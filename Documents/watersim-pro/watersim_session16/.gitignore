@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────
+# WaterSim Pro — .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+
+# Environment files — NEVER commit these
+.env
+.env.local
+.env.prod
+.env.staging
+backend/.env
+frontend/.env
+*.env.local
+
+# Build outputs
+dist/
+build/
+coverage/
+frontend/dist/
+
+# Kubernetes secrets — NEVER commit
+k8s/secret.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+*.dockerignore
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Misc
+*.tgz
+*.tar.gz

@@ -1,0 +1,15 @@
+# Apply all manifests in order:
+#   kubectl apply -k k8s/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: watersim
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml        # NOT committed; create from secret.example.yaml
+  - postgres.yaml
+  - backend.yaml
+  - frontend.yaml
+  - ingress.yaml

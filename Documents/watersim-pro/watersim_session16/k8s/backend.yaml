@@ -1,0 +1,138 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Backend — Deployment, Service, HPA
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: watersim
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:        1
+      maxUnavailable:  0     # zero-downtime rolling deploy
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # Security: drop all capabilities, run as non-root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser:    1001
+        runAsGroup:   1001
+      containers:
+        - name: backend
+          image: ghcr.io/YOUR_ORG/watersim-backend:latest
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - configMapRef:
+                name: watersim-config
+          env:
+            - name: DATABASE_URL
+              value: postgres://watersim:$(POSTGRES_PASSWORD)@postgres:5432/watersim_prod
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: watersim-secrets
+                  key: POSTGRES_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: watersim-secrets
+                  key: JWT_SECRET
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds:       20
+            failureThreshold:    3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds:       10
+            failureThreshold:    3
+          resources:
+            requests:
+              cpu:    200m
+              memory: 256Mi
+            limits:
+              cpu:    1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem:   true
+            capabilities:
+              drop: [ALL]
+      # Init container: run migrations before pods start
+      initContainers:
+        - name: migrate
+          image: ghcr.io/YOUR_ORG/watersim-backend:latest
+          command: [node, src/db/migrate.js, up]
+          envFrom:
+            - configMapRef:
+                name: watersim-config
+          env:
+            - name: DATABASE_URL
+              value: postgres://watersim:$(POSTGRES_PASSWORD)@postgres:5432/watersim_prod
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: watersim-secrets
+                  key: POSTGRES_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: watersim-secrets
+                  key: JWT_SECRET
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: watersim
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 4000
+      targetPort: 4000
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: watersim
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type:               AverageUtilization
+          averageUtilization: 65
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type:               AverageUtilization
+          averageUtilization: 80

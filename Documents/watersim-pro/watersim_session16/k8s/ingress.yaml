@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Ingress — requires nginx-ingress-controller + cert-manager
+# TLS cert is provisioned by Let's Encrypt via cert-manager ClusterIssuer.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: watersim-ingress
+  namespace: watersim
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # WebSocket support (for /ws/ paths → backend)
+    nginx.ingress.kubernetes.io/proxy-read-timeout:  "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout:  "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering:     "off"
+    # TLS via cert-manager
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.watersim.example.com
+      secretName: watersim-tls
+  rules:
+    - host: app.watersim.example.com
+      http:
+        paths:
+          # WebSocket collaboration (must come before / to avoid frontend match)
+          - path: /ws/
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 4000
+          # REST API
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 4000
+          # Health (unauthenticated)
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 4000
+          # Frontend SPA (catch-all)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

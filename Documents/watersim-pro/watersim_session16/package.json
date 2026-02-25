@@ -1,0 +1,20 @@
+{
+  "name": "watersim-pro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WaterSim Pro — Web-Based Wastewater & Water Purification Process Simulation Platform",
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=frontend",
+    "db:migrate": "npm run migrate --workspace=backend",
+    "db:seed": "npm run seed --workspace=backend",
+    "test": "npm run test --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": { "node": ">=18.0.0", "npm": ">=9.0.0" }
+}

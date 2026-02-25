@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1
+# ─────────────────────────────────────────────────────────────
+# WaterSim Pro — Backend Production Dockerfile (multi-stage)
+# Stage 1 "deps"    : install only production dependencies
+# Stage 2 "release" : minimal runtime image — no dev tools
+# ─────────────────────────────────────────────────────────────
+
+# ── Stage 1: dependency installer ────────────────────────────
+FROM node:20-alpine AS deps
+
+# Add dumb-init for proper PID 1 signal handling
+RUN apk add --no-cache dumb-init
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --ignore-scripts
+
+# ── Stage 2: production image ─────────────────────────────────
+FROM node:20-alpine AS release
+
+# Security: run as non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nodeapp -u 1001
+
+# Install Python3 + pip for PDF report generation (reportlab + matplotlib)
+RUN apk add --no-cache python3 py3-pip py3-numpy py3-matplotlib && \
+    pip3 install --break-system-packages reportlab==4.2.5
+
+WORKDIR /app
+
+# Carry in dumb-init from deps stage
+COPY --from=deps /usr/bin/dumb-init /usr/bin/dumb-init
+
+# Production node_modules only
+COPY --from=deps /app/node_modules ./node_modules
+
+# Application source (no tests, no dev files)
+COPY src ./src
+COPY .env.example .env.example
+
+# Ownership
+RUN chown -R nodeapp:nodejs /app
+
+USER nodeapp
+
+EXPOSE 4000
+
+# dumb-init as PID 1 ensures SIGTERM propagates to node
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "src/server.js"]

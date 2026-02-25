@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: watersim-config
+  namespace: watersim
+data:
+  NODE_ENV:               "production"
+  PORT:                   "4000"
+  API_VERSION:            "v1"
+  CORS_ORIGIN:            "https://app.watersim.example.com"
+  PUBLIC_HOST:            "app.watersim.example.com"
+  JWT_ACCESS_EXPIRES_IN:  "15m"
+  JWT_REFRESH_EXPIRES_IN: "7d"
+  BCRYPT_ROUNDS:          "12"
+  RATE_LIMIT_WINDOW_MS:   "900000"
+  RATE_LIMIT_MAX:         "300"
+  AUTH_RATE_LIMIT_MAX:    "10"
+  DB_POOL_MIN:            "2"
+  DB_POOL_MAX:            "20"
