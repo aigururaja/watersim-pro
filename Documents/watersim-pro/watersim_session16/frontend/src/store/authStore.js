@@ -9,10 +9,16 @@ const useAuthStore = create((set, get) => ({
   // Initialise from localStorage on app load
   init: async () => {
     const token = localStorage.getItem('accessToken');
-    if (!token) { set({ loading: false }); return; }
+    if (!token || token === 'undefined') {
+      localStorage.removeItem('accessToken');
+      set({ loading: false });
+      return;
+    }
     try {
-      const { data } = await api.get('/auth/me');
-      set({ user: data, loading: false });
+      const { data: resp } = await api.get('/auth/me');
+      // Server wraps: { success, data: { user } }
+      const user = resp.data?.user || resp.user || resp.data || resp;
+      set({ user, loading: false });
     } catch {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
@@ -22,20 +28,24 @@ const useAuthStore = create((set, get) => ({
 
   login: async (email, password) => {
     set({ error: null });
-    const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('accessToken',  data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    set({ user: data.user });
-    return data.user;
+    const { data: resp } = await api.post('/auth/login', { email, password });
+    // Server wraps: { success, data: { accessToken, user } }
+    const inner = resp.data || resp;
+    localStorage.setItem('accessToken', inner.accessToken);
+    set({ user: inner.user });
+    return inner.user;
   },
 
   register: async (payload) => {
     set({ error: null });
-    const { data } = await api.post('/auth/register', payload);
-    localStorage.setItem('accessToken',  data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    set({ user: data.user });
-    return data.user;
+    const { data: resp } = await api.post('/auth/register', payload);
+    // Server wraps: { success, data: { accessToken, user } }
+    const inner = resp.data || resp;
+    if (inner.accessToken) {
+      localStorage.setItem('accessToken', inner.accessToken);
+    }
+    set({ user: inner.user });
+    return inner.user;
   },
 
   logout: async () => {

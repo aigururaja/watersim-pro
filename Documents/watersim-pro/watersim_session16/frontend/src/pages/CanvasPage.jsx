@@ -17,12 +17,14 @@ import UnitOpPalette from '../components/canvas/UnitOpPalette';
 import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
+import LiveSimPanel from '../components/canvas/LiveSimPanel';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCanvasPerf } from '../hooks/useCanvasPerf';
+import useLiveSimStore from '../store/liveSimStore';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 
-const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, targetX, targetY, data, style = {}, markerEnd }) {
+const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, targetX, targetY, data, style = {}, markerEnd, selected }) {
   const [edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY });
   const stream     = data?.streamResult;
   const isRecycle  = data?.isRecycle || (data?.streamType && data.streamType !== 'stream');
@@ -34,14 +36,14 @@ const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, target
       : `Q: ${stream.Q} m³/d`
     : null;
 
-  const edgeColor = isRecycle ? '#F97316' : (stream ? '#0ea5e9' : '#2E75B6');
+  const edgeColor = selected ? '#EF4444' : isRecycle ? '#F97316' : (stream ? '#0ea5e9' : '#2E75B6');
   const edgeDash  = isRecycle ? '6 3' : undefined;
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={{
+      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} interactionWidth={20} style={{
         stroke: edgeColor,
-        strokeWidth: stream ? 2.5 : 2,
+        strokeWidth: selected ? 3.5 : (stream ? 2.5 : 2),
         strokeDasharray: edgeDash,
         ...style,
       }} />
@@ -51,13 +53,13 @@ const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, target
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              background: isRecycle ? '#FFF7ED' : '#f0f9ff',
-              border: `1px solid ${isRecycle ? '#FED7AA' : '#7dd3fc'}`,
+              background: selected ? '#FEF2F2' : isRecycle ? '#FFF7ED' : '#f0f9ff',
+              border: `1px solid ${selected ? '#FCA5A5' : isRecycle ? '#FED7AA' : '#7dd3fc'}`,
               borderRadius: 4,
               padding: '1px 7px',
               fontSize: 10,
               fontWeight: 600,
-              color: isRecycle ? '#9A3412' : '#0369a1',
+              color: selected ? '#DC2626' : isRecycle ? '#9A3412' : '#0369a1',
               pointerEvents: 'none',
               whiteSpace: 'nowrap',
               zIndex: 10,
@@ -297,7 +299,7 @@ export default function CanvasPage() {
   }, []);
 
   // ── Collaboration hook ────────────────────────────────────────────────────
-  const { sendEvent, presence, self: collabSelf, remoteCursors, simBanner } =
+  const { sendEvent, presence, self: collabSelf, remoteCursors, simBanner, wsConnected } =
     useCollaboration(flowsheetId, { onRemoteEvent: handleRemoteEvent });
 
   // Throttled cursor broadcast ref
@@ -321,10 +323,16 @@ export default function CanvasPage() {
   const [dynamicResults, setDynamicResults] = useState(null);
   const [dynamicRunning, setDynamicRunning] = useState(false);
 
+  // ── Live simulation ────────────────────────────────────────────────────────
+  const [showLiveSim, setShowLiveSim] = useState(false);
+
   // ── Scenario comparison ────────────────────────────────────────────────────
   const [showScenarios, setShowScenarios]     = useState(false);
   const [scenarioResults, setScenarioResults] = useState(null);
   const [scenariosRunning, setScenariosRunning] = useState(false);
+
+  // ── Design / Run mode ────────────────────────────────────────────────────
+  const [mode, setMode] = useState('design'); // 'design' | 'run'
 
   // ── Load flowsheet ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -491,6 +499,30 @@ export default function CanvasPage() {
     setEdges(eds => eds.map(e => ({ ...e, data: { ...e.data, streamResult: null } })));
   };
 
+  const switchToDesign = useCallback(() => {
+    setMode('design');
+    clearResults();
+    useLiveSimStore.getState().reset();
+    setShowLiveSim(false);
+  }, []);
+
+  const switchToRun = useCallback(() => {
+    setMode('run');
+    setSelectedNode(null);
+  }, []);
+
+  // ── Live simulation: update edge labels as steps stream in ────────────────
+  const liveSteps = useLiveSimStore(s => s.steps);
+  const latestLiveStep = liveSteps.length ? liveSteps[liveSteps.length - 1] : null;
+  useEffect(() => {
+    if (!latestLiveStep?.streamResults) return;
+    setEdges(eds => eds.map(e => ({
+      ...e,
+      type: 'stream',
+      data: { ...e.data, streamResult: latestLiveStep.streamResults[e.id] || e.data.streamResult },
+    })));
+  }, [latestLiveStep, setEdges]);
+
   // ── Drop ───────────────────────────────────────────────────────────────────
   const onDrop = useCallback((event) => {
     event.preventDefault();
@@ -576,35 +608,74 @@ export default function CanvasPage() {
         <div style={S.toolbar}>
           <button style={S.backBtn} onClick={() => navigate(`/projects/${projectId}`)}>← Back</button>
           <span style={S.title}>{flowsheet?.name || 'Loading…'}</span>
+
+          {/* ── Mode toggle (segmented control) ────────────────── */}
+          <div style={S.modeToggle}>
+            <button
+              style={mode === 'design' ? S.modeActive : S.modeInactive}
+              onClick={switchToDesign}
+            >
+              Design
+            </button>
+            <button
+              style={mode === 'run' ? S.modeActive : S.modeInactive}
+              onClick={switchToRun}
+            >
+              Run
+            </button>
+          </div>
+
           <div style={S.tbRight}>
             {/* ── Collaboration presence ─────────────────────────── */}
             <PresenceAvatars presence={presence} self={collabSelf} />
             {simBanner && <SimBanner simBanner={simBanner} />}
             {!saved && <span style={S.unsaved}>● Unsaved</span>}
-            {hasAnyResults && (
-              <button style={{ ...S.btn, background: '#F3F4F6', color: '#374151' }} onClick={clearResults}>
-                Clear Results
-              </button>
+
+            {/* ── Run-mode buttons ────────────────────────────────── */}
+            {mode === 'run' && (
+              <>
+                {hasAnyResults && (
+                  <button style={{ ...S.btn, background: '#F3F4F6', color: '#374151' }} onClick={clearResults}>
+                    Clear Results
+                  </button>
+                )}
+                {simResults && (
+                  <button style={{ ...S.btn, background: '#0891B2', color: '#fff' }} onClick={() => { setShowSummary(true); setShowDynamic(false); setShowScenarios(false); setShowLiveSim(false); setSelectedNode(null); }}>
+                    Summary
+                  </button>
+                )}
+                <button
+                  style={{ ...S.btn, background: '#7C3AED', color: '#fff', opacity: dynamicRunning ? 0.7 : 1 }}
+                  onClick={() => { setShowDynamic(true); setShowSummary(false); setShowScenarios(false); setShowLiveSim(false); setSelectedNode(null); }}
+                  disabled={nodes.length === 0}
+                >
+                  Dynamic
+                </button>
+                <button
+                  style={{ ...S.btn, background: '#059669', color: '#fff' }}
+                  onClick={() => { setShowLiveSim(true); setShowDynamic(false); setShowSummary(false); setShowScenarios(false); setSelectedNode(null); }}
+                  disabled={nodes.length === 0}
+                >
+                  Live Sim
+                </button>
+                <button
+                  style={{ ...S.btn, background: '#B45309', color: '#fff', opacity: scenariosRunning ? 0.7 : 1 }}
+                  onClick={() => { setShowScenarios(true); setShowDynamic(false); setShowSummary(false); setShowLiveSim(false); setSelectedNode(null); }}
+                  disabled={nodes.length === 0}
+                >
+                  Compare
+                </button>
+                <button
+                  style={{ ...S.btn, background: '#16A34A', color: '#fff', opacity: simulating ? 0.7 : 1 }}
+                  onClick={simulate}
+                  disabled={simulating || nodes.length === 0}
+                >
+                  {simulating ? 'Running…' : 'Simulate'}
+                </button>
+              </>
             )}
-            {simResults && (
-              <button style={{ ...S.btn, background: '#0891B2', color: '#fff' }} onClick={() => { setShowSummary(true); setShowDynamic(false); setShowScenarios(false); setSelectedNode(null); }}>
-                📊 Summary
-              </button>
-            )}
-            <button
-              style={{ ...S.btn, background: '#7C3AED', color: '#fff', opacity: dynamicRunning ? 0.7 : 1 }}
-              onClick={() => { setShowDynamic(true); setShowSummary(false); setShowScenarios(false); setSelectedNode(null); }}
-              disabled={nodes.length === 0}
-            >
-              📈 Dynamic
-            </button>
-            <button
-              style={{ ...S.btn, background: '#B45309', color: '#fff', opacity: scenariosRunning ? 0.7 : 1 }}
-              onClick={() => { setShowScenarios(true); setShowDynamic(false); setShowSummary(false); setSelectedNode(null); }}
-              disabled={nodes.length === 0}
-            >
-              ⚖ Compare
-            </button>
+
+            {/* ── Common buttons (both modes) ────────────────────── */}
             <button
               title="Edit cost coefficients for this project"
               style={{ ...S.btn, background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', fontSize: 14 }}
@@ -619,14 +690,7 @@ export default function CanvasPage() {
               onClick={() => { setSnapName(`${flowsheet?.name || 'Flowsheet'} — ${new Date().toLocaleDateString()}`); setShowSnapModal(true); }}
               disabled={nodes.length === 0}
             >
-              📸
-            </button>
-            <button
-              style={{ ...S.btn, background: '#16A34A', color: '#fff', opacity: simulating ? 0.7 : 1 }}
-              onClick={simulate}
-              disabled={simulating || nodes.length === 0}
-            >
-              {simulating ? '⏳ Running…' : '▶ Simulate'}
+              Snapshot
             </button>
           </div>
         </div>
@@ -640,22 +704,29 @@ export default function CanvasPage() {
         )}
 
         <div style={S.body}>
-          <UnitOpPalette />
+          {mode === 'design' && <UnitOpPalette />}
 
-          <div style={S.canvasWrap} onDrop={onDrop} onDragOver={onDragOver} onMouseMove={onMouseMoveCanvas}>
+          <div
+            style={S.canvasWrap}
+            onDrop={mode === 'design' ? onDrop : undefined}
+            onDragOver={mode === 'design' ? onDragOver : undefined}
+            onMouseMove={onMouseMoveCanvas}
+          >
             {/* Remote collaborator cursors */}
             <RemoteCursors cursors={remoteCursors} />
             <ReactFlow
               nodes={nodes}
               edges={edges}
-              onNodesChange={onNodesChangeWrapped}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
+              onNodesChange={mode === 'design' ? onNodesChangeWrapped : (changes) => onNodesChangeWrapped(changes.filter(c => c.type !== 'remove'))}
+              onEdgesChange={mode === 'design' ? onEdgesChange : (changes) => onEdgesChange(changes.filter(c => c.type !== 'remove'))}
+              onConnect={mode === 'design' ? onConnect : undefined}
               onNodeClick={onNodeClick}
               onNodeDragStop={onNodeDragStop}
               onPaneClick={() => setSelectedNode(null)}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
+              deleteKeyCode={mode === 'design' ? 'Delete' : null}
+              nodesConnectable={mode === 'design'}
               fitView
             >
               <Background variant="dots" gap={20} size={1} color="#D1D5DB" />
@@ -664,7 +735,9 @@ export default function CanvasPage() {
               <MiniMap nodeColor={() => '#2E75B6'} maskColor="rgba(240,246,255,0.6)" />
               <Panel position="top-right">
                 <div style={S.hint}>
-                  Drag unit ops · Connect nodes · Click to configure · ▶ Simulate
+                  {mode === 'design'
+                    ? 'Drag unit ops · Connect nodes · Click to configure · Delete to remove'
+                    : 'Click nodes to inspect · Simulate to run'}
                 </div>
               </Panel>
             </ReactFlow>
@@ -715,6 +788,17 @@ export default function CanvasPage() {
           )}
         </div>
       </div>
+
+      {/* Live Simulation Dashboard (full-screen overlay) */}
+      {showLiveSim && (
+        <LiveSimPanel
+          sendEvent={sendEvent}
+          buildNodeParams={buildNodeParams}
+          canvasData={{ nodes, edges }}
+          wsConnected={wsConnected}
+          onClose={() => setShowLiveSim(false)}
+        />
+      )}
 
       {/* Snapshot toast */}
       {snapToast && (
@@ -1733,6 +1817,9 @@ const S = {
   backBtn:     { background: 'none', border: 'none', cursor: 'pointer', color: '#2E75B6', fontWeight: 600, fontSize: 14, flexShrink: 0, minHeight: 36, padding: '4px 8px' },
   title:       { fontSize: 14, fontWeight: 700, color: '#111', flex: 1, minWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   tbRight:     { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 },
+  modeToggle:  { display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #D1D5DB', flexShrink: 0 },
+  modeActive:  { padding: '5px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer', border: 'none', background: '#1F4E79', color: '#fff' },
+  modeInactive:{ padding: '5px 14px', fontWeight: 600, fontSize: 12, cursor: 'pointer', border: 'none', background: '#F3F4F6', color: '#6B7280' },
   unsaved:     { fontSize: 11, color: '#F59E0B', fontWeight: 500, whiteSpace: 'nowrap' },
   btn:         { border: 'none', borderRadius: 6, padding: '5px 10px', fontWeight: 600, cursor: 'pointer', fontSize: 12, flexShrink: 0, minHeight: 34 },
   body:        { display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 },

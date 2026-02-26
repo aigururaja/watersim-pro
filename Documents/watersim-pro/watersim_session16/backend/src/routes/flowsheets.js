@@ -31,13 +31,13 @@ router.get('/', async (req, res, next) => {
   if (!await checkProject(req.params.projectId, orgId(req), res)) return;
   try {
     const result = await query(
-      `SELECT f.id, f.name, f.description, f.version, f.is_snapshot, f.snapshot_tag,
+      `SELECT f.id, f.name, f.description, f.version, f.is_locked, f.locked_by,
               f.created_at, f.updated_at,
               u.first_name || ' ' || u.last_name AS created_by_name
        FROM   flowsheets f
        JOIN   users u ON u.id = f.created_by
        WHERE  f.project_id = $1
-       ORDER  BY f.is_snapshot ASC, f.updated_at DESC`,
+       ORDER  BY f.updated_at DESC`,
       [req.params.projectId]
     );
     res.json(result.rows);
@@ -103,11 +103,11 @@ router.patch('/:id', [
        FROM projects p
        WHERE f.id = $${i} AND f.project_id = $${i + 1}
          AND f.project_id = p.id AND p.organisation_id = $${i + 2}
-         AND f.is_snapshot = false
+         AND f.is_locked = false
        RETURNING f.*`,
       [...vals, orgId(req)]
     );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Flowsheet not found or is a read-only snapshot' });
+    if (!result.rows[0]) return res.status(404).json({ error: 'Flowsheet not found or is locked' });
     res.json(result.rows[0]);
   } catch (err) { next(err); }
 });
@@ -120,11 +120,11 @@ router.delete('/:id', requireRole('engineer'), [param('id').isUUID()], async (re
       `DELETE FROM flowsheets f USING projects p
        WHERE f.id = $1 AND f.project_id = $2
          AND f.project_id = p.id AND p.organisation_id = $3
-         AND f.is_snapshot = false
+         AND f.is_locked = false
        RETURNING f.id`,
       [req.params.id, req.params.projectId, orgId(req)]
     );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Flowsheet not found or is a read-only snapshot' });
+    if (!result.rows[0]) return res.status(404).json({ error: 'Flowsheet not found or is locked' });
     res.json({ message: 'Flowsheet deleted' });
   } catch (err) { next(err); }
 });
@@ -139,21 +139,20 @@ router.post('/:id/snapshot', [
     const src = await query(
       `SELECT f.* FROM flowsheets f
        JOIN projects p ON p.id = f.project_id
-       WHERE f.id = $1 AND f.project_id = $2 AND p.organisation_id = $3 AND f.is_snapshot = false`,
+       WHERE f.id = $1 AND f.project_id = $2 AND p.organisation_id = $3`,
       [req.params.id, req.params.projectId, orgId(req)]
     );
     if (!src.rows[0]) return res.status(404).json({ error: 'Flowsheet not found' });
     const f = src.rows[0];
     const result = await query(
-      `INSERT INTO flowsheets (project_id, created_by, name, description, version, is_snapshot, snapshot_tag, canvas_data)
-       VALUES ($1,$2,$3,$4,$5,true,$6,$7) RETURNING *`,
-      [f.project_id, userId(req), `${f.name} [${req.body.tag}]`,
-       f.description, f.version, req.body.tag, f.canvas_data]
+      `INSERT INTO flowsheet_snapshots (flowsheet_id, created_by, label, notes, canvas_data, version_number)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [f.id, userId(req), req.body.tag, req.body.description || null, f.canvas_data, f.version]
     );
-    logger.info('Snapshot created', { flowsheetId: req.params.id, tag: req.body.tag });
+    logger.info('Snapshot created', { flowsheetId: req.params.id, label: req.body.tag });
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Snapshot tag already exists for this project' });
+    if (err.code === '23505') return res.status(409).json({ error: 'Snapshot label already exists for this flowsheet' });
     next(err);
   }
 });

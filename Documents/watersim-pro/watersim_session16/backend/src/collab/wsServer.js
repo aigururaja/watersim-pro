@@ -11,6 +11,8 @@ const { WebSocketServer } = require('ws');
 const { parse: parseUrl } = require('url');
 const jwtUtils = require('../utils/jwt');
 const logger   = require('../utils/logger');
+const liveSimRunner = require('../simulation/liveSimRunner');
+const { query: dbQuery } = require('../db/pool');
 
 // ── Colour palette for presence avatars ─────────────────────────────────────
 const PRESENCE_COLORS = [
@@ -77,6 +79,99 @@ function cleanThrottles(ws) {
   if (m) {
     for (const { timer } of m.values()) clearTimeout(timer);
     throttles.delete(ws);
+  }
+}
+
+// ── Server-originated broadcast (for live simulation steps) ─────────────────
+function broadcastToRoom(flowsheetId, message) {
+  const room = rooms.get(flowsheetId);
+  if (!room || room.size === 0) return;
+  broadcast(room, message); // no excludeWs — server-originated goes to everyone
+}
+
+// ── Live simulation start handler ───────────────────────────────────────────
+async function handleLiveSimStart(flowsheetId, peer, payload) {
+  try {
+    logger.info('Live sim start requested', { flowsheetId, userId: peer.userId });
+
+    // Prefer client-sent canvas data (always fresh) over DB (may be stale)
+    let canvasData = payload.canvasData;
+
+    if (!canvasData || !canvasData.nodes || canvasData.nodes.length === 0) {
+      // Fallback: load from DB
+      logger.info('Live sim: no client canvasData, loading from DB', { flowsheetId });
+      const fsResult = await dbQuery('SELECT canvas_data FROM flowsheets WHERE id = $1', [flowsheetId]);
+      if (!fsResult.rows[0]) {
+        logger.warn('Live sim: flowsheet not found in DB', { flowsheetId });
+        broadcastToRoom(flowsheetId, {
+          type: 'sim:live:error',
+          payload: { runId: null, error: 'Flowsheet not found. Please save first.' },
+        });
+        return;
+      }
+      canvasData = fsResult.rows[0].canvas_data || { nodes: [], edges: [] };
+    }
+
+    if (!canvasData.nodes || canvasData.nodes.length === 0) {
+      broadcastToRoom(flowsheetId, {
+        type: 'sim:live:error',
+        payload: { runId: null, error: 'Flowsheet has no nodes. Add some units and try again.' },
+      });
+      return;
+    }
+
+    logger.info('Live sim: canvas loaded', { flowsheetId, nodeCount: canvasData.nodes.length, edgeCount: (canvasData.edges || []).length });
+
+    const speed = Math.min(Math.max(payload.speed || 100, 1), 1000);
+
+    // Create simulation_runs record
+    const runResult = await dbQuery(
+      `INSERT INTO simulation_runs (flowsheet_id, created_by, mode, status, config, started_at)
+       VALUES ($1, $2, 'dynamic', 'running', $3, NOW()) RETURNING id`,
+      [flowsheetId, peer.userId, JSON.stringify({
+        nodeParams: payload.nodeParams,
+        timeSeriesConfig: payload.timeSeriesConfig,
+        speed,
+        live: true,
+      })]
+    );
+    const runId = runResult.rows[0].id;
+    logger.info('Live sim: run record created', { flowsheetId, runId });
+
+    // Compute totalSteps from config (same logic as liveSimRunner.preComputeSteps)
+    const tsc = payload.timeSeriesConfig || {};
+    const totalSteps = Math.min(Math.max(tsc.hoursToSimulate ?? 24, 1), 48);
+
+    // Broadcast 'started' BEFORE startLiveSim, because startLiveSim emits
+    // the first step immediately and we need onStarted to run first on the client.
+    broadcastToRoom(flowsheetId, {
+      type: 'sim:live:started',
+      payload: {
+        runId,
+        totalSteps,
+        speed,
+        startedBy: peer.displayName,
+      },
+    });
+
+    const result = liveSimRunner.startLiveSim({
+      flowsheetId,
+      runId,
+      canvasData,
+      nodeParams: payload.nodeParams || {},
+      timeSeriesConfig: payload.timeSeriesConfig || {},
+      speed,
+      userId: peer.userId,
+      broadcastFn: broadcastToRoom,
+    });
+
+    logger.info('Live sim: runner started', { flowsheetId, runId, totalSteps: result.totalSteps });
+  } catch (err) {
+    logger.error('Failed to start live sim', { flowsheetId, error: err.message, stack: err.stack });
+    broadcastToRoom(flowsheetId, {
+      type: 'sim:live:error',
+      payload: { runId: null, error: err.message },
+    });
   }
 }
 
@@ -193,6 +288,39 @@ function attachWsServer(httpServer) {
           broadcast(room, { type, payload, from: peer.userId }, ws);
           break;
 
+        // ── Live simulation control ──────────────────────────────
+        case 'sim:live:start':
+          handleLiveSimStart(flowsheetId, peer, payload || {}).catch(err => {
+            logger.error('Unhandled live sim error', { flowsheetId, error: err.message });
+          });
+          break;
+
+        case 'sim:live:pause':
+          if (liveSimRunner.pauseSim(flowsheetId)) {
+            broadcast(room, { type: 'sim:live:paused', payload: { from: peer.displayName } });
+          }
+          break;
+
+        case 'sim:live:resume':
+          if (liveSimRunner.resumeSim(flowsheetId)) {
+            broadcast(room, { type: 'sim:live:resumed', payload: { from: peer.displayName } });
+          }
+          break;
+
+        case 'sim:live:cancel':
+          if (liveSimRunner.cancelSim(flowsheetId)) {
+            broadcast(room, { type: 'sim:live:cancelled', payload: { from: peer.displayName } });
+          }
+          break;
+
+        case 'sim:live:speed': {
+          const newSpeed = payload?.speed;
+          if (newSpeed && liveSimRunner.setSpeed(flowsheetId, newSpeed)) {
+            broadcast(room, { type: 'sim:live:speed-changed', payload: { speed: newSpeed, from: peer.displayName } });
+          }
+          break;
+        }
+
         // Remote cursor (throttled at 50 ms)
         case 'cursor:move':
           throttledBroadcast(room, ws, {
@@ -231,4 +359,4 @@ function attachWsServer(httpServer) {
   return wss;
 }
 
-module.exports = { attachWsServer };
+module.exports = { attachWsServer, broadcastToRoom };

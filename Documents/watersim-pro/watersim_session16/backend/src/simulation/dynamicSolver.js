@@ -162,4 +162,4 @@ function runDynamic(canvasData, config = {}) {
   };
 }
 
-module.exports = { runDynamic, DEFAULT_DIURNAL_PROFILE };
+module.exports = { runDynamic, DEFAULT_DIURNAL_PROFILE, buildProfile, scaleInletParams };
