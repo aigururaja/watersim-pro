@@ -107,7 +107,7 @@ const login = async (req, res, next) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       expires: expiresAt,
-      path: '/api/auth',
+      path: '/api/v1/auth',
     });
 
     res.json({
@@ -169,7 +169,7 @@ const refresh = async (req, res, next) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       expires: expiresAt,
-      path: '/api/auth',
+      path: '/api/v1/auth',
     });
 
     res.json({

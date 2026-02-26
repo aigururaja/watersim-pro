@@ -3,6 +3,17 @@ import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 import { Droplets, Loader2 } from 'lucide-react';
 
+// Defined outside RegisterPage so it is never recreated on re-render (prevents focus loss)
+function Field({ id, label, type = 'text', placeholder, readOnly, value, onChange }) {
+  return (
+    <div>
+      <label className="label" htmlFor={id}>{label}</label>
+      <input id={id} name={id} type={type} className={`input ${readOnly ? 'bg-gray-50 text-gray-500' : ''}`}
+        placeholder={placeholder} value={value} onChange={onChange} required readOnly={readOnly} />
+    </div>
+  );
+}
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ orgName: '', orgSlug: '', email: '', password: '', firstName: '', lastName: '' });
@@ -28,14 +39,6 @@ export default function RegisterPage() {
     } finally { setLoading(false); }
   };
 
-  const Field = ({ id, label, type = 'text', placeholder, readOnly }) => (
-    <div>
-      <label className="label" htmlFor={id}>{label}</label>
-      <input id={id} name={id} type={type} className={`input ${readOnly ? 'bg-gray-50 text-gray-500' : ''}`}
-        placeholder={placeholder} value={form[id]} onChange={handleChange} required readOnly={readOnly} />
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-700 via-brand-600 to-teal-500 flex items-start md:items-center justify-center p-4 py-8 overflow-y-auto">
       <div className="w-full max-w-lg">
@@ -51,14 +54,14 @@ export default function RegisterPage() {
           {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <Field id="firstName" label="First name" placeholder="Jane" />
-              <Field id="lastName" label="Last name" placeholder="Smith" />
+              <Field id="firstName" label="First name" placeholder="Jane" value={form.firstName} onChange={handleChange} />
+              <Field id="lastName" label="Last name" placeholder="Smith" value={form.lastName} onChange={handleChange} />
             </div>
-            <Field id="email" label="Work email" type="email" placeholder="jane@yourcompany.com" />
-            <Field id="password" label="Password" type="password" placeholder="Min 8 chars, upper+lower+number" />
+            <Field id="email" label="Work email" type="email" placeholder="jane@yourcompany.com" value={form.email} onChange={handleChange} />
+            <Field id="password" label="Password" type="password" placeholder="Min 8 chars, upper+lower+number" value={form.password} onChange={handleChange} />
             <div className="border-t pt-4">
               <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Organisation details</p>
-              <Field id="orgName" label="Organisation name" placeholder="City Water Authority" />
+              <Field id="orgName" label="Organisation name" placeholder="City Water Authority" value={form.orgName} onChange={handleChange} />
               <div className="mt-4">
                 <label className="label" htmlFor="orgSlug">Organisation slug <span className="text-gray-400 font-normal">(auto-generated, editable)</span></label>
                 <div className="flex items-center gap-0">

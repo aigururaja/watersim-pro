@@ -10,7 +10,7 @@ export const api = axios.create({
 
 // Attach access token to every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
+  const token = sessionStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -34,23 +34,19 @@ api.interceptors.response.use(
       original._retry = true;
       refreshing = true;
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
-        const { data: tokens } = await axios.post(`${BASE}/auth/refresh`, { refreshToken });
-        localStorage.setItem('accessToken', tokens.accessToken);
-        localStorage.setItem('refreshToken', tokens.refreshToken);
+        const { data: tokens } = await axios.post(`${BASE}/auth/refresh`, {}, { withCredentials: true });
+        sessionStorage.setItem('accessToken', tokens.data?.accessToken || tokens.accessToken);
         queue.forEach(({ resolve, config }) => {
-          config.headers.Authorization = `Bearer ${tokens.accessToken}`;
+          config.headers.Authorization = `Bearer ${sessionStorage.getItem('accessToken')}`;
           resolve(api(config));
         });
         queue = [];
-        original.headers.Authorization = `Bearer ${tokens.accessToken}`;
+        original.headers.Authorization = `Bearer ${sessionStorage.getItem('accessToken')}`;
         return api(original);
       } catch (refreshErr) {
         queue.forEach(({ reject }) => reject(refreshErr));
         queue = [];
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        sessionStorage.removeItem('accessToken');
         window.location.href = '/login';
         return Promise.reject(refreshErr);
       } finally {

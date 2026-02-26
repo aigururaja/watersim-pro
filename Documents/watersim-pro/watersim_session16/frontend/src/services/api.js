@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true, // include httpOnly cookies
 });
@@ -24,7 +24,8 @@ api.interceptors.response.use(
       original._retry = true;
       try {
         if (!refreshPromise) {
-          refreshPromise = api.post('/auth/refresh').finally(() => { refreshPromise = null; });
+          // Use raw axios (not the intercepted instance) to avoid infinite retry loops
+          refreshPromise = axios.post('/api/v1/auth/refresh', {}, { withCredentials: true }).finally(() => { refreshPromise = null; });
         }
         const { data } = await refreshPromise;
         const newToken = data.data.accessToken;

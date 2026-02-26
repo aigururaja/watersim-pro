@@ -108,7 +108,7 @@ const authLimiter = rateLimit({
 app.use(API, globalLimiter);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use(`${API}/auth`,                                           authLimiter, authRoutes);
+app.use(`${API}/auth`,                                           authRoutes);
 app.use(`${API}/projects`,                                       projectRoutes);
 app.use(`${API}/projects/:projectId/flowsheets`,                 flowsheetRoutes);
 app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId/simulate`, simulateRoutes);

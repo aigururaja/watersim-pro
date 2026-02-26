@@ -359,11 +359,11 @@ function FlowsheetCard({ fs, onOpen, onSnapshot, onDelete, deleting }) {
           {hover && (
             <>
               <button title="Save snapshot" style={S.iconBtn} onClick={e => { e.stopPropagation(); onSnapshot(); }}>
-                \u{1F4F8}
+                📸
               </button>
               <button title="Delete flowsheet" style={{ ...S.iconBtn, color: '#DC2626' }}
                 onClick={e => { e.stopPropagation(); onDelete(); }} disabled={deleting}>
-                {deleting ? '\u2026' : '\u{1F5D1}'}
+                {deleting ? '…' : '🗑'}
               </button>
             </>
           )}
@@ -406,7 +406,7 @@ function SnapshotCard({ snap, onRestore, onDelete, restoring, deleting }) {
           {restoring ? 'Restoring\u2026' : '\u21a9 Restore as Flowsheet'}
         </button>
         <button style={{ ...S.iconBtn, color: '#DC2626', fontSize: 16 }} onClick={onDelete} disabled={deleting} title="Delete snapshot">
-          {deleting ? '\u2026' : '\u{1F5D1}'}
+          {deleting ? '…' : '🗑'}
         </button>
       </div>
     </div>

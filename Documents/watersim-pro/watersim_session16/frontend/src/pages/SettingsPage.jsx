@@ -475,7 +475,6 @@ export default function SettingsPage() {
             Your current role: <strong style={{ color: '#1D4ED8' }}>{user?.role}</strong>
           </p>
         </section>
-      </div>
 
         </> )}  {/* end permits tab */}
 
@@ -496,6 +495,7 @@ export default function SettingsPage() {
           onUpdateLimit={updateLimit}
         />
       )}
+      </div>
     </AppLayout>
   );
 }
