@@ -37,6 +37,10 @@ function paramColor(key, source) {
 
 // ── Transport Controls ──────────────────────────────────────────────────────
 
+const FLAT_PROFILE = Array.from({ length: 24 }, (_, h) => ({
+  hour: h, Q_scale: 1, BOD_scale: 1, TN_scale: 1, TP_scale: 1, TSS_scale: 1,
+}));
+
 function TransportControls({ sendEvent, buildNodeParams, canvasData, wsConnected }) {
   const status      = useLiveSimStore(s => s.status);
   const currentStep = useLiveSimStore(s => s.currentStep);
@@ -45,6 +49,7 @@ function TransportControls({ sendEvent, buildNodeParams, canvasData, wsConnected
   const reset       = useLiveSimStore(s => s.reset);
 
   const [sliderVal, setSliderVal] = useState(speedToSlider(speed));
+  const [constantInlet, setConstantInlet] = useState(false);
 
   const pct = totalSteps ? Math.round((currentStep / totalSteps) * 100) : 0;
   const isIdle = status === 'idle' || status === 'completed' || status === 'cancelled';
@@ -52,9 +57,11 @@ function TransportControls({ sendEvent, buildNodeParams, canvasData, wsConnected
   const handleStart = () => {
     reset();
     const spd = sliderToSpeed(sliderVal);
+    const tsc = { hoursToSimulate: 24 };
+    if (constantInlet) tsc.profile = FLAT_PROFILE;
     sendEvent('sim:live:start', {
       nodeParams: buildNodeParams ? buildNodeParams() : {},
-      timeSeriesConfig: { hoursToSimulate: 24 },
+      timeSeriesConfig: tsc,
       speed: spd,
       canvasData: canvasData || { nodes: [], edges: [] },
     });
@@ -131,6 +138,12 @@ function TransportControls({ sendEvent, buildNodeParams, canvasData, wsConnected
           <span>1x</span><span>10x</span><span>100x</span><span>1000x</span>
         </div>
       </div>
+
+      {/* Constant inlet toggle */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#374151', cursor: 'pointer' }}>
+        <input type="checkbox" checked={constantInlet} onChange={e => setConstantInlet(e.target.checked)} disabled={!isIdle} />
+        Constant Inlet (no diurnal variation)
+      </label>
     </div>
   );
 }

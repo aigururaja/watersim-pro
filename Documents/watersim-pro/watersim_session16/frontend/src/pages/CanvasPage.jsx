@@ -4,6 +4,7 @@ import ReactFlow, {
   addEdge, Background, Controls, MiniMap,
   useNodesState, useEdgesState,
   Panel, EdgeLabelRenderer, BaseEdge, getStraightPath,
+  ReactFlowProvider, useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
@@ -236,8 +237,17 @@ let idCounter = 1;
 const getId = () => `node_${idCounter++}`;
 
 export default function CanvasPage() {
+  return (
+    <ReactFlowProvider>
+      <CanvasPageInner />
+    </ReactFlowProvider>
+  );
+}
+
+function CanvasPageInner() {
   const { projectId, flowsheetId } = useParams();
   const navigate   = useNavigate();
+  const reactFlowInstance = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   // ── Canvas performance monitor (FPS overlay in dev) ──────────────────────
@@ -529,11 +539,11 @@ export default function CanvasPage() {
     const type  = event.dataTransfer.getData('application/unitop-type');
     const label = event.dataTransfer.getData('application/unitop-label');
     if (!type) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const position = {
-      x: event.clientX - bounds.left - 80,
-      y: event.clientY - bounds.top  - 30,
-    };
+    // Convert screen coordinates to flow coordinates (accounts for zoom/pan)
+    const position = reactFlowInstance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
     const newNode = {
       id:   getId(),
       type: 'unitOp',
@@ -547,7 +557,7 @@ export default function CanvasPage() {
     setNodes(ns => [...ns, newNode]);
     setSaved(false);
     sendEvent('node:add', newNode);
-  }, [sendEvent]);
+  }, [sendEvent, reactFlowInstance]);
 
   const onDragOver = (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; };
 
@@ -1264,6 +1274,10 @@ const SummaryPanel = React.memo(function SummaryPanel({ summary, costBreakdown, 
 
 // ── Dynamic Panel ──────────────────────────────────────────────────────────────
 
+const FLAT_PROFILE = Array.from({ length: 24 }, (_, h) => ({
+  hour: h, Q_scale: 1, BOD_scale: 1, TN_scale: 1, TP_scale: 1, TSS_scale: 1,
+}));
+
 const DEFAULT_PROFILE = Array.from({ length: 24 }, (_, h) => ({
   hour: h,
   Q_scale:   [0.60,0.55,0.52,0.50,0.52,0.58,0.80,1.10,1.30,1.40,1.45,1.50,1.45,1.35,1.25,1.20,1.20,1.25,1.30,1.25,1.10,0.95,0.80,0.68][h],
@@ -1274,6 +1288,7 @@ const DEFAULT_PROFILE = Array.from({ length: 24 }, (_, h) => ({
 function DynamicPanel({ running, results, onRun, onClose }) {
   const [profile, setProfile] = useState(DEFAULT_PROFILE.map(p => ({ ...p })));
   const [hours, setHours]     = useState(24);
+  const [constantInlet, setConstantInlet] = useState(false);
   const [activeChart, setActiveChart] = useState('Q');
 
   const updateScale = (hour, key, val) => {
@@ -1281,7 +1296,7 @@ function DynamicPanel({ running, results, onRun, onClose }) {
   };
 
   const handleRun = () => {
-    onRun({ profile, hoursToSimulate: hours });
+    onRun({ profile: constantInlet ? FLAT_PROFILE : profile, hoursToSimulate: hours });
   };
 
   const chartData = results?.results?.steps?.map(s => ({
@@ -1315,6 +1330,10 @@ function DynamicPanel({ running, results, onRun, onClose }) {
           <input type="number" style={S.paramInput} min={1} max={48} step={1}
             value={hours} onChange={e => setHours(Number(e.target.value))} />
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#374151', cursor: 'pointer', marginTop: 6 }}>
+          <input type="checkbox" checked={constantInlet} onChange={e => setConstantInlet(e.target.checked)} />
+          Constant Inlet (disable diurnal variation)
+        </label>
         <button
           style={{ ...S.btn, background: '#7C3AED', color: '#fff', width: '100%', marginTop: 8, opacity: running ? 0.7 : 1 }}
           onClick={handleRun}
@@ -1325,7 +1344,7 @@ function DynamicPanel({ running, results, onRun, onClose }) {
       </div>
 
       {/* Diurnal profile editor */}
-      <div style={{ ...S.panelSection, padding: '10px 0' }}>
+      {!constantInlet && <div style={{ ...S.panelSection, padding: '10px 0' }}>
         <div style={{ ...S.secTitle, padding: '0 16px' }}>24-Hour Loading Profile</div>
         <div style={{ overflowX: 'auto', padding: '0 8px' }}>
           <table style={{ fontSize: 11, borderCollapse: 'collapse', width: '100%' }}>
@@ -1356,7 +1375,7 @@ function DynamicPanel({ running, results, onRun, onClose }) {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
       {/* Results charts */}
       {results && chartData.length > 0 && (
