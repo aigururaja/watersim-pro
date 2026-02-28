@@ -603,12 +603,29 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
   // ── Write Now ───────────────────────────────────────────────────────────
   const writeNow = async () => {
     if (busyRef.current) return;
+
+    // Build map of OPC-read values by streamVar so writes can use live OPC data
+    const readValueByStreamVar = {};
+    for (const r of readRowsRef.current) {
+      if (r.lastValue != null && r.projectTag) {
+        const parts = r.projectTag.split('::');
+        const sv = parts.length > 1 ? parts[1] : parts[0];
+        if (sv) readValueByStreamVar[sv] = r.lastValue;
+      }
+    }
+
     const tags = [];
     for (const w of writeRowsRef.current) {
       if (!w.opcTag || !w.projectTag) continue;
       let raw;
-      if (w.manualOverride) { raw = w.manualValue; }
-      else { raw = getProjectValue(w.projectTag); }
+      if (w.manualOverride) {
+        raw = w.manualValue;
+      } else {
+        // Priority: OPC-read value for same stream var > simulation value
+        const parts = w.projectTag.split('::');
+        const sv = parts.length > 1 ? parts[1] : parts[0];
+        raw = readValueByStreamVar[sv] ?? getProjectValue(w.projectTag);
+      }
       if (raw == null || raw === '') continue;
       const asNum = Number(raw);
       const value = (typeof raw === 'number') ? raw : (typeof raw === 'string' && raw.trim() !== '' && !isNaN(asNum)) ? asNum : raw;
