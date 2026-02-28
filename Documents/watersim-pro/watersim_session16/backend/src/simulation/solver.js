@@ -27,6 +27,9 @@ const MODELS = {
   granular_filter:  require('./models/granularFilter'),
   // Session 8 — Step 39: ADM1-lite anaerobic digestion
   anaerobic_digest: require('./models/anaerobicDigester'),
+  // OPC integration
+  opc_read:         require('./models/opcRead'),
+  opc_write:        require('./models/opcWrite'),
 };
 
 const PALETTE_TYPE_MAP = {
@@ -54,6 +57,7 @@ const PALETTE_TYPE_MAP = {
   polymer_dosing: 'chemical_dosing',
   ph_adjustment: 'chemical_dosing',
   pump: null, blower: null, tank: null,
+  opc_read: 'opc_read', opc_write: 'opc_write',
 };
 
 const SOURCE_TYPES = new Set(['inlet']);

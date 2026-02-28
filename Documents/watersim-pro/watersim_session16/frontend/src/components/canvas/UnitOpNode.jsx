@@ -23,6 +23,8 @@ const TYPE_COLORS = {
   blower:             { bg: '#F8FAFC', border: '#94A3B8', icon: '🌀' },
   ro_membrane:        { bg: '#F0FDFA', border: '#0D9488', icon: '💧' },
   thickener:          { bg: '#FDF4FF', border: '#9333EA', icon: '🪣' },
+  opc_read:           { bg: '#EFF6FF', border: '#1D4ED8', icon: '📡' },
+  opc_write:          { bg: '#FEF3C7', border: '#B45309', icon: '📤' },
   default:            { bg: '#F8FAFC', border: '#94A3B8', icon: '⬡' },
 };
 

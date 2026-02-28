@@ -25,6 +25,8 @@
     "npm": ">=9.0.0"
   },
   "dependencies": {
-    "is-stream": "^2.0.1"
+    "is-stream": "^2.0.1",
+    "node-opc-da": "^1.0.7",
+    "node-opcua": "^2.163.1"
   }
 }

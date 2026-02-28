@@ -67,6 +67,13 @@ const PALETTE = [
       { type: 'tank',    label: 'Storage Tank' },
     ]
   },
+  {
+    category: 'OPC Integration',
+    items: [
+      { type: 'opc_read',  label: 'OPC Read' },
+      { type: 'opc_write', label: 'OPC Write' },
+    ]
+  },
 ];
 
 function PaletteItem({ type, label }) {

@@ -19,9 +19,12 @@ import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
 import LiveSimPanel from '../components/canvas/LiveSimPanel';
+import OpcConnectionDialog from '../components/canvas/OpcConnectionDialog';
+import OpcTagTable from '../components/canvas/OpcTagTable';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCanvasPerf } from '../hooks/useCanvasPerf';
 import useLiveSimStore from '../store/liveSimStore';
+import useOpcStore from '../store/opcStore';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 
@@ -226,6 +229,9 @@ const PARAM_DEFS = {
       hint: 'true = digestate split into cake + centrate' },
     { key: 'cake_DS_pct',      label: 'Cake Dry Solids (%)',      type: 'number', step: 1, min: 12, max: 35 },
   ],
+  // ── OPC Integration — uses OpcConfigPanel instead of ParamPanel ─────────
+  opc_read:  [],
+  opc_write: [],
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -241,6 +247,63 @@ export default function CanvasPage() {
     <ReactFlowProvider>
       <CanvasPageInner />
     </ReactFlowProvider>
+  );
+}
+
+// ── OPC Toolbar Button (shows connection status dot) ────────────────────────
+function OpcToolbarBtn({ onClick }) {
+  const connStatus = useOpcStore(s => s.connStatus);
+  const dotColor = { disconnected: '#9CA3AF', connecting: '#F59E0B', connected: '#16A34A', error: '#DC2626' }[connStatus];
+  return (
+    <button
+      style={{ border: 'none', borderRadius: 5, padding: '5px 10px', fontWeight: 600, cursor: 'pointer', fontSize: 12, minHeight: 30, background: '#1F4E79', color: '#fff', display: 'flex', alignItems: 'center', gap: 4 }}
+      onClick={onClick}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
+      OPC
+    </button>
+  );
+}
+
+// ── Minimal info panel shown when OPC node is clicked ───────────────────────
+function OpcNodeInfoPanel({ node, onOpenTagTable, onOpenConnection, onClose }) {
+  const connStatus = useOpcStore(s => s.connStatus);
+  const isRead = node.data.opType === 'opc_read';
+  const mappings = node.data.params?.tagMappings || [];
+  const mapped = mappings.filter(m => m.opcTag).length;
+  const dotColor = { disconnected: '#9CA3AF', connecting: '#F59E0B', connected: '#16A34A', error: '#DC2626' }[connStatus];
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #E5E7EB' }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#1F4E79' }}>{node.data.label}</div>
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{isRead ? 'OPC Read' : 'OPC Write'}</div>
+        </div>
+        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 16, minWidth: 32, minHeight: 32 }} onClick={onClose}>{'\u2715'}</button>
+      </div>
+      <div style={{ padding: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, fontSize: 12 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
+          <span style={{ color: '#374151' }}>{connStatus}</span>
+        </div>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 16 }}>
+          {mapped} tag{mapped !== 1 ? 's' : ''} mapped
+        </div>
+        <button
+          style={{ width: '100%', border: 'none', borderRadius: 5, padding: '8px 12px', fontWeight: 600, cursor: 'pointer', fontSize: 12, background: '#7C3AED', color: '#fff', marginBottom: 8 }}
+          onClick={onOpenTagTable}
+        >
+          Open Tag Table
+        </button>
+        <button
+          style={{ width: '100%', border: 'none', borderRadius: 5, padding: '8px 12px', fontWeight: 600, cursor: 'pointer', fontSize: 12, background: '#1F4E79', color: '#fff' }}
+          onClick={onOpenConnection}
+        >
+          OPC Connection
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -336,6 +399,10 @@ function CanvasPageInner() {
   // ── Live simulation ────────────────────────────────────────────────────────
   const [showLiveSim, setShowLiveSim] = useState(false);
 
+  // ── OPC dialogs ────────────────────────────────────────────────────────────
+  const [showOpcConnection, setShowOpcConnection] = useState(false);
+  const [showOpcTagTable, setShowOpcTagTable]     = useState(false);
+
   // ── Scenario comparison ────────────────────────────────────────────────────
   const [showScenarios, setShowScenarios]     = useState(false);
   const [scenarioResults, setScenarioResults] = useState(null);
@@ -356,6 +423,18 @@ function CanvasPageInner() {
       })
       .catch(() => navigate(`/projects/${projectId}`));
   }, [flowsheetId]);
+
+  // ── Hydrate global OPC store from first OPC node found ────────────────────
+  const opcHydratedRef = useRef(false);
+  useEffect(() => {
+    if (opcHydratedRef.current || nodes.length === 0) return;
+    const opcNode = nodes.find(n => n.data?.opType === 'opc_read' || n.data?.opType === 'opc_write');
+    if (opcNode?.data?.params) {
+      opcHydratedRef.current = true;
+      useOpcStore.getState().hydrateFromNode(opcNode.data.params);
+      useOpcStore.getState().checkStatus();
+    }
+  }, [nodes.length]);
 
   // ── Connections ────────────────────────────────────────────────────────────
   const onConnect = useCallback((params) => {
@@ -452,10 +531,14 @@ function CanvasPageInner() {
         type: 'stream',
         data: { ...e.data, streamResult: data.results?.streamResults?.[e.id] || null },
       })));
-      setShowSummary(true);
       setShowDynamic(false);
       setShowScenarios(false);
-      setSelectedNode(null);
+      // Keep OPC panels open after simulation so they can display the new stream values
+      const isOpc = selectedNode?.data?.opType === 'opc_read' || selectedNode?.data?.opType === 'opc_write';
+      if (!isOpc) {
+        setShowSummary(true);
+        setSelectedNode(null);
+      }
       sendEvent('sim:result', data);
     } catch (err) {
       setSimError(err.response?.data?.error || err.message);
@@ -675,6 +758,17 @@ function CanvasPageInner() {
                 >
                   Compare
                 </button>
+                {nodes.some(n => n.data?.opType === 'opc_read' || n.data?.opType === 'opc_write') && (
+                  <>
+                    <OpcToolbarBtn onClick={() => setShowOpcConnection(true)} />
+                    <button
+                      style={{ ...S.btn, background: '#7C3AED', color: '#fff' }}
+                      onClick={() => setShowOpcTagTable(true)}
+                    >
+                      OPC Tags
+                    </button>
+                  </>
+                )}
                 <button
                   style={{ ...S.btn, background: '#16A34A', color: '#fff', opacity: simulating ? 0.7 : 1 }}
                   onClick={simulate}
@@ -757,12 +851,20 @@ function CanvasPageInner() {
           {showRight && (
             <aside style={S.rightPanel}>
               {selectedNode && (
-                <ParamPanel
-                  node={selectedNode}
-                  unitResult={simResults?.results?.unitResults?.[selectedNode.id]}
-                  onUpdateParam={updateParam}
-                  onClose={() => setSelectedNode(null)}
-                />
+                (selectedNode.data.opType === 'opc_read' || selectedNode.data.opType === 'opc_write')
+                  ? <OpcNodeInfoPanel
+                      node={selectedNode}
+                      onOpenTagTable={() => { setShowOpcTagTable(true); setSelectedNode(null); }}
+                      onOpenConnection={() => setShowOpcConnection(true)}
+                      onClose={() => setSelectedNode(null)}
+                    />
+                  : <ParamPanel
+                      key={selectedNode.id}
+                      node={selectedNode}
+                      unitResult={simResults?.results?.unitResults?.[selectedNode.id]}
+                      onUpdateParam={updateParam}
+                      onClose={() => setSelectedNode(null)}
+                    />
               )}
               {showSummary && !selectedNode && summary && (
                 <SummaryPanel
@@ -807,6 +909,22 @@ function CanvasPageInner() {
           canvasData={{ nodes, edges }}
           wsConnected={wsConnected}
           onClose={() => setShowLiveSim(false)}
+        />
+      )}
+
+      {/* OPC Connection Dialog */}
+      {showOpcConnection && (
+        <OpcConnectionDialog onClose={() => setShowOpcConnection(false)} />
+      )}
+
+      {/* OPC Tag Table */}
+      {showOpcTagTable && (
+        <OpcTagTable
+          nodes={nodes}
+          edges={edges}
+          simResults={simResults}
+          onUpdateParam={updateParam}
+          onClose={() => setShowOpcTagTable(false)}
         />
       )}
 
