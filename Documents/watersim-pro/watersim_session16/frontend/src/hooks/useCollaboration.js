@@ -113,12 +113,10 @@ export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
           setSimBanner({ displayName: payload?.startedBy || 'A collaborator', live: true });
           break;
         case 'sim:live:step':
-          useLiveSimStore.getState().onStep(payload);
+          useLiveSimStore.getState().onSteps({ steps: [payload.step] });
           break;
-        case 'sim:live:complete':
-          console.log('[WS] Received sim:live:complete', payload);
-          useLiveSimStore.getState().onComplete(payload);
-          setSimBanner(null);
+        case 'sim:live:steps':
+          useLiveSimStore.getState().onSteps(payload);
           break;
         case 'sim:live:paused':
           useLiveSimStore.getState().onPaused();
@@ -130,13 +128,13 @@ export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
           useLiveSimStore.getState().onCancelled();
           setSimBanner(null);
           break;
-        case 'sim:live:speed-changed':
-          useLiveSimStore.getState().onSpeedChanged(payload);
-          break;
         case 'sim:live:error':
           console.error('[WS] Received sim:live:error', payload);
           useLiveSimStore.getState().onError(payload);
           setSimBanner(null);
+          break;
+        case 'sim:live:speed-changed':
+          useLiveSimStore.getState().onSpeedChanged(payload);
           break;
 
         default:

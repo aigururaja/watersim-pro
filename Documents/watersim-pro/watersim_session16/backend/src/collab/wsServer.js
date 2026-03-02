@@ -122,8 +122,6 @@ async function handleLiveSimStart(flowsheetId, peer, payload) {
 
     logger.info('Live sim: canvas loaded', { flowsheetId, nodeCount: canvasData.nodes.length, edgeCount: (canvasData.edges || []).length });
 
-    const speed = Math.min(Math.max(payload.speed || 100, 1), 1000);
-
     // Create simulation_runs record
     const runResult = await dbQuery(
       `INSERT INTO simulation_runs (flowsheet_id, created_by, mode, status, config, started_at)
@@ -131,16 +129,12 @@ async function handleLiveSimStart(flowsheetId, peer, payload) {
       [flowsheetId, peer.userId, JSON.stringify({
         nodeParams: payload.nodeParams,
         timeSeriesConfig: payload.timeSeriesConfig,
-        speed,
         live: true,
+        continuous: true,
       })]
     );
     const runId = runResult.rows[0].id;
     logger.info('Live sim: run record created', { flowsheetId, runId });
-
-    // Compute totalSteps from config (same logic as liveSimRunner.preComputeSteps)
-    const tsc = payload.timeSeriesConfig || {};
-    const totalSteps = Math.min(Math.max(tsc.hoursToSimulate ?? 24, 1), 48);
 
     // Broadcast 'started' BEFORE startLiveSim, because startLiveSim emits
     // the first step immediately and we need onStarted to run first on the client.
@@ -148,24 +142,23 @@ async function handleLiveSimStart(flowsheetId, peer, payload) {
       type: 'sim:live:started',
       payload: {
         runId,
-        totalSteps,
-        speed,
         startedBy: peer.displayName,
+        speed: payload.speed || 1,
       },
     });
 
-    const result = liveSimRunner.startLiveSim({
+    liveSimRunner.startLiveSim({
       flowsheetId,
       runId,
       canvasData,
       nodeParams: payload.nodeParams || {},
       timeSeriesConfig: payload.timeSeriesConfig || {},
-      speed,
+      speed: payload.speed || 1,
       userId: peer.userId,
       broadcastFn: broadcastToRoom,
     });
 
-    logger.info('Live sim: runner started', { flowsheetId, runId, totalSteps: result.totalSteps });
+    logger.info('Live sim: runner started (continuous)', { flowsheetId, runId });
   } catch (err) {
     logger.error('Failed to start live sim', { flowsheetId, error: err.message, stack: err.stack });
     broadcastToRoom(flowsheetId, {
@@ -271,8 +264,14 @@ function attachWsServer(httpServer) {
         case 'node:delete':
         case 'edge:add':
         case 'edge:delete':
+          broadcast(room, { type, payload, from: peer.userId }, ws);
+          break;
+
         case 'params:update':
           broadcast(room, { type, payload, from: peer.userId }, ws);
+          // Forward param updates to active live sim so OPC values
+          // are incorporated into subsequent step computations
+          liveSimRunner.updateNodeParams(flowsheetId, payload || {});
           break;
 
         // Simulation lifecycle

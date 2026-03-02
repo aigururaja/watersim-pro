@@ -25,7 +25,7 @@ api.interceptors.response.use(
     const original = error.config;
     const data = error.response?.data;
 
-    if (error.response?.status === 401 && data?.code === 'TOKEN_EXPIRED' && !original._retry) {
+    if (error.response?.status === 401 && (data?.code === 'TOKEN_EXPIRED' || data?.error?.code === 'TOKEN_EXPIRED') && !original._retry) {
       if (refreshing) {
         return new Promise((resolve, reject) => {
           queue.push({ resolve, reject, config: original });

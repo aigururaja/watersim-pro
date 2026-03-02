@@ -25,7 +25,7 @@
 
 'use strict';
 
-const { runSteadyState } = require('./solver');
+const { runSteadyState, collectOpcOverrides } = require('./solver');
 
 /** Default diurnal profile — typical municipal WW loading pattern */
 const DEFAULT_DIURNAL_PROFILE = [
@@ -84,9 +84,16 @@ function buildProfile(userProfile) {
  *
  * For each inlet node: scales Q, BOD, TN, TP, TSS by the profile multipliers.
  * The base values come from nodeParams first, falling back to inlet DEFAULTS.
+ *
+ * IMPORTANT: Variables that are read from OPC (via opc_read tag mappings) are
+ * NOT scaled — the OPC live value is used directly, overriding any diurnal
+ * profile scaling. This ensures simulation uses real plant data when available.
  */
 function scaleInletParams(canvasData, nodeParams, stepEntry, inletDefaults) {
   const scaledParams = JSON.parse(JSON.stringify(nodeParams)); // deep copy
+
+  // Collect OPC overrides — variables driven by OPC skip diurnal scaling
+  const opcOverrides = collectOpcOverrides(canvasData.nodes || [], nodeParams);
 
   for (const node of canvasData.nodes || []) {
     const opType = node.data?.opType || node.data?.type;
@@ -95,13 +102,13 @@ function scaleInletParams(canvasData, nodeParams, stepEntry, inletDefaults) {
     const base = scaledParams[node.id] || {};
     scaledParams[node.id] = {
       ...base,
-      Q:   (base.Q   ?? inletDefaults.Q)   * (stepEntry.Q_scale   ?? 1),
-      BOD: (base.BOD ?? inletDefaults.BOD) * (stepEntry.BOD_scale  ?? 1),
-      TN:  (base.TN  ?? inletDefaults.TN)  * (stepEntry.TN_scale   ?? 1),
-      TP:  (base.TP  ?? inletDefaults.TP)  * (stepEntry.TP_scale   ?? 1),
-      TSS: (base.TSS ?? inletDefaults.TSS) * (stepEntry.TSS_scale  ?? 1),
-      // NH4 scales with TN by default (proportional)
-      NH4: (base.NH4 ?? inletDefaults.NH4) * (stepEntry.TN_scale   ?? 1),
+      // If OPC override exists, use live OPC value directly (no diurnal scaling)
+      Q:   opcOverrides.Q   ?? ((base.Q   ?? inletDefaults.Q)   * (stepEntry.Q_scale   ?? 1)),
+      BOD: opcOverrides.BOD ?? ((base.BOD ?? inletDefaults.BOD) * (stepEntry.BOD_scale  ?? 1)),
+      TN:  opcOverrides.TN  ?? ((base.TN  ?? inletDefaults.TN)  * (stepEntry.TN_scale   ?? 1)),
+      TP:  opcOverrides.TP  ?? ((base.TP  ?? inletDefaults.TP)  * (stepEntry.TP_scale   ?? 1)),
+      TSS: opcOverrides.TSS ?? ((base.TSS ?? inletDefaults.TSS) * (stepEntry.TSS_scale  ?? 1)),
+      NH4: opcOverrides.NH4 ?? ((base.NH4 ?? inletDefaults.NH4) * (stepEntry.TN_scale   ?? 1)),
     };
   }
 

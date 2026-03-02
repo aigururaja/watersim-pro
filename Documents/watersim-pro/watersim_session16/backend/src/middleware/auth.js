@@ -10,7 +10,9 @@ const authenticate = (req, res, next) => {
     req.user = jwtUtils.verifyAccess(token);
     next();
   } catch (err) {
-    return next(new AppError(err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid token', 401));
+    const appErr = new AppError(err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid token', 401);
+    if (err.name === 'TokenExpiredError') appErr.code = 'TOKEN_EXPIRED';
+    return next(appErr);
   }
 };
 

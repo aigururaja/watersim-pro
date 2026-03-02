@@ -14,6 +14,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallba
 import ReactDOM from 'react-dom';
 import api from '../../utils/api';
 import useOpcStore from '../../store/opcStore';
+import { applyTransform, validateEquation } from '../../utils/opcTransform';
 
 // ── Stream variables ─────────────────────────────────────────────────────────
 
@@ -65,14 +66,42 @@ function fmtVal(v) {
   return typeof v === 'number' ? v.toFixed(2) : String(v);
 }
 
-// ── Searchable Tag Dropdown ──────────────────────────────────────────────────
-// Enhanced to support {key, label} items and optional browse button
+// ── Build tree from flat browse nodes ────────────────────────────────────────
 
-function TagDropdown({ items, loading, value, onSelect, onBrowse, onClose, placeholder, anchor }) {
+function buildTree(nodes) {
+  const folderMap = {};
+  const roots = [];
+  for (const n of nodes) {
+    if (n.isFolder) {
+      folderMap[n.itemID || n.name] = {
+        id: n.itemID || n.name,
+        name: n.name || n.itemID,
+        isFolder: true,
+        children: [],
+      };
+    }
+  }
+  for (const n of nodes) {
+    const entry = n.isFolder
+      ? folderMap[n.itemID || n.name]
+      : { id: n.itemID || n.name, name: n.name || n.itemID, isFolder: false };
+    const parent = n.parentPath ? folderMap[n.parentPath] : null;
+    if (parent) parent.children.push(entry);
+    else roots.push(entry);
+  }
+  return roots;
+}
+
+// ── Searchable Tag Dropdown ──────────────────────────────────────────────────
+// For project tags — flat list with {key, label} items
+
+function TagDropdown({ items, loading, value, onSelect, onClose, placeholder, anchor }) {
   const [filter, setFilter] = useState('');
   const ref = useRef(null);
   const inputRef = useRef(null);
   const [pos, setPos] = useState(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Position the dropdown using fixed coords from the anchor DOM element
   useLayoutEffect(() => {
@@ -92,10 +121,10 @@ function TagDropdown({ items, loading, value, onSelect, onBrowse, onClose, place
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onCloseRef.current(); };
+    const timer = setTimeout(() => document.addEventListener('mousedown', handler), 0);
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', handler); };
+  }, []);
 
   // Normalize: accept [{key,label}] or [string]
   const normalized = useMemo(() =>
@@ -152,11 +181,6 @@ function TagDropdown({ items, loading, value, onSelect, onBrowse, onClose, place
         ))}
         {filtered.length > 100 && <div style={DD.hint}>{filtered.length - 100} more... (type to filter)</div>}
       </div>
-      {onBrowse && (
-        <div style={DD.footer}>
-          <button style={DD.browseBtn} onClick={onBrowse}>Browse Tree...</button>
-        </div>
-      )}
     </div>
   );
 
@@ -171,118 +195,178 @@ const DD = {
   item:      { padding: '5px 8px', fontSize: 11, fontFamily: 'monospace', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, borderBottom: '1px solid #F9FAFB' },
   hint:      { padding: '8px', fontSize: 11, color: '#9CA3AF', textAlign: 'center' },
   useBtn:    { background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: 3, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 },
-  footer:    { padding: '4px 8px', borderTop: '1px solid #E5E7EB' },
-  browseBtn: { background: 'none', border: 'none', color: '#1D4ED8', fontSize: 11, cursor: 'pointer', fontWeight: 600, padding: '2px 0' },
 };
 
-// ── Tag Browser (full tree — UA + DA) ────────────────────────────────────────
+// ── OPC Tag Tree Dropdown ────────────────────────────────────────────────────
+// Shows OPC server tags in tree structure with expandable folders.
+// When user types a search filter, switches to flat filtered list.
 
-function TagBrowser({ onSelect, onClose }) {
-  const { protocol, endpointUrl, daServer } = useOpcStore();
-  const [tree, setTree] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [expandedNodes, setExpandedNodes] = useState(new Set());
-  const [childrenMap, setChildrenMap] = useState({});
-  const [manualTag, setManualTag] = useState('');
+function OpcTagTreeDropdown({ tree, flatTags, loading, value, onSelect, onClose, anchor }) {
   const [filter, setFilter] = useState('');
+  const [expanded, setExpanded] = useState(new Set());
+  const ref = useRef(null);
+  const inputRef = useRef(null);
+  const [pos, setPos] = useState(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  useLayoutEffect(() => {
+    const el = anchor || ref.current?.parentElement;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const showAbove = spaceBelow < 320 && rect.top > 320;
+    setPos({
+      top: showAbove ? undefined : rect.bottom + 2,
+      bottom: showAbove ? (window.innerHeight - rect.top + 2) : undefined,
+      left: rect.left,
+      width: Math.max(rect.width, 300),
+    });
+  }, [anchor]);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  // Click-outside handler — use ref to avoid re-registering on every render
   useEffect(() => {
-    if (protocol === 'da') loadDaTags(); else loadChildren(null);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onCloseRef.current(); };
+    // Delay registration to avoid catching the opening click
+    const timer = setTimeout(() => document.addEventListener('mousedown', handler), 0);
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', handler); };
+  }, []);
 
-  const loadChildren = async (nodeId) => {
-    setLoading(true); setError(null);
-    try {
-      const { data } = await api.post('/opc/browse', { endpointUrl, nodeId: nodeId || undefined });
-      if (nodeId) setChildrenMap(prev => ({ ...prev, [nodeId]: data.nodes || [] }));
-      else setTree(data.nodes || []);
-    } catch (err) { setError(err.response?.data?.error || err.message); }
-    finally { setLoading(false); }
+  const toggleFolder = (id) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
-  const loadDaTags = async () => {
-    setLoading(true); setError(null);
-    try {
-      const { data } = await api.post('/opc/da/browse', { progId: daServer?.progId, address: daServer?.address || 'localhost' });
-      const nodes = data.nodes || [];
-      const folderMap = {};
-      const roots = [];
-      for (const n of nodes) { if (!n.isFolder) continue; folderMap[n.itemID || n.name] = { nodeId: n.itemID || n.name, displayName: n.name || n.itemID, isFolder: true, children: [] }; }
-      for (const n of nodes) {
-        const tn = n.isFolder ? folderMap[n.itemID || n.name] : { nodeId: n.itemID || n.name, displayName: n.name || n.itemID, isFolder: false, children: [] };
-        const parent = n.parentPath ? folderMap[n.parentPath] : null;
-        if (parent) parent.children.push(tn); else roots.push(tn);
-      }
-      setTree(roots);
-      const cMap = {};
-      for (const [, f] of Object.entries(folderMap)) { if (f.children.length > 0) cMap[f.nodeId] = f.children; }
-      setChildrenMap(cMap);
-    } catch (err) { setError(err.response?.data?.error || err.message); }
-    finally { setLoading(false); }
-  };
-
-  const toggleExpand = (nodeId) => {
-    const next = new Set(expandedNodes);
-    if (next.has(nodeId)) next.delete(nodeId);
-    else { next.add(nodeId); if (!childrenMap[nodeId]) loadChildren(nodeId); }
-    setExpandedNodes(next);
-  };
-
+  // Render a tree node recursively
   const renderNode = (node, depth = 0) => {
-    const isExp = expandedNodes.has(node.nodeId);
-    const children = node.children || childrenMap[node.nodeId] || [];
-    return (
-      <div key={node.nodeId}>
-        <div style={{ ...TBS.treeItem, paddingLeft: 12 + depth * 16 }} onClick={() => node.isFolder ? toggleExpand(node.nodeId) : onSelect(node.nodeId)}>
-          <span style={{ marginRight: 6, fontSize: 12 }}>{node.isFolder ? (isExp ? '\u25BC' : '\u25B6') : '\u2022'}</span>
-          <span style={{ flex: 1, fontSize: 12 }}>{node.displayName || node.browseName}</span>
-          {!node.isFolder && <span style={{ fontSize: 10, color: '#9CA3AF' }}>{node.nodeId}</span>}
+    if (node.isFolder) {
+      const isExp = expanded.has(node.id);
+      return (
+        <div key={node.id}>
+          <div
+            style={{ ...TDD.treeItem, paddingLeft: 8 + depth * 16 }}
+            onClick={() => toggleFolder(node.id)}
+            onMouseEnter={e => e.currentTarget.style.background = '#F3F4F6'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <span style={{ fontSize: 9, color: '#6B7280', marginRight: 4, width: 10, display: 'inline-block' }}>
+              {isExp ? '\u25BC' : '\u25B6'}
+            </span>
+            <span style={{ fontSize: 11, color: '#374151', fontWeight: 600 }}>{node.name}</span>
+          </div>
+          {isExp && node.children && node.children.map(c => renderNode(c, depth + 1))}
         </div>
-        {isExp && children.map(c => renderNode(c, depth + 1))}
+      );
+    }
+    // Leaf node
+    const isSelected = node.id === value;
+    return (
+      <div
+        key={node.id}
+        style={{ ...TDD.treeItem, paddingLeft: 8 + depth * 16, background: isSelected ? '#EFF6FF' : 'transparent' }}
+        onClick={() => onSelect(node.id)}
+        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#F9FAFB'; }}
+        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <span style={{ fontSize: 7, color: '#9CA3AF', marginRight: 4, width: 10, display: 'inline-block', textAlign: 'center' }}>{'\u25CF'}</span>
+        <span style={{ flex: 1, fontSize: 11, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
+        {isSelected && <span style={{ color: '#1D4ED8', fontSize: 10 }}>{'\u2713'}</span>}
       </div>
     );
   };
 
-  const matchesFilter = (node, term) => {
-    if ((node.displayName || node.nodeId || '').toLowerCase().includes(term)) return true;
-    return (node.children || []).some(c => matchesFilter(c, term));
-  };
-  const filteredTree = filter ? tree.filter(n => matchesFilter(n, filter.toLowerCase())) : tree;
+  const term = filter.toLowerCase();
 
-  return (
-    <div style={TBS.overlay}>
-      <div style={TBS.modal}>
-        <div style={TBS.header}>
-          <span style={{ fontWeight: 700, fontSize: 13 }}>Browse {protocol === 'da' ? 'DA' : 'UA'} Tags</span>
-          <button style={TBS.closeBtn} onClick={onClose}>{'\u2715'}</button>
-        </div>
-        {error && <div style={TBS.error}>Browse failed: {error}</div>}
-        <div style={{ padding: '6px 16px', borderBottom: '1px solid #E5E7EB' }}>
-          <input type="text" placeholder="Filter tags..." value={filter} onChange={e => setFilter(e.target.value)} style={{ width: '100%', padding: '5px 8px', border: '1px solid #D1D5DB', borderRadius: 4, fontSize: 12 }} />
-        </div>
-        <div style={TBS.treeContainer}>
-          {loading && tree.length === 0 && <div style={{ padding: 12, fontSize: 12, color: '#9CA3AF' }}>Loading...</div>}
-          {filteredTree.map(node => renderNode(node))}
-        </div>
-        <div style={TBS.manualEntry}>
-          <input type="text" placeholder={protocol === 'da' ? 'Manual item ID' : 'Manual tag ID'} value={manualTag} onChange={e => setManualTag(e.target.value)} style={{ flex: 1, padding: '5px 8px', border: '1px solid #D1D5DB', borderRadius: 4, fontSize: 12 }} />
-          <PressBtn style={{ border: 'none', borderRadius: 5, padding: '5px 10px', fontWeight: 600, cursor: 'pointer', fontSize: 11, minHeight: 30, background: '#1D4ED8', color: '#fff' }} onClick={() => { if (manualTag.trim()) onSelect(manualTag.trim()); }} disabled={!manualTag.trim()}>Use Tag</PressBtn>
-        </div>
+  // In search mode: show flat filtered leaf tags
+  const flatFiltered = term
+    ? flatTags.filter(t => t.toLowerCase().includes(term))
+    : null;
+
+  const dropdown = (
+    <div ref={ref} style={{
+      ...TDD.wrap,
+      position: 'fixed',
+      top: pos?.top,
+      bottom: pos?.bottom,
+      left: pos?.left,
+      width: pos?.width || 300,
+      right: 'auto',
+      zIndex: 9999,
+    }}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={filter}
+        onChange={e => setFilter(e.target.value)}
+        placeholder="Search OPC tags..."
+        style={TDD.input}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            if (flatFiltered && flatFiltered.length > 0) onSelect(flatFiltered[0]);
+            else if (filter.trim()) onSelect(filter.trim());
+          }
+          if (e.key === 'Escape') onClose();
+        }}
+      />
+      <div style={TDD.list}>
+        {loading && <div style={TDD.hint}>Loading OPC tags...</div>}
+
+        {/* Search mode: flat filtered list */}
+        {!loading && flatFiltered && (
+          <>
+            {flatFiltered.length === 0 && (
+              <div style={TDD.hint}>
+                No match
+                {filter.trim() && (
+                  <div style={{ marginTop: 4 }}>
+                    <button style={TDD.useBtn} onClick={() => onSelect(filter.trim())}>Use "{filter.trim()}"</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {flatFiltered.slice(0, 100).map(t => (
+              <div key={t} style={{ ...TDD.flatItem, background: t === value ? '#EFF6FF' : 'transparent' }} onClick={() => onSelect(t)}>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t}</span>
+                {t === value && <span style={{ color: '#1D4ED8', fontSize: 10 }}>{'\u2713'}</span>}
+              </div>
+            ))}
+            {flatFiltered.length > 100 && <div style={TDD.hint}>{flatFiltered.length - 100} more... (type to filter)</div>}
+          </>
+        )}
+
+        {/* Tree mode: hierarchical view */}
+        {!loading && !flatFiltered && (
+          <>
+            {tree.length === 0 && <div style={TDD.hint}>No OPC tags available</div>}
+            {tree.map(node => renderNode(node))}
+          </>
+        )}
       </div>
+      {/* Manual entry footer */}
+      {filter.trim() && flatFiltered && flatFiltered.length > 0 && !flatFiltered.includes(filter.trim()) && (
+        <div style={{ padding: '4px 8px', borderTop: '1px solid #E5E7EB' }}>
+          <button style={TDD.useBtn} onClick={() => onSelect(filter.trim())}>Use "{filter.trim()}"</button>
+        </div>
+      )}
     </div>
   );
+
+  return ReactDOM.createPortal(dropdown, document.body);
 }
 
-const TBS = {
-  overlay:       { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  modal:         { background: '#fff', borderRadius: 10, width: 420, maxHeight: '70vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.25)' },
-  header:        { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #E5E7EB' },
-  closeBtn:      { background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 16, minWidth: 32, minHeight: 32 },
-  error:         { padding: '8px 16px', background: '#FEF2F2', color: '#991B1B', fontSize: 12, borderBottom: '1px solid #FECACA' },
-  treeContainer: { flex: 1, overflowY: 'auto', minHeight: 150, maxHeight: 350 },
-  treeItem:      { display: 'flex', alignItems: 'center', padding: '4px 12px', cursor: 'pointer', fontSize: 12, color: '#374151', borderBottom: '1px solid #F9FAFB' },
-  manualEntry:   { display: 'flex', gap: 6, padding: '10px 16px', borderTop: '1px solid #E5E7EB' },
+const TDD = {
+  wrap:      { background: '#fff', border: '1px solid #D1D5DB', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column', minWidth: 260, maxWidth: 440 },
+  input:     { padding: '6px 8px', border: 'none', borderBottom: '1px solid #E5E7EB', fontSize: 11, fontFamily: 'monospace', outline: 'none' },
+  list:      { maxHeight: 300, overflowY: 'auto' },
+  treeItem:  { display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', minHeight: 26 },
+  flatItem:  { padding: '5px 8px', fontSize: 11, fontFamily: 'monospace', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, borderBottom: '1px solid #F9FAFB' },
+  hint:      { padding: '8px', fontSize: 11, color: '#9CA3AF', textAlign: 'center' },
+  useBtn:    { background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: 3, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 },
 };
 
 // ── Resizable Column Header ──────────────────────────────────────────────────
@@ -364,8 +448,9 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
     return map;
   }, [projectTags]);
 
-  // ── Cached OPC tag list (fetched from server for dropdowns) ─────────────
-  const [opcTags, setOpcTags] = useState([]);
+  // ── Cached OPC tag tree + flat list (fetched from server for dropdowns) ──
+  const [opcTagTree, setOpcTagTree] = useState([]);   // hierarchical tree for dropdown
+  const [opcTagFlat, setOpcTagFlat] = useState([]);    // flat leaf strings for search
   const [tagsLoading, setTagsLoading] = useState(false);
   const [tagsError, setTagsError] = useState(null);
 
@@ -374,17 +459,23 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
     setTagsLoading(true);
     setTagsError(null);
     try {
+      let browseNodes;
       if (protocol === 'da') {
         const { data } = await api.post('/opc/da/browse', { progId: daServer?.progId, address: daServer?.address || 'localhost' });
-        const tags = (data.nodes || []).filter(n => !n.isFolder).map(n => n.itemID || n.name);
-        setOpcTags(tags);
-        if (tags.length === 0) setTagsError('Browse returned 0 tags');
+        browseNodes = data.nodes || [];
       } else {
         const { data } = await api.post('/opc/browse', { endpointUrl });
-        const tags = (data.nodes || []).filter(n => !n.isFolder).map(n => n.nodeId || n.browseName);
-        setOpcTags(tags);
-        if (tags.length === 0) setTagsError('Browse returned 0 leaf tags — try "Browse Tree" in OPC tag dropdown');
+        browseNodes = (data.nodes || []).map(n => ({
+          itemID: n.nodeId || n.browseName,
+          name: n.browseName || n.nodeId,
+          isFolder: !!n.isFolder,
+          parentPath: n.parentPath || '',
+        }));
       }
+      const flat = browseNodes.filter(n => !n.isFolder).map(n => n.itemID || n.name);
+      setOpcTagFlat(flat);
+      setOpcTagTree(buildTree(browseNodes));
+      if (flat.length === 0) setTagsError('Browse returned 0 tags');
     } catch (err) {
       setTagsError(err.response?.data?.error || err.message);
     }
@@ -392,7 +483,7 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
   }, [connStatus, protocol, endpointUrl, daServer]);
 
   useEffect(() => {
-    if (connStatus === 'connected' && opcTags.length === 0) fetchOpcTags();
+    if (connStatus === 'connected' && opcTagFlat.length === 0) fetchOpcTags();
   }, [connStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Parse project tag key → { nodeId, streamVar } ───────────────────────
@@ -450,7 +541,9 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
           projectTag: ptag?.key || '',
           opcTag: m.opcTag || '',
           lastValue: m.lastValue ?? null,
+          rawValue: m.rawValue ?? null,
           nodeId: rn.id,
+          filter: m.filter || { min: null, max: null, equation: '' },
         });
       }
     }
@@ -473,6 +566,7 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
           nodeId: wn.id,
           manualOverride: m.manualOverride || false,
           manualValue: m.manualValue || '',
+          filter: m.filter || { min: null, max: null, equation: '' },
         });
       }
     }
@@ -490,7 +584,6 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
   const [actionStatus, setActionStatus] = useState(null);
   const [lastPollTime, setLastPollTime] = useState(null);
   const [activeDropdown, setActiveDropdown] = useState(null); // {section:'read'|'write', rowIdx, field:'projectTag'|'opcTag', anchor: DOMElement}
-  const [browseTarget, setBrowseTarget] = useState(null);     // {section:'read'|'write', rowIdx}
 
   const pollRef = useRef(null);
   const busyRef = useRef(false);
@@ -508,12 +601,25 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
   const setColW = (key, w) => setColWidths(prev => ({ ...prev, [key]: w }));
 
   // ── Row operations ──────────────────────────────────────────────────────
-  const addReadRow = () => setReadRows(prev => [...prev, { projectTag: '', opcTag: '', lastValue: null, nodeId: readNodes[0]?.id || null }]);
-  const addWriteRow = () => setWriteRows(prev => [...prev, { projectTag: '', opcTag: '', lastValue: null, nodeId: writeNodes[0]?.id || null, manualOverride: false, manualValue: '' }]);
+  const addReadRow = () => setReadRows(prev => [...prev, { projectTag: '', opcTag: '', lastValue: null, rawValue: null, nodeId: readNodes[0]?.id || null, filter: { min: null, max: null, equation: '' } }]);
+  const addWriteRow = () => setWriteRows(prev => [...prev, { projectTag: '', opcTag: '', lastValue: null, nodeId: writeNodes[0]?.id || null, manualOverride: false, manualValue: '', filter: { min: null, max: null, equation: '' } }]);
   const removeReadRow = (idx) => setReadRows(prev => prev.filter((_, i) => i !== idx));
   const removeWriteRow = (idx) => setWriteRows(prev => prev.filter((_, i) => i !== idx));
   const updateReadRow = (idx, field, value) => setReadRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
   const updateWriteRow = (idx, field, value) => setWriteRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+  const updateReadFilter = (idx, field, val) => setReadRows(prev => prev.map((r, i) => i === idx ? { ...r, filter: { ...(r.filter || {}), [field]: val } } : r));
+  const updateWriteFilter = (idx, field, val) => setWriteRows(prev => prev.map((r, i) => i === idx ? { ...r, filter: { ...(r.filter || {}), [field]: val } } : r));
+
+  // ── Filter expand/collapse ────────────────────────────────────────────
+  const [expandedFilters, setExpandedFilters] = useState(new Set());
+  const toggleFilter = (section, idx) => {
+    const key = `${section}-${idx}`;
+    setExpandedFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   // ── Save to node params ─────────────────────────────────────────────────
   const saveToNodes = useCallback(() => {
@@ -521,15 +627,22 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
 
     // Build read mappings per opc_read node
     const readMappingsMap = {};
+    const streamVarOverrides = {};  // Push OPC values to upstream nodes
     for (const r of readRowsRef.current) {
       if (!r.opcTag || !r.projectTag) continue;
       const nid = r.nodeId || readNodes[0]?.id;
       if (!nid) continue;
       const parts = r.projectTag.split('::');
+      const targetNodeId = parts.length > 1 ? parts[0] : null;
       const streamVar = parts.length > 1 ? parts[1] : parts[0];
       if (!streamVar) continue;
       if (!readMappingsMap[nid]) readMappingsMap[nid] = [];
-      readMappingsMap[nid].push({ streamVar, opcTag: r.opcTag, lastValue: r.lastValue });
+      readMappingsMap[nid].push({ streamVar, opcTag: r.opcTag, lastValue: r.lastValue, rawValue: r.rawValue, filter: r.filter });
+
+      // Track OPC overrides for upstream node params
+      if (r.lastValue != null && targetNodeId) {
+        streamVarOverrides[`${targetNodeId}::${streamVar}`] = r.lastValue;
+      }
     }
 
     // Build write mappings per opc_write node
@@ -542,7 +655,7 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
       const streamVar = parts.length > 1 ? parts[1] : parts[0];
       if (!streamVar) continue;
       if (!writeMappingsMap[nid]) writeMappingsMap[nid] = [];
-      writeMappingsMap[nid].push({ streamVar, opcTag: w.opcTag, lastValue: w.lastValue, manualOverride: w.manualOverride || false, manualValue: w.manualValue || '' });
+      writeMappingsMap[nid].push({ streamVar, opcTag: w.opcTag, lastValue: w.lastValue, manualOverride: w.manualOverride || false, manualValue: w.manualValue || '', filter: w.filter });
     }
 
     for (const rn of readNodes) {
@@ -558,6 +671,13 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
       onUpdateParam(wn.id, 'endpointUrl', ep);
       onUpdateParam(wn.id, 'daServer', ds);
       onUpdateParam(wn.id, 'intervalSec', intervalSec);
+    }
+
+    // Push OPC read values to upstream node params (e.g. inlet Q = OPC value)
+    // so simulation uses live OPC data for all mapped variables
+    for (const [key, val] of Object.entries(streamVarOverrides)) {
+      const [targetNodeId, streamVar] = key.split('::');
+      onUpdateParam(targetNodeId, streamVar, val);
     }
   }, [readNodes, writeNodes, onUpdateParam, intervalSec]);
 
@@ -586,13 +706,57 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
         const { data } = await api.post('/opc/read', { endpointUrl, tagIds });
         values = data.values || [];
       }
-      setReadRows(prev => prev.map(r => {
+      // Update readRows state with latest OPC values (apply filter transforms)
+      const updatedRows = readRowsRef.current.map(r => {
         const match = values.find(v => v.tagId === r.opcTag);
-        return match ? { ...r, lastValue: match.value } : r;
-      }));
+        if (!match) return r;
+        const rawValue = match.value;
+        const lastValue = r.filter ? applyTransform(rawValue, r.filter) : rawValue;
+        return { ...r, lastValue, rawValue };
+      });
+      setReadRows(updatedRows);
       setLastPollTime(Date.now());
       const good = values.filter(v => v.isGood).length;
       setActionStatus({ type: good > 0 ? 'success' : 'error', msg: `Read ${good}/${tagIds.length}` });
+
+      // ── Immediately persist OPC values to node params ──────────────────
+      // When variables are read from OPC, they must be available in node
+      // params right away so any simulation triggered uses live OPC values,
+      // not stale stored values. This bypasses the 500ms debounce.
+      if (good > 0) {
+        const readMappingsMap = {};
+        // Also collect overrides to push to upstream (inlet) nodes
+        const streamVarOverrides = {};  // { nodeId::streamVar → value }
+
+        for (const r of updatedRows) {
+          if (!r.opcTag || !r.projectTag) continue;
+          const nid = r.nodeId || readNodes[0]?.id;
+          if (!nid) continue;
+          const parts = r.projectTag.split('::');
+          const targetNodeId = parts.length > 1 ? parts[0] : null;
+          const streamVar = parts.length > 1 ? parts[1] : parts[0];
+          if (!streamVar) continue;
+          if (!readMappingsMap[nid]) readMappingsMap[nid] = [];
+          readMappingsMap[nid].push({ streamVar, opcTag: r.opcTag, lastValue: r.lastValue, rawValue: r.rawValue, filter: r.filter });
+
+          // Track OPC overrides for upstream node params (e.g. inlet Q)
+          if (r.lastValue != null && targetNodeId) {
+            streamVarOverrides[`${targetNodeId}::${streamVar}`] = r.lastValue;
+          }
+        }
+
+        // Update opc_read node tagMappings
+        for (const rn of readNodes) {
+          onUpdateParam(rn.id, 'tagMappings', readMappingsMap[rn.id] || []);
+        }
+
+        // Push OPC values to the actual upstream node params (e.g. inlet Q)
+        // so that getProjectValue() and simulation both use live OPC data
+        for (const [key, val] of Object.entries(streamVarOverrides)) {
+          const [targetNodeId, streamVar] = key.split('::');
+          onUpdateParam(targetNodeId, streamVar, val);
+        }
+      }
     } catch (err) {
       const msg = err.response?.data?.error || err.message;
       setActionStatus({ type: 'error', msg });
@@ -628,7 +792,10 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
       }
       if (raw == null || raw === '') continue;
       const asNum = Number(raw);
-      const value = (typeof raw === 'number') ? raw : (typeof raw === 'string' && raw.trim() !== '' && !isNaN(asNum)) ? asNum : raw;
+      let value = (typeof raw === 'number') ? raw : (typeof raw === 'string' && raw.trim() !== '' && !isNaN(asNum)) ? asNum : raw;
+      if (w.filter && typeof value === 'number') {
+        value = applyTransform(value, w.filter);
+      }
       tags.push({ tagId: w.opcTag, value });
     }
     if (tags.length === 0) return;
@@ -697,20 +864,6 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
     setActiveDropdown(null);
   };
 
-  const handleBrowseFromDropdown = () => {
-    if (!activeDropdown) return;
-    setBrowseTarget({ section: activeDropdown.section, rowIdx: activeDropdown.rowIdx });
-    setActiveDropdown(null);
-  };
-
-  const handleBrowseSelect = (tagId) => {
-    if (!browseTarget) return;
-    if (browseTarget.section === 'read') updateReadRow(browseTarget.rowIdx, 'opcTag', tagId);
-    else updateWriteRow(browseTarget.rowIdx, 'opcTag', tagId);
-    setBrowseTarget(null);
-    if (!opcTags.includes(tagId)) setOpcTags(prev => [...prev, tagId]);
-  };
-
   // ── Live pulse ──────────────────────────────────────────────────────────
   const [pulse, setPulse] = useState(false);
   useEffect(() => {
@@ -770,23 +923,31 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
                 <ResizableTh width={colWidths.opcTag} onResize={w => setColW('opcTag', w)} style={S.th}>OPC Tag</ResizableTh>
                 <ResizableTh width={colWidths.projVal} onResize={w => setColW('projVal', w)} style={{ ...S.th, textAlign: 'right' }}>Project Value</ResizableTh>
                 <ResizableTh width={colWidths.opcVal} onResize={w => setColW('opcVal', w)} style={{ ...S.th, textAlign: 'right' }}>OPC Value</ResizableTh>
+                <th style={{ ...S.th, width: 28, fontSize: 9, fontFamily: 'monospace', color: '#7C3AED' }} title="Pre/Post-processing filters">fx</th>
                 <th style={{ ...S.th, width: 28 }}></th>
               </tr>
             </thead>
             <tbody>
               {sectionRows.length === 0 && (
-                <tr><td colSpan={5} style={{ padding: 16, textAlign: 'center', color: '#9CA3AF', fontSize: 11, fontStyle: 'italic' }}>
+                <tr><td colSpan={6} style={{ padding: 16, textAlign: 'center', color: '#9CA3AF', fontSize: 11, fontStyle: 'italic' }}>
                   No mappings yet. Click "+ Add" to create a mapping.
                 </td></tr>
               )}
               {sectionRows.map((row, idx) => {
                 const isActiveProjTag = activeDropdown?.section === section && activeDropdown?.rowIdx === idx && activeDropdown?.field === 'projectTag';
                 const isActiveOpcTag  = activeDropdown?.section === section && activeDropdown?.rowIdx === idx && activeDropdown?.field === 'opcTag';
-                const projVal = getProjectValue(row.projectTag);
+                const storedProjVal = getProjectValue(row.projectTag);
                 const hasMapping = row.projectTag && row.opcTag;
 
+                // For READ rows: when OPC provides a live value, that IS the
+                // project value (since OPC overrides stored/simulation values).
+                // For WRITE rows: show the simulation output value.
+                const opcDriven = isRead && hasMapping && row.lastValue != null;
+                const projVal   = opcDriven ? row.lastValue : storedProjVal;
+
                 return (
-                  <tr key={idx} style={{ borderBottom: '1px solid #F3F4F6', background: hasMapping ? '#fff' : '#FEFCE8' }}>
+                  <React.Fragment key={idx}>
+                  <tr style={{ borderBottom: '1px solid #F3F4F6', background: hasMapping ? '#fff' : '#FEFCE8' }}>
 
                     {/* Project Tag */}
                     <td style={{ ...S.td, width: colWidths.projTag }}>
@@ -824,31 +985,76 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
                         <span style={{ fontSize: 8, color: '#9CA3AF' }}>{'\u25BC'}</span>
                       </div>
                       {isActiveOpcTag && (
-                        <TagDropdown
-                          items={opcTags.map(t => ({ key: t, label: t }))}
+                        <OpcTagTreeDropdown
+                          tree={opcTagTree}
+                          flatTags={opcTagFlat}
                           loading={tagsLoading}
                           value={row.opcTag}
                           onSelect={handleTagSelect}
-                          onBrowse={isConnected ? handleBrowseFromDropdown : undefined}
                           onClose={() => setActiveDropdown(null)}
-                          placeholder="Search OPC tags..."
                           anchor={activeDropdown.anchor}
                         />
                       )}
                     </td>
 
-                    {/* Project Value */}
+                    {/* Project Value — shows live OPC value for READ-mapped vars */}
                     <td style={{ ...S.td, textAlign: 'right', width: colWidths.projVal }}>
-                      <span style={{ fontSize: 11, color: '#374151', transition: 'color 0.3s', ...(pulse && hasMapping ? { color: isRead ? '#059669' : '#B45309' } : {}) }}>
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: opcDriven ? 600 : 400,
+                        color: opcDriven ? '#059669' : '#374151',
+                        transition: 'color 0.3s',
+                        ...(pulse && hasMapping ? { color: isRead ? '#047857' : '#B45309' } : {}),
+                      }}>
                         {fmtVal(projVal)}
                       </span>
+                      {opcDriven && (
+                        <span style={{ fontSize: 8, color: '#059669', marginLeft: 2 }} title="Driven by OPC">{'\u25C0'}</span>
+                      )}
                     </td>
 
-                    {/* OPC Value (live) */}
+                    {/* OPC Value (live) — shows raw value when filter active */}
                     <td style={{ ...S.td, textAlign: 'right', width: colWidths.opcVal }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: isRead ? '#059669' : '#B45309', transition: 'color 0.3s', ...(pulse && hasMapping ? { color: isRead ? '#047857' : '#92400E' } : {}) }}>
-                        {fmtVal(row.lastValue)}
-                      </span>
+                      {(() => {
+                        const f = row.filter;
+                        const hasFilter = f && (f.min != null || f.max != null || (f.equation && f.equation.trim()));
+                        const showRaw = isRead && hasFilter && row.rawValue != null && row.rawValue !== row.lastValue;
+                        return (
+                          <>
+                            <span
+                              style={{ fontSize: 11, fontWeight: 600, color: isRead ? '#059669' : '#B45309', transition: 'color 0.3s', ...(pulse && hasMapping ? { color: isRead ? '#047857' : '#92400E' } : {}) }}
+                              title={showRaw ? `Raw: ${row.rawValue}` : undefined}
+                            >
+                              {fmtVal(row.lastValue)}
+                            </span>
+                            {showRaw && (
+                              <span style={{ fontSize: 8, color: '#7C3AED', marginLeft: 2, fontWeight: 700 }} title={`Raw: ${row.rawValue}`}>f</span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </td>
+
+                    {/* Filter toggle */}
+                    <td style={S.td}>
+                      {(() => {
+                        const f = row.filter;
+                        const hasFilter = f && (f.min != null || f.max != null || (f.equation && f.equation.trim()));
+                        return (
+                          <button
+                            style={{
+                              background: hasFilter ? '#EDE9FE' : 'none',
+                              border: hasFilter ? '1px solid #C4B5FD' : '1px solid transparent',
+                              color: hasFilter ? '#7C3AED' : '#9CA3AF',
+                              cursor: 'pointer', fontSize: 9, padding: '1px 3px',
+                              borderRadius: 3, fontWeight: 600, fontFamily: 'monospace',
+                              lineHeight: 1,
+                            }}
+                            onClick={() => toggleFilter(section, idx)}
+                            title="Configure min/max/equation filter"
+                          >fx</button>
+                        );
+                      })()}
                     </td>
 
                     {/* Remove */}
@@ -856,6 +1062,72 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
                       <button style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 13, padding: '0 4px' }} onClick={() => removeRow(idx)} title="Remove">{'\u2715'}</button>
                     </td>
                   </tr>
+
+                  {/* Expandable filter sub-row */}
+                  {expandedFilters.has(`${section}-${idx}`) && (
+                    <tr style={{ background: '#FAFAFF', borderBottom: '1px solid #E5E7EB' }}>
+                      <td colSpan={6} style={{ padding: '6px 12px' }}>
+                        {(() => {
+                          const updateFilter = isRead ? updateReadFilter : updateWriteFilter;
+                          const f = row.filter || {};
+                          const eqError = validateEquation(f.equation);
+                          const hasAnyFilter = f.min != null || f.max != null || (f.equation && f.equation.trim());
+                          // Preview: show what the transform produces for the current raw/last value
+                          const previewInput = isRead ? (row.rawValue ?? row.lastValue) : row.lastValue;
+                          const previewOutput = (hasAnyFilter && previewInput != null) ? applyTransform(previewInput, f) : null;
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 600, minWidth: 72 }}>
+                                  {isRead ? 'Pre-process:' : 'Post-process:'}
+                                </span>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#374151', fontWeight: 500 }}>
+                                  Min
+                                  <input
+                                    type="number"
+                                    value={f.min ?? ''}
+                                    onChange={e => updateFilter(idx, 'min', e.target.value === '' ? null : Number(e.target.value))}
+                                    style={{ width: 70, padding: '3px 5px', border: '1px solid #D1D5DB', borderRadius: 3, fontSize: 11, outline: 'none' }}
+                                    placeholder="--"
+                                  />
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#374151', fontWeight: 500 }}>
+                                  Max
+                                  <input
+                                    type="number"
+                                    value={f.max ?? ''}
+                                    onChange={e => updateFilter(idx, 'max', e.target.value === '' ? null : Number(e.target.value))}
+                                    style={{ width: 70, padding: '3px 5px', border: '1px solid #D1D5DB', borderRadius: 3, fontSize: 11, outline: 'none' }}
+                                    placeholder="--"
+                                  />
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#374151', fontWeight: 500 }}>
+                                  Equation
+                                  <input
+                                    type="text"
+                                    value={f.equation ?? ''}
+                                    onChange={e => updateFilter(idx, 'equation', e.target.value)}
+                                    style={{ width: 160, padding: '3px 5px', border: `1px solid ${eqError ? '#FCA5A5' : '#D1D5DB'}`, borderRadius: 3, fontSize: 11, fontFamily: 'monospace', outline: 'none' }}
+                                    placeholder="e.g. x * 0.001"
+                                  />
+                                </label>
+                                {eqError && <span style={{ fontSize: 9, color: '#DC2626' }}>{eqError}</span>}
+                              </div>
+                              {hasAnyFilter && (
+                                <div style={{ fontSize: 10, color: '#6B7280', fontFamily: 'monospace', paddingLeft: 72 }}>
+                                  {previewInput != null
+                                    ? <span>Preview: <b style={{ color: '#374151' }}>{Number(previewInput).toFixed(2)}</b> {'\u2192'} <b style={{ color: '#7C3AED' }}>{previewOutput != null ? Number(previewOutput).toFixed(2) : '?'}</b></span>
+                                    : <span style={{ fontStyle: 'italic' }}>No value yet — click Read Now to test</span>
+                                  }
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
                 );
               })}
             </tbody>
@@ -897,7 +1169,7 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
             <span style={{ fontSize: 10, color: '#9CA3AF' }}>sec</span>
           </div>
           {tagsLoading && <span style={{ fontSize: 10, color: '#6B7280' }}>Loading OPC tags...</span>}
-          {isConnected && opcTags.length === 0 && !tagsLoading && (
+          {isConnected && opcTagFlat.length === 0 && !tagsLoading && (
             <PressBtn style={{ ...S.btn, background: '#4F46E5', color: '#fff', fontSize: 10, padding: '2px 10px', minHeight: 24 }} onClick={fetchOpcTags}>
               {tagsError ? 'Retry Load Tags' : 'Load OPC Tags'}
             </PressBtn>
@@ -905,6 +1177,12 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
           {tagsError && <span style={{ fontSize: 10, color: '#DC2626', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tagsError}>{tagsError}</span>}
           {!isConnected && <span style={{ fontSize: 10, color: '#9CA3AF' }}>Connect to OPC server to load tags</span>}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <PressBtn
+              style={{ ...S.btn, background: '#7C3AED', color: '#fff', fontSize: 11 }}
+              onClick={() => { saveToNodes(); setActionStatus({ type: 'success', msg: 'Mappings updated' }); }}
+              disabled={!hasMappings}
+              title="Save current mappings and OPC values to node parameters for simulation"
+            >Update Mappings</PressBtn>
             {isConnected && (
               polling
                 ? <PressBtn style={{ ...S.btn, background: '#DC2626', color: '#fff', fontSize: 11 }} onClick={() => setPolling(false)}>Stop Live</PressBtn>
@@ -937,14 +1215,10 @@ export default function OpcTagTable({ nodes, edges, simResults, onUpdateParam, o
           <span style={{ fontSize: 10, color: '#9CA3AF', marginLeft: 'auto' }}>
             {readRows.length} read &middot; {writeRows.length} write
             {polling && <> &middot; <span style={{ color: '#059669' }}>polling {intervalSec}s</span></>}
-            {opcTags.length > 0 && <> &middot; {opcTags.length} OPC tags</>}
+            {opcTagFlat.length > 0 && <> &middot; {opcTagFlat.length} OPC tags</>}
           </span>
         </div>
 
-        {/* Tag Browser overlay */}
-        {browseTarget && isConnected && (
-          <TagBrowser onSelect={handleBrowseSelect} onClose={() => setBrowseTarget(null)} />
-        )}
       </div>
     </div>
   );

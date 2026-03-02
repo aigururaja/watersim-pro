@@ -28,8 +28,13 @@ const TYPE_COLORS = {
   default:            { bg: '#F8FAFC', border: '#94A3B8', icon: '⬡' },
 };
 
+// OPC nodes are data integration nodes — no connection handles needed.
+// They inject/extract values globally via tagMappings, not via edges.
+const OPC_TYPES = new Set(['opc_read', 'opc_write']);
+
 const UnitOpNode = memo(({ data, selected }) => {
   const style = TYPE_COLORS[data.opType] || TYPE_COLORS.default;
+  const isOpc = OPC_TYPES.has(data.opType);
   return (
     <div style={{
       ...styles.node,
@@ -37,16 +42,16 @@ const UnitOpNode = memo(({ data, selected }) => {
       border: `2px solid ${selected ? '#1F4E79' : style.border}`,
       boxShadow: selected ? `0 0 0 3px rgba(31,78,121,0.25)` : '0 2px 6px rgba(0,0,0,0.08)',
     }}>
-      {/* Input handle (left) */}
-      <Handle type="target" position={Position.Left} style={styles.handle} />
+      {/* Input handle (left) — not for OPC nodes */}
+      {!isOpc && <Handle type="target" position={Position.Left} style={styles.handle} />}
 
       <div style={styles.body}>
         <span style={styles.icon}>{style.icon}</span>
         <span style={styles.label}>{data.label}</span>
       </div>
 
-      {/* Output handle (right) */}
-      <Handle type="source" position={Position.Right} style={styles.handle} />
+      {/* Output handle (right) — not for OPC nodes */}
+      {!isOpc && <Handle type="source" position={Position.Right} style={styles.handle} />}
     </div>
   );
 });

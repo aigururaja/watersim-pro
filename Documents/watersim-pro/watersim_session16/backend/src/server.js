@@ -92,8 +92,19 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders:   false,
   message:         { error: 'Too many requests, please try again later' },
+  skip:            (req) => process.env.NODE_ENV === 'test' || req.path.startsWith('/opc'),
+  keyGenerator:    (req) => req.ip,
+});
+
+// OPC routes have their own generous limit — live polling generates
+// frequent read/write requests (every 1-5 seconds)
+const opcLimiter = rateLimit({
+  windowMs:        15 * 60 * 1000,
+  max:             parseInt(process.env.OPC_RATE_LIMIT_MAX || '5000', 10),
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message:         { error: 'Too many OPC requests, please try again later' },
   skip:            () => process.env.NODE_ENV === 'test',
-  // Key by real IP (trust proxy = 1 above)
   keyGenerator:    (req) => req.ip,
 });
 
@@ -116,7 +127,7 @@ app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId/simulate`, reportRou
 app.use(`${API}/permit-templates`,                               permitRoutes);
 app.use(`${API}/admin`,                                          adminRoutes);
 app.use(`${API}/reports`,                                        reportsOrgRoutes);
-app.use(`${API}/opc`,                                            require('./routes/opc'));
+app.use(`${API}/opc`,                                  opcLimiter, require('./routes/opc'));
 
 // ── Health check (unauthenticated — used by load balancers + k8s probes) ─────
 app.get('/health', async (_req, res) => {

@@ -18,11 +18,12 @@ import UnitOpPalette from '../components/canvas/UnitOpPalette';
 import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
-import LiveSimPanel from '../components/canvas/LiveSimPanel';
+import LiveSimPanel, { TrendOverlay } from '../components/canvas/LiveSimPanel';
 import OpcConnectionDialog from '../components/canvas/OpcConnectionDialog';
 import OpcTagTable from '../components/canvas/OpcTagTable';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCanvasPerf } from '../hooks/useCanvasPerf';
+import useOpcPolling from '../hooks/useOpcPolling';
 import useLiveSimStore from '../store/liveSimStore';
 import useOpcStore from '../store/opcStore';
 
@@ -398,6 +399,7 @@ function CanvasPageInner() {
 
   // ── Live simulation ────────────────────────────────────────────────────────
   const [showLiveSim, setShowLiveSim] = useState(false);
+  const [showTrend, setShowTrend]     = useState(false);
 
   // ── OPC dialogs ────────────────────────────────────────────────────────────
   const [showOpcConnection, setShowOpcConnection] = useState(false);
@@ -617,11 +619,21 @@ function CanvasPageInner() {
   }, [latestLiveStep, setEdges]);
 
   // ── Drop ───────────────────────────────────────────────────────────────────
+  // OPC nodes are singleton — only one opc_read and one opc_write allowed
+  const SINGLETON_OPC_TYPES = new Set(['opc_read', 'opc_write']);
+
   const onDrop = useCallback((event) => {
     event.preventDefault();
     const type  = event.dataTransfer.getData('application/unitop-type');
     const label = event.dataTransfer.getData('application/unitop-label');
     if (!type) return;
+
+    // Enforce single OPC read / single OPC write
+    if (SINGLETON_OPC_TYPES.has(type)) {
+      const existing = nodes.find(n => n.data?.opType === type);
+      if (existing) return; // silently ignore — already on canvas
+    }
+
     // Convert screen coordinates to flow coordinates (accounts for zoom/pan)
     const position = reactFlowInstance.screenToFlowPosition({
       x: event.clientX,
@@ -640,7 +652,7 @@ function CanvasPageInner() {
     setNodes(ns => [...ns, newNode]);
     setSaved(false);
     sendEvent('node:add', newNode);
-  }, [sendEvent, reactFlowInstance]);
+  }, [sendEvent, reactFlowInstance, nodes]);
 
   const onDragOver = (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; };
 
@@ -669,6 +681,9 @@ function CanvasPageInner() {
     setSaved(false);
     sendEvent('params:update', { nodeId, params: { [key]: value } });
   }, [sendEvent]);
+
+  // ── Background OPC polling (runs even when tag table is closed) ──────────
+  useOpcPolling(nodes, updateParam);
 
   // Broadcast node position after drag ends
   const onNodeDragStop = useCallback((_evt, node) => {
@@ -752,6 +767,12 @@ function CanvasPageInner() {
                   Live Sim
                 </button>
                 <button
+                  style={{ ...S.btn, background: '#0D9488', color: '#fff' }}
+                  onClick={() => setShowTrend(true)}
+                >
+                  Trend
+                </button>
+                <button
                   style={{ ...S.btn, background: '#B45309', color: '#fff', opacity: scenariosRunning ? 0.7 : 1 }}
                   onClick={() => { setShowScenarios(true); setShowDynamic(false); setShowSummary(false); setShowLiveSim(false); setSelectedNode(null); }}
                   disabled={nodes.length === 0}
@@ -808,7 +829,7 @@ function CanvasPageInner() {
         )}
 
         <div style={S.body}>
-          {mode === 'design' && <UnitOpPalette />}
+          {mode === 'design' && <UnitOpPalette nodes={nodes} />}
 
           <div
             style={S.canvasWrap}
@@ -910,6 +931,11 @@ function CanvasPageInner() {
           wsConnected={wsConnected}
           onClose={() => setShowLiveSim(false)}
         />
+      )}
+
+      {/* Quick Trend Overlay (read-only chart, no controls) */}
+      {showTrend && (
+        <TrendOverlay onClose={() => setShowTrend(false)} />
       )}
 
       {/* OPC Connection Dialog */}

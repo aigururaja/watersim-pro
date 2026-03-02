@@ -15,8 +15,8 @@ const config = {
 
   jwt: {
     secret: process.env.JWT_SECRET || 'dev_secret_change_in_production',
-    accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+    accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '8h',
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
 
   cors: { origin: process.env.CORS_ORIGIN || 'http://localhost:5173' },

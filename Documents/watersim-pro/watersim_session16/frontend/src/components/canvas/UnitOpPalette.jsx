@@ -76,8 +76,9 @@ const PALETTE = [
   },
 ];
 
-function PaletteItem({ type, label }) {
+function PaletteItem({ type, label, disabled }) {
   const onDragStart = (e) => {
+    if (disabled) { e.preventDefault(); return; }
     e.dataTransfer.setData('application/unitop-type', type);
     e.dataTransfer.setData('application/unitop-label', label);
     e.dataTransfer.effectAllowed = 'move';
@@ -85,18 +86,25 @@ function PaletteItem({ type, label }) {
 
   return (
     <div
-      draggable
+      draggable={!disabled}
       onDragStart={onDragStart}
-      style={styles.item}
-      title={`Drag to add: ${label}`}
+      style={{ ...styles.item, ...(disabled ? { opacity: 0.4, cursor: 'default' } : {}) }}
+      title={disabled ? `${label} already on canvas (only one allowed)` : `Drag to add: ${label}`}
     >
       <span style={styles.itemText}>{label}</span>
-      <span style={styles.dragHint}>⠿</span>
+      {disabled
+        ? <span style={{ color: '#9CA3AF', fontSize: 10 }}>{'\u2713'}</span>
+        : <span style={styles.dragHint}>⠿</span>
+      }
     </div>
   );
 }
 
-export default function UnitOpPalette() {
+// OPC nodes are singletons — only one of each allowed on the canvas
+const SINGLETON_TYPES = new Set(['opc_read', 'opc_write']);
+
+export default function UnitOpPalette({ nodes = [] }) {
+  const existingTypes = new Set(nodes.map(n => n.data?.opType).filter(Boolean));
   // On mobile, palette collapses to a toggle button
   const [open, setOpen] = useState(false);
 
@@ -145,7 +153,7 @@ export default function UnitOpPalette() {
             <div key={group.category} style={styles.group}>
               <div style={styles.groupTitle}>{group.category}</div>
               {group.items.map(item => (
-                <PaletteItem key={item.type} {...item} />
+                <PaletteItem key={item.type} {...item} disabled={SINGLETON_TYPES.has(item.type) && existingTypes.has(item.type)} />
               ))}
             </div>
           ))}

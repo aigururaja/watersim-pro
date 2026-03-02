@@ -1,14 +1,23 @@
 /**
- * WaterSim Pro — Live Simulation Runner
+ * WaterSim Pro — Live Simulation Runner  (continuous mode)
  *
- * Pre-computes all dynamic simulation steps eagerly, then emits them
- * one-by-one via a WebSocket broadcast callback at a configurable pace.
+ * Computes steady-state snapshots using the latest nodeParams (including
+ * OPC-polled values received via params:update).
  *
- * Speed is a real-time multiplier (1x–1000x).
- * At 100x, 1 simulated hour = 36 seconds wall-clock.
- * At 1000x, 1 simulated hour = 3.6 seconds wall-clock.
+ * Speed multiplier (1x, 5x, 10x, 100x, 1000x) controls how many solver
+ * steps are computed per tick. The UI update interval is always
+ * max(compute_time, 5 seconds) — never faster than 5 s real-time.
+ * OPC polling is independent and always runs at its own rate (default 5 s).
  *
- * Supports pause, resume, cancel, and speed changes mid-simulation.
+ * At 10x speed: 10 solver steps are computed, results sent as a batch,
+ * then the runner waits the remaining time until 5 s have passed.
+ * At 1000x: 1000 steps computed; if that takes 8 s, the next tick fires
+ * immediately (no wait).
+ *
+ * The diurnal profile wraps with `stepIndex % 24` so inlet scaling
+ * still cycles if the user runs for a long time.
+ *
+ * Supports pause, resume, cancel, and mid-sim speed changes.
  * Only one active simulation per flowsheet at a time.
  */
 
@@ -23,110 +32,90 @@ const logger      = require('../utils/logger');
 // ── In-memory registry: flowsheetId → LiveSimulation ────────────────────────
 const activeSims = new Map();
 
+/** Minimum real-time interval between UI updates (ms). */
+const UI_UPDATE_INTERVAL_MS = 5_000;
+
 class LiveSimulation {
-  constructor({ flowsheetId, runId, steps, profile, speed, userId, broadcastFn }) {
+  constructor({ flowsheetId, runId, canvasData, nodeParams, profile, speed, userId, broadcastFn }) {
     this.flowsheetId  = flowsheetId;
     this.runId        = runId;
-    this.steps        = steps;          // Pre-computed step results array
+    this.canvasData   = canvasData;
+    this.nodeParams   = nodeParams;       // Mutable — updated by params:update events
     this.profile      = profile;
-    this.totalSteps   = steps.length;
-    this.currentStep  = 0;              // Next step index to emit
-    this.speed        = speed;          // Real-time multiplier (1–1000)
-    this.state        = 'running';      // running | paused | completed | cancelled
-    this.timer        = null;           // setTimeout handle
+    this.speed        = speed || 1;       // Steps per tick (1, 5, 10, 100, 1000)
+    this.currentStep  = 0;                // Running step counter (no upper limit)
+    this.startTime    = Date.now();       // Wall-clock start for elapsed display
+    this.state        = 'running';        // running | paused | cancelled
+    this.timer        = null;             // setTimeout handle
     this.userId       = userId;
     this.broadcastFn  = broadcastFn;
-  }
-
-  /** Milliseconds between step emissions */
-  get intervalMs() {
-    return 3_600_000 / this.speed;
+    this.emittedSteps = [];               // Accumulated results for persistence
   }
 }
 
-// ── Pre-compute all steps ───────────────────────────────────────────────────
+// ── Compute a single solver step (no emit) ──────────────────────────────────
 
-function preComputeSteps(canvasData, nodeParams, timeSeriesConfig) {
-  const tsc             = timeSeriesConfig || {};
-  const hoursToSimulate = Math.min(Math.max(tsc.hoursToSimulate ?? 24, 1), 48);
-  const profile         = buildProfile(tsc.profile);
+function computeStep(sim) {
+  const stepIndex = sim.currentStep;
+  const stepEntry = sim.profile[stepIndex % 24];
+  const elapsedMs = Date.now() - sim.startTime;
 
-  const steps = [];
-  for (let h = 0; h < hoursToSimulate; h++) {
-    const stepEntry    = profile[h % 24];
-    const scaledParams = scaleInletParams(canvasData, nodeParams, stepEntry, inletDefaults);
-    const result       = runSteadyState(canvasData, { nodeParams: scaledParams });
+  const scaledParams = scaleInletParams(sim.canvasData, sim.nodeParams, stepEntry, inletDefaults);
+  const result       = runSteadyState(sim.canvasData, { nodeParams: scaledParams });
 
-    steps.push({
-      hour:          h,
-      stepEntry,
-      streamResults: result.streamResults,
-      unitResults:   result.unitResults,
-      summary:       result.summary,
-      warnings:      result.warnings,
-    });
-  }
+  const step = {
+    tick:          stepIndex,
+    elapsedSec:    Math.round(elapsedMs / 1000),
+    stepEntry,
+    streamResults: result.streamResults,
+    unitResults:   result.unitResults,
+    summary:       result.summary,
+    warnings:      result.warnings,
+  };
 
-  return { steps, profile: profile.slice(0, hoursToSimulate) };
-}
-
-// ── Emission loop ───────────────────────────────────────────────────────────
-
-function emitStep(sim) {
-  const step = sim.steps[sim.currentStep];
+  sim.emittedSteps.push(step);
   sim.currentStep++;
-
-  sim.broadcastFn(sim.flowsheetId, {
-    type: 'sim:live:step',
-    payload: {
-      runId:      sim.runId,
-      step,
-      stepIndex:  sim.currentStep - 1,
-      totalSteps: sim.totalSteps,
-      progress:   sim.currentStep / sim.totalSteps,
-    },
-  });
+  return step;
 }
 
-function scheduleNext(sim, immediate) {
+// ── Batch tick: compute N steps, emit, schedule next ────────────────────────
+
+function executeTick(sim) {
   if (sim.state !== 'running') return;
 
-  if (sim.currentStep >= sim.totalSteps) {
-    sim.state = 'completed';
+  const tickStart = Date.now();
+  const stepsToCompute = sim.speed;
+  const batch = [];
+
+  for (let i = 0; i < stepsToCompute; i++) {
+    if (sim.state !== 'running') break;
+    batch.push(computeStep(sim));
+  }
+
+  // Send batch to all clients
+  if (batch.length > 0) {
     sim.broadcastFn(sim.flowsheetId, {
-      type: 'sim:live:complete',
+      type: 'sim:live:steps',
       payload: {
-        runId:      sim.runId,
-        totalSteps: sim.totalSteps,
-        summary:    sim.steps[sim.totalSteps - 1]?.summary || null,
+        runId: sim.runId,
+        steps: batch,
       },
     });
-    persistResults(sim);
-    activeSims.delete(sim.flowsheetId);
-    return;
   }
 
-  // Emit the first step immediately so the UI gets instant feedback
-  if (immediate) {
-    emitStep(sim);
-    scheduleNext(sim, false);
-    return;
-  }
+  // Wait at least UI_UPDATE_INTERVAL_MS between ticks
+  const computeTime = Date.now() - tickStart;
+  const remaining = Math.max(0, UI_UPDATE_INTERVAL_MS - computeTime);
 
-  sim.timer = setTimeout(() => {
-    if (sim.state !== 'running') return;
-    emitStep(sim);
-    scheduleNext(sim, false);
-  }, sim.intervalMs);
+  sim.timer = setTimeout(() => executeTick(sim), remaining);
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────────
 
 async function persistResults(sim) {
   try {
-    const emittedSteps = sim.steps.slice(0, sim.currentStep);
     const allWarn = [];
-    for (const s of emittedSteps) {
+    for (const s of sim.emittedSteps) {
       if (s.warnings?.length) {
         for (const w of s.warnings) {
           if (!allWarn.includes(w)) allWarn.push(w);
@@ -135,22 +124,20 @@ async function persistResults(sim) {
     }
 
     const results = {
-      mode:        'dynamic',
-      steps:       emittedSteps,
+      mode:        'live',
+      steps:       sim.emittedSteps,
       profileUsed: sim.profile,
-      stepCount:   emittedSteps.length,
+      stepCount:   sim.emittedSteps.length,
       warnings:    allWarn,
     };
 
-    const status = sim.state === 'completed' ? 'completed'
-                 : sim.state === 'cancelled' ? 'cancelled'
-                 : 'failed';
+    const status = sim.state === 'cancelled' ? 'cancelled' : 'failed';
 
     await query(
       `UPDATE simulation_runs SET status = $1, results = $2, completed_at = NOW() WHERE id = $3`,
       [status, JSON.stringify(results), sim.runId]
     );
-    logger.info('Live sim persisted', { runId: sim.runId, status, steps: emittedSteps.length });
+    logger.info('Live sim persisted', { runId: sim.runId, status, steps: sim.emittedSteps.length });
   } catch (err) {
     logger.error('Failed to persist live sim results', { runId: sim.runId, error: err.message });
   }
@@ -159,8 +146,8 @@ async function persistResults(sim) {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Start a live simulation for a flowsheet.
- * Pre-computes all steps, then begins timed emission via broadcastFn.
+ * Start a continuous live simulation for a flowsheet.
+ * @param {number} speed — Steps per tick (1, 5, 10, 100, 1000). Default 1.
  */
 function startLiveSim({ flowsheetId, runId, canvasData, nodeParams, timeSeriesConfig, speed, userId, broadcastFn }) {
   // Cancel any existing sim for this flowsheet
@@ -172,36 +159,53 @@ function startLiveSim({ flowsheetId, runId, canvasData, nodeParams, timeSeriesCo
     activeSims.delete(flowsheetId);
   }
 
-  const clampedSpeed = Math.min(Math.max(speed || 100, 1), 1000);
-
-  // Pre-compute all steps (CPU-bound, typically < 3s for 48 steps)
-  const { steps, profile } = preComputeSteps(canvasData, nodeParams || {}, timeSeriesConfig);
+  const tsc     = timeSeriesConfig || {};
+  const profile = buildProfile(tsc.profile);
 
   const sim = new LiveSimulation({
-    flowsheetId, runId, steps, profile,
-    speed: clampedSpeed, userId, broadcastFn,
+    flowsheetId, runId, canvasData,
+    nodeParams: nodeParams || {},
+    profile, speed, userId, broadcastFn,
   });
   activeSims.set(flowsheetId, sim);
 
-  logger.info('Live sim started', { flowsheetId, runId, steps: steps.length, speed: clampedSpeed });
+  logger.info('Live sim started (continuous)', {
+    flowsheetId, runId, speed: sim.speed, uiIntervalMs: UI_UPDATE_INTERVAL_MS,
+  });
 
-  // Begin emission — first step emits immediately for instant feedback
-  scheduleNext(sim, true);
+  // First tick fires immediately for instant feedback
+  executeTick(sim);
 
-  return { runId, totalSteps: steps.length };
+  return { runId, speed: sim.speed };
 }
 
-/** Change playback speed mid-simulation. */
+/**
+ * Merge updated node params into the active simulation.
+ * Called when the frontend sends params:update (e.g. from OPC polling).
+ * The next step computation will use these updated values.
+ */
+function updateNodeParams(flowsheetId, { nodeId, params }) {
+  const sim = activeSims.get(flowsheetId);
+  if (!sim) return false;
+
+  if (!nodeId || !params) return false;
+
+  sim.nodeParams[nodeId] = { ...(sim.nodeParams[nodeId] || {}), ...params };
+  return true;
+}
+
+/**
+ * Change the speed multiplier mid-simulation.
+ * @param {number} newSpeed — Steps per tick (1, 5, 10, 100, 1000)
+ */
 function setSpeed(flowsheetId, newSpeed) {
   const sim = activeSims.get(flowsheetId);
   if (!sim) return false;
 
-  sim.speed = Math.min(Math.max(newSpeed || 100, 1), 1000);
-  // Reschedule: clear current timer and re-queue with new interval
-  if (sim.state === 'running') {
-    clearTimeout(sim.timer);
-    scheduleNext(sim, false);
-  }
+  const clamped = Math.max(1, Math.min(10_000, Math.round(Number(newSpeed) || 1)));
+  sim.speed = clamped;
+
+  logger.info('Live sim speed changed', { flowsheetId, speed: clamped });
   return true;
 }
 
@@ -221,7 +225,7 @@ function resumeSim(flowsheetId) {
   if (!sim || sim.state !== 'paused') return false;
 
   sim.state = 'running';
-  scheduleNext(sim, true);  // emit next step immediately on resume
+  executeTick(sim);  // resume immediately
   return true;
 }
 
@@ -246,10 +250,9 @@ function getStatus(flowsheetId) {
     runId:       sim.runId,
     state:       sim.state,
     currentStep: sim.currentStep,
-    totalSteps:  sim.totalSteps,
     speed:       sim.speed,
     userId:      sim.userId,
   };
 }
 
-module.exports = { startLiveSim, setSpeed, pauseSim, resumeSim, cancelSim, getStatus };
+module.exports = { startLiveSim, setSpeed, pauseSim, resumeSim, cancelSim, getStatus, updateNodeParams };

@@ -65,6 +65,32 @@ const SINK_TYPES   = new Set(['outlet']);
 const RECYCLE_STREAM_TYPES = new Set(['ras', 'was', 'recycle', 'internal_recycle']);
 const CONVERGENCE_TOL = 0.0001;
 const MAX_ITERATIONS  = 50;
+const OPC_STREAM_VARS = new Set(['Q', 'TSS', 'BOD', 'COD', 'TN', 'NH4', 'NO3', 'NO2', 'TP', 'DO', 'pH', 'temp']);
+
+/**
+ * Scan all opc_read nodes and collect OPC overrides from their tagMappings.
+ * When a variable is read from OPC, its lastValue takes absolute priority
+ * over any internally stored or computed value.
+ *
+ * @returns {{ [streamVar: string]: number }} e.g. { Q: 8500, TSS: 250 }
+ */
+function collectOpcOverrides(nodes, nodeParams) {
+  const overrides = {};
+  for (const node of nodes) {
+    const raw = node.data?.opType || node.data?.type || '';
+    if (raw !== 'opc_read' && PALETTE_TYPE_MAP[raw] !== 'opc_read') continue;
+
+    const params   = nodeParams[node.id] || {};
+    const mappings = params.tagMappings || [];
+    for (const m of mappings) {
+      if (!m.streamVar || !OPC_STREAM_VARS.has(m.streamVar)) continue;
+      if (m.lastValue == null) continue;
+      const val = Number(m.lastValue);
+      if (!isNaN(val)) overrides[m.streamVar] = val;
+    }
+  }
+  return overrides;
+}
 
 function resolveNodeType(node) {
   const raw = node.data?.opType || node.data?.type || node.id.replace(/_\d+$/, '');
@@ -249,6 +275,22 @@ function executePass(order, nodeMap, edgesByTarget, edgesBySource, edgeStreams, 
   return unitResults;
 }
 
+/** Walk the topo order backwards to find the last node with a non-zero effluent output. */
+function findLastEffluent(order, unitResults) {
+  for (let i = order.length - 1; i >= 0; i--) {
+    const r = unitResults[order[i]];
+    if (!r) continue;
+    const t = r.paletteType || r.type;
+    // Skip inlet, outlet, opc nodes
+    if (t === 'inlet' || t === 'outlet' || t === 'opc_read' || t === 'opc_write') continue;
+    // Check all possible output keys
+    const out = r.outputs?.effluent || r.outputs?.filtrate || r.outputs?.permeate
+             || r.outputs?.digestate || r.outputs?.thickened;
+    if (out && out.Q > 0) return out;
+  }
+  return null;
+}
+
 // ── Main Entry Point ──────────────────────────────────────────────────────────
 
 function runSteadyState(canvasData, config = {}) {
@@ -268,6 +310,19 @@ function runSteadyState(canvasData, config = {}) {
       if (type === 'outlet' || type.includes('outlet') || type.includes('disinfection') || type.includes('chlorination')) {
         augmentedParams[node.id] = { ...( augmentedParams[node.id] || {}), permitLimits };
       }
+    }
+  }
+
+  // ── OPC Override Injection ────────────────────────────────────────────────
+  // When variables are read from OPC, their lastValues take absolute priority
+  // over internally stored inlet parameters. This ensures the simulation uses
+  // live OPC values from the very first node in the process train.
+  const opcOverrides = collectOpcOverrides(nodes, augmentedParams);
+  if (Object.keys(opcOverrides).length > 0) {
+    for (const node of nodes) {
+      const type = resolveNodeType(node);
+      if (!SOURCE_TYPES.has(type)) continue;
+      augmentedParams[node.id] = { ...(augmentedParams[node.id] || {}), ...opcOverrides };
     }
   }
 
@@ -347,12 +402,22 @@ function runSteadyState(canvasData, config = {}) {
   }
   if (outletNodes.length) {
     const r = unitResults[outletNodes[0].id];
-    summary.effluent          = r?.outputs?.effluent  || null;
+    const outEff = r?.outputs?.effluent;
+    // If the outlet node has no incoming edge its Q will be 0 — fall back to
+    // the last process node in topological order that produced a non-zero output.
+    if (outEff && outEff.Q > 0) {
+      summary.effluent = outEff;
+    } else {
+      summary.effluent = findLastEffluent(order, unitResults) || outEff || null;
+    }
     summary.permit_violations = r?.metrics?.permit_violations || [];
     summary.compliant         = r?.metrics?.compliant ?? null;
+  } else {
+    // No outlet node at all — use the last process node's output
+    summary.effluent = findLastEffluent(order, unitResults) || null;
   }
 
   return { streamResults, unitResults, summary, warnings, iterations };
 }
 
-module.exports = { runSteadyState, MODELS, resolveNodeType, PALETTE_TYPE_MAP };
+module.exports = { runSteadyState, MODELS, resolveNodeType, PALETTE_TYPE_MAP, collectOpcOverrides };
