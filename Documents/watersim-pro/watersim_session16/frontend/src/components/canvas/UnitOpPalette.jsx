@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import UnitOpIcon from './UnitOpIcon';
+import useCustomUnitStore from '../../store/customUnitStore';
 
 const PALETTE = [
   {
@@ -84,6 +85,81 @@ const PALETTE = [
   },
 ];
 
+// Built-in unit types a custom unit can be based on (so it still simulates).
+const BASE_TYPES = (() => {
+  const seen = new Set(); const out = [];
+  for (const g of PALETTE) for (const it of g.items) {
+    if (it.type === 'opc_read' || it.type === 'opc_write') continue;
+    if (seen.has(it.type)) continue;
+    seen.add(it.type);
+    out.push({ type: it.type, label: it.label });
+  }
+  return out;
+})();
+
+// A user-defined palette item: draggable, with edit / delete controls.
+function CustomPaletteItem({ unit, onEdit, onDelete }) {
+  const onDragStart = (e) => {
+    e.dataTransfer.setData('application/unitop-type', unit.baseType);
+    e.dataTransfer.setData('application/unitop-label', unit.label);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  return (
+    <div draggable onDragStart={onDragStart} style={styles.item} title={`Drag to add: ${unit.label}`}>
+      <span style={styles.itemIcon}><UnitOpIcon opType={unit.baseType} size={22} /></span>
+      <span style={styles.itemText}>{unit.label}</span>
+      <button style={styles.iconBtn} title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(unit); }}>✎</button>
+      <button style={{ ...styles.iconBtn, color: '#DC2626' }} title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(unit.id); }}>🗑</button>
+    </div>
+  );
+}
+
+// Add / edit form for a custom unit.
+function CustomUnitModal({ initial, onSave, onCancel }) {
+  const [label, setLabel]       = useState(initial?.label || '');
+  const [baseType, setBaseType] = useState(initial?.baseType || BASE_TYPES[0]?.type || 'tank');
+  const [category, setCategory] = useState(initial?.category || 'Custom Units');
+  const valid = label.trim().length > 0 && baseType;
+
+  const save = (e) => {
+    e.preventDefault();
+    if (!valid) return;
+    onSave({ label: label.trim(), baseType, category: category.trim() || 'Custom Units' });
+  };
+
+  return (
+    <div style={styles.modalOverlay} onClick={onCancel}>
+      <form style={styles.modal} onClick={(e) => e.stopPropagation()} onSubmit={save}>
+        <div style={styles.modalTitle}>{initial ? 'Edit unit operation' : 'Add unit operation'}</div>
+
+        <label style={styles.fieldLabel} htmlFor="cu-label">Name</label>
+        <input id="cu-label" style={styles.input} value={label} autoFocus
+          placeholder="e.g. High-rate Clarifier" onChange={(e) => setLabel(e.target.value)} />
+
+        <label style={styles.fieldLabel} htmlFor="cu-base">Based on (simulation model)</label>
+        <div style={styles.baseRow}>
+          <UnitOpIcon opType={baseType} size={24} />
+          <select id="cu-base" style={{ ...styles.input, margin: 0 }} value={baseType} onChange={(e) => setBaseType(e.target.value)}>
+            {BASE_TYPES.map(b => <option key={b.type} value={b.type}>{b.label}</option>)}
+          </select>
+        </div>
+        <p style={styles.hintText}>It behaves like this model in the solver — you can tune parameters on the node after adding it.</p>
+
+        <label style={styles.fieldLabel} htmlFor="cu-cat">Category</label>
+        <input id="cu-cat" style={styles.input} value={category}
+          placeholder="Custom Units" onChange={(e) => setCategory(e.target.value)} />
+
+        <div style={styles.modalBtns}>
+          <button type="button" style={styles.btnGhost} onClick={onCancel}>Cancel</button>
+          <button type="submit" style={{ ...styles.btnPrimary, opacity: valid ? 1 : 0.5 }} disabled={!valid}>
+            {initial ? 'Save changes' : 'Add unit'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function PaletteItem({ type, label, disabled }) {
   const onDragStart = (e) => {
     if (disabled) { e.preventDefault(); return; }
@@ -112,10 +188,28 @@ function PaletteItem({ type, label, disabled }) {
 // OPC nodes are singletons — only one of each allowed on the canvas
 const SINGLETON_TYPES = new Set(['opc_read', 'opc_write']);
 
+// Group custom units by their category label.
+function groupCustom(units) {
+  const map = new Map();
+  for (const u of units) {
+    const cat = u.category || 'Custom Units';
+    if (!map.has(cat)) map.set(cat, []);
+    map.get(cat).push(u);
+  }
+  return [...map.entries()];
+}
+
 export default function UnitOpPalette({ nodes = [] }) {
   const existingTypes = new Set(nodes.map(n => n.data?.opType).filter(Boolean));
   // On mobile, palette collapses to a toggle button
   const [open, setOpen] = useState(false);
+
+  // Custom (user-defined) units
+  const customUnits = useCustomUnitStore(s => s.units);
+  const addUnit     = useCustomUnitStore(s => s.addUnit);
+  const updateUnit  = useCustomUnitStore(s => s.updateUnit);
+  const removeUnit  = useCustomUnitStore(s => s.removeUnit);
+  const [modal, setModal] = useState(null); // null | 'new' | unit object
 
   return (
     <>
@@ -152,10 +246,13 @@ export default function UnitOpPalette({ nodes = [] }) {
       >
         <div style={styles.header} className="flex items-center justify-between">
           <span>Unit Operations</span>
-          <button
-            className="md:hidden text-brand-200 hover:text-white p-1 rounded"
-            onClick={() => setOpen(false)}
-          >✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button style={styles.addBtn} title="Add a custom unit operation" onClick={() => setModal('new')}>+ Add</button>
+            <button
+              className="md:hidden text-brand-200 hover:text-white p-1 rounded"
+              onClick={() => setOpen(false)}
+            >✕</button>
+          </div>
         </div>
         <div style={styles.scrollArea}>
           {PALETTE.map(group => (
@@ -166,9 +263,33 @@ export default function UnitOpPalette({ nodes = [] }) {
               ))}
             </div>
           ))}
+
+          {/* User-defined units */}
+          {groupCustom(customUnits).map(([cat, items]) => (
+            <div key={`custom-${cat}`} style={styles.group}>
+              <div style={styles.groupTitle}>{cat}</div>
+              {items.map(u => (
+                <CustomPaletteItem key={u.id} unit={u} onEdit={setModal} onDelete={removeUnit} />
+              ))}
+            </div>
+          ))}
+
+          <button style={styles.addRow} onClick={() => setModal('new')}>+ Add unit operation</button>
         </div>
         <div style={styles.hint}>Drag items onto the canvas</div>
       </aside>
+
+      {modal && (
+        <CustomUnitModal
+          initial={modal === 'new' ? null : modal}
+          onCancel={() => setModal(null)}
+          onSave={(data) => {
+            if (modal === 'new') addUnit(data);
+            else updateUnit(modal.id, data);
+            setModal(null);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -184,4 +305,18 @@ const styles = {
   itemText:  { flex: 1 },
   dragHint:  { color: '#CBD5E1', fontSize: 14 },
   hint:      { padding: '10px 14px', fontSize: 11, color: '#9CA3AF', borderTop: '1px solid #E5E7EB', fontStyle: 'italic' },
+  addBtn:    { fontSize: 11, fontWeight: 700, color: '#0891B2', background: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' },
+  iconBtn:   { border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: '#9CA3AF', padding: '2px 3px', lineHeight: 1 },
+  addRow:    { display: 'block', width: 'calc(100% - 20px)', margin: '4px 10px 8px', padding: '8px', fontSize: 12.5, fontWeight: 600, color: '#0891B2', background: '#fff', border: '1px dashed #A5F3FC', borderRadius: 8, cursor: 'pointer' },
+  // modal
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  modal:     { background: '#fff', borderRadius: 14, boxShadow: '0 20px 50px rgba(0,0,0,0.25)', width: 'min(380px, 94vw)', padding: 20, display: 'flex', flexDirection: 'column' },
+  modalTitle:{ fontSize: 16, fontWeight: 700, color: '#1F4E79', marginBottom: 12 },
+  fieldLabel:{ fontSize: 12, fontWeight: 600, color: '#374151', margin: '8px 0 4px' },
+  input:     { width: '100%', padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, color: '#111', margin: '0 0 4px', boxSizing: 'border-box' },
+  baseRow:   { display: 'flex', alignItems: 'center', gap: 8 },
+  hintText:  { fontSize: 11, color: '#9CA3AF', margin: '4px 0 4px' },
+  modalBtns: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 },
+  btnGhost:  { padding: '8px 14px', background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' },
+  btnPrimary:{ padding: '8px 16px', background: '#0891B2', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' },
 };
