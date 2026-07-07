@@ -9,7 +9,7 @@
 
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const { readBinding, driverStatus } = require('../live/gateway');
+const { readBinding, writeBinding, driverStatus } = require('../live/gateway');
 const gatewaySession = require('../live/gatewaySession');
 
 const router = express.Router();
@@ -38,11 +38,16 @@ router.get('/drivers', (req, res) => {
 });
 
 router.post('/test', async (req, res) => {
-  const { protocol, config, scale } = req.body || {};
+  const { protocol, config, scale, mode, value } = req.body || {};
   if (!protocol) return res.status(400).json({ ok: false, error: 'protocol is required' });
   try {
-    const r = await readBinding({ protocol, config, scale });
-    res.json({ ok: true, raw: r.raw, value: r.value });
+    if (mode === 'write') {
+      const r = await writeBinding({ protocol, config, scale }, Number(value) || 0);
+      res.json({ ok: true, mode: 'write', wrote: r.wrote, raw: r.raw });
+    } else {
+      const r = await readBinding({ protocol, config, scale });
+      res.json({ ok: true, mode: 'read', raw: r.raw, value: r.value });
+    }
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }

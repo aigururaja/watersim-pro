@@ -608,7 +608,7 @@ function LiveInputsBar({ flowsheetId, canvasData }) {
       const lb = n.data?.liveBindings || {};
       for (const [paramKey, b] of Object.entries(lb)) {
         if (b?.enabled && b.protocol) {
-          out.push({ nodeId: n.id, paramKey, protocol: b.protocol, config: b.config || {}, scale: b.scale, poll_ms: b.poll_ms });
+          out.push({ nodeId: n.id, paramKey, protocol: b.protocol, mode: b.mode || 'read', config: b.config || {}, scale: b.scale, poll_ms: b.poll_ms });
         }
       }
     }
@@ -652,17 +652,23 @@ function LiveInputsBar({ flowsheetId, canvasData }) {
       {on && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669', boxShadow: '0 0 0 3px rgba(5,150,105,.25)' }} />}
       <span style={{ fontSize: 12, color: '#4B5563' }}>
         {bindings.length
-          ? `${bindings.length} bound parameter${bindings.length > 1 ? 's' : ''} — device values override the simulation`
+          ? `${bindings.filter(b => b.mode !== 'write').length} read · ${bindings.filter(b => b.mode === 'write').length} write`
           : 'No live bindings yet — set them in a node’s Live Configuration tab'}
       </span>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' }}>
-        {values.map(v => (
-          <span key={v.nodeId + v.paramKey} title={`${labelOf[v.nodeId]} · ${v.protocol}`}
-            style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid',
-              ...(v.ok ? { borderColor: '#A7F3D0', background: '#ECFDF5', color: '#065F46' } : { borderColor: '#FCA5A5', background: '#FEF2F2', color: '#991B1B' }) }}>
-            {labelOf[v.nodeId]}·{v.paramKey} = {v.ok ? Number(v.value).toFixed(2) : '✕'}
-          </span>
-        ))}
+        {values.map(v => {
+          const write = v.mode === 'write';
+          const c = !v.ok ? { borderColor: '#FCA5A5', background: '#FEF2F2', color: '#991B1B' }
+            : write ? { borderColor: '#FDBA74', background: '#FFF7ED', color: '#9A3412' }
+                    : { borderColor: '#A7F3D0', background: '#ECFDF5', color: '#065F46' };
+          const shown = v.ok ? Number(write ? v.value : v.value).toFixed(2) : '✕';
+          return (
+            <span key={(v.mode || 'r') + v.nodeId + v.paramKey} title={`${labelOf[v.nodeId]} · ${v.protocol} · ${write ? 'write' : 'read'}`}
+              style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid', ...c }}>
+              {write ? '↑' : '↓'} {labelOf[v.nodeId]}·{v.paramKey} = {shown}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

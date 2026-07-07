@@ -255,4 +255,10 @@ function getStatus(flowsheetId) {
   };
 }
 
-module.exports = { startLiveSim, setSpeed, pauseSim, resumeSim, cancelSim, getStatus, updateNodeParams };
+/** Read the current value of a node parameter in the active live sim (for write bindings). */
+function getParamValue(flowsheetId, nodeId, paramKey) {
+  const sim = activeSims.get(flowsheetId);
+  return sim?.nodeParams?.[nodeId]?.[paramKey];
+}
+
+module.exports = { startLiveSim, setSpeed, pauseSim, resumeSim, cancelSim, getStatus, updateNodeParams, getParamValue };

@@ -125,35 +125,51 @@ function BindingEditor({ paramLabel, binding, onChange }) {
   const enabled = !!b.enabled;
   const proto = PROTO_BY_ID[b.protocol] || PROTOCOLS[0];
 
+  const mode = b.mode || 'read';
+  const isWrite = mode === 'write';
   const set    = (patch)   => onChange({ ...b, ...patch });
   const setCfg = (k, v)    => onChange({ ...b, config: { ...(b.config || {}), [k]: v } });
   const setScale = (k, v)  => onChange({ ...b, scale: { ...(b.scale || {}), [k]: v } });
 
   const [testing, setTesting] = useState(false);
   const [result, setResult]   = useState(null);
+  const [writeVal, setWriteVal] = useState('0');
   const runTest = async () => {
     setTesting(true); setResult(null);
     try {
-      const { data } = await api.post('/live/test', { protocol: b.protocol, config: b.config || {}, scale: b.scale });
+      const body = { protocol: b.protocol, config: b.config || {}, scale: b.scale, mode };
+      if (isWrite) body.value = Number(writeVal) || 0;
+      const { data } = await api.post('/live/test', body);
       setResult(data);
     } catch (e) {
       setResult({ ok: false, error: e.response?.data?.error || e.message });
     } finally { setTesting(false); }
   };
+  const accent = isWrite ? '#B45309' : '#0891B2';
 
   return (
     <div style={s.card}>
-      <label style={s.cardHdr}>
+      <label style={{ ...s.cardHdr, borderLeft: enabled ? `3px solid ${accent}` : '3px solid transparent' }}>
         <input type="checkbox" checked={enabled}
-          onChange={e => set({ enabled: e.target.checked, protocol: b.protocol || PROTOCOLS[1].id, config: b.config || {} })} />
+          onChange={e => set({ enabled: e.target.checked, mode: b.mode || 'read', protocol: b.protocol || PROTOCOLS[1].id, config: b.config || {} })} />
         <span style={s.paramName}>{paramLabel}</span>
         {enabled
-          ? <span style={{ ...s.dot, background: '#059669' }} title="Live source bound" />
+          ? <span style={{ ...s.badge, background: accent }}>{isWrite ? '↑ WRITE' : '↓ READ'}</span>
           : <span style={s.muted}>simulated</span>}
       </label>
 
       {enabled && (
         <div style={s.cardBody}>
+          <div style={s.dirRow}>
+            {['read', 'write'].map(m => (
+              <button type="button" key={m} onClick={() => set({ mode: m })}
+                style={{ ...s.dirBtn, ...(mode === m ? { ...s.dirBtnOn, background: m === 'write' ? '#B45309' : '#0891B2' } : {}) }}>
+                {m === 'read' ? '↓ Read' : '↑ Write'}
+              </button>
+            ))}
+            <span style={s.dirHint}>{isWrite ? 'simulation → device' : 'device → simulation'}</span>
+          </div>
+
           <label style={s.field}>
             <span style={s.flabel}>Connection type</span>
             <select style={s.input} value={b.protocol || proto.id} onChange={e => set({ protocol: e.target.value, config: {} })}>
@@ -175,14 +191,22 @@ function BindingEditor({ paramLabel, binding, onChange }) {
             <Field f={{ label: 'Offset', type: 'number', def: 0 }} value={b.scale?.offset} onChange={v => setScale('offset', v)} />
           </div>
 
-          <div style={s.bound}>value = raw × factor + offset &nbsp;·&nbsp; {addressSummary(b)}</div>
+          <div style={s.bound}>
+            {isWrite ? 'raw = (value − offset) ÷ factor' : 'value = raw × factor + offset'} &nbsp;·&nbsp; {isWrite ? '→ ' : '← '}{addressSummary(b)}
+          </div>
 
           <div style={s.testRow}>
-            <button type="button" style={s.testBtn} onClick={runTest} disabled={testing}>
-              {testing ? 'Reading…' : 'Test connection'}
+            {isWrite && (
+              <input type="number" value={writeVal} onChange={e => setWriteVal(e.target.value)}
+                style={{ ...s.input, width: 90 }} title="Value to write" />
+            )}
+            <button type="button" style={{ ...s.testBtn, background: accent }} onClick={runTest} disabled={testing}>
+              {testing ? (isWrite ? 'Writing…' : 'Reading…') : (isWrite ? 'Test write' : 'Test read')}
             </button>
             {result && (result.ok
-              ? <span style={s.ok}>✓ {Number(result.value).toFixed(2)} <span style={s.rawNote}>(raw {String(result.raw)})</span></span>
+              ? (isWrite
+                  ? <span style={s.ok}>✓ wrote {Number(result.wrote).toFixed(2)} <span style={s.rawNote}>(raw {String(result.raw)})</span></span>
+                  : <span style={s.ok}>✓ {Number(result.value).toFixed(2)} <span style={s.rawNote}>(raw {String(result.raw)})</span></span>)
               : <span style={s.err}>✕ {result.error}</span>)}
           </div>
         </div>
@@ -193,10 +217,10 @@ function BindingEditor({ paramLabel, binding, onChange }) {
 
 export default function LiveConfigPanel({ node, defs, onUpdateBinding }) {
   const bindings = node.data.liveBindings || {};
-  const boundCount = useMemo(
-    () => Object.values(bindings).filter(b => b?.enabled).length,
-    [bindings]
-  );
+  const counts = useMemo(() => {
+    const v = Object.values(bindings).filter(b => b?.enabled);
+    return { read: v.filter(b => (b.mode || 'read') === 'read').length, write: v.filter(b => b.mode === 'write').length };
+  }, [bindings]);
 
   if (!defs.length) {
     return <p style={s.empty}>This unit has no parameters to bind.</p>;
@@ -205,9 +229,9 @@ export default function LiveConfigPanel({ node, defs, onUpdateBinding }) {
   return (
     <div>
       <div style={s.intro}>
-        Bind any parameter to a live device. A value pulled from the field
-        <b> overrides the simulation input</b> for that parameter during live runs.
-        {boundCount > 0 && <span style={s.count}>{boundCount} bound</span>}
+        <b style={{ color: '#0891B2' }}>↓ Read</b> pulls a live value in (overrides the simulation input);
+        <b style={{ color: '#B45309' }}> ↑ Write</b> pushes the simulated value out to the device.
+        {(counts.read > 0 || counts.write > 0) && <span style={s.count}>{counts.read} read · {counts.write} write</span>}
       </div>
       {defs.map(def => (
         <BindingEditor
@@ -229,6 +253,11 @@ const s = {
   cardHdr:  { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', background: '#F9FAFB', cursor: 'pointer', fontSize: 13 },
   paramName:{ fontWeight: 600, color: '#111827', flex: 1 },
   muted:    { fontSize: 11, color: '#9CA3AF' },
+  badge:    { fontSize: 9.5, fontWeight: 800, color: '#fff', borderRadius: 6, padding: '2px 7px', letterSpacing: '.04em' },
+  dirRow:   { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
+  dirBtn:   { padding: '4px 12px', fontSize: 12, fontWeight: 700, color: '#374151', background: '#fff', border: '1px solid #D1D5DB', borderRadius: 999, cursor: 'pointer' },
+  dirBtnOn: { color: '#fff', border: '1px solid transparent' },
+  dirHint:  { fontSize: 11, color: '#9CA3AF', marginLeft: 4 },
   dot:      { width: 9, height: 9, borderRadius: '50%' },
   cardBody: { padding: '10px 11px', display: 'flex', flexDirection: 'column', gap: 4 },
   field:    { display: 'flex', flexDirection: 'column', gap: 3 },

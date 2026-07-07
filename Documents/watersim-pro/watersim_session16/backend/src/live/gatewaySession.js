@@ -7,32 +7,38 @@
  */
 'use strict';
 
-const { readBinding } = require('./gateway');
-const { updateNodeParams } = require('../simulation/liveSimRunner');
+const { readBinding, writeBinding } = require('./gateway');
+const { updateNodeParams, getParamValue } = require('../simulation/liveSimRunner');
 const logger = require('../utils/logger');
 
 const sessions = new Map(); // flowsheetId -> session
 
 const clampInterval = (ms) => Math.max(250, Math.min(60_000, Number(ms) || 1000));
-const keyOf = (b) => `${b.nodeId}::${b.paramKey}`;
+const keyOf = (b) => `${b.mode === 'write' ? 'w' : 'r'}:${b.nodeId}::${b.paramKey}`;
 
 function pollOne(flowsheetId, b, session) {
   const key = keyOf(b);
+  const isWrite = b.mode === 'write';
   const tick = async () => {
     if (session.stopped) return;
     try {
-      const r = await readBinding(b);
-      session.latest[key] = {
-        nodeId: b.nodeId, paramKey: b.paramKey, protocol: b.protocol,
-        value: r.value, raw: r.raw, ok: true, at: Date.now(),
-      };
-      // Inject into the running live sim (no-op if none is active yet)
-      updateNodeParams(flowsheetId, { nodeId: b.nodeId, params: { [b.paramKey]: r.value } });
+      if (isWrite) {
+        // simulation → device: write the current parameter value
+        const cur = getParamValue(flowsheetId, b.nodeId, b.paramKey);
+        if (cur == null) {
+          session.latest[key] = { nodeId: b.nodeId, paramKey: b.paramKey, protocol: b.protocol, mode: 'write', ok: false, error: 'waiting for simulation value', at: Date.now() };
+        } else {
+          const r = await writeBinding(b, cur);
+          session.latest[key] = { nodeId: b.nodeId, paramKey: b.paramKey, protocol: b.protocol, mode: 'write', value: r.wrote, raw: r.raw, ok: true, at: Date.now() };
+        }
+      } else {
+        // device → simulation: read and inject
+        const r = await readBinding(b);
+        session.latest[key] = { nodeId: b.nodeId, paramKey: b.paramKey, protocol: b.protocol, mode: 'read', value: r.value, raw: r.raw, ok: true, at: Date.now() };
+        updateNodeParams(flowsheetId, { nodeId: b.nodeId, params: { [b.paramKey]: r.value } });
+      }
     } catch (e) {
-      session.latest[key] = {
-        nodeId: b.nodeId, paramKey: b.paramKey, protocol: b.protocol,
-        ok: false, error: e.message, at: Date.now(),
-      };
+      session.latest[key] = { nodeId: b.nodeId, paramKey: b.paramKey, protocol: b.protocol, mode: isWrite ? 'write' : 'read', ok: false, error: e.message, at: Date.now() };
     }
     if (!session.stopped) session.timers[key] = setTimeout(tick, clampInterval(b.poll_ms));
   };
