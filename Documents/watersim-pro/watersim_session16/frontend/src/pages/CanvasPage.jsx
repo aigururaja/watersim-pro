@@ -15,6 +15,7 @@ import api from '../utils/api';
 import AppLayout from '../components/layout/AppLayout';
 import UnitOpNode from '../components/canvas/UnitOpNode';
 import UnitOpPalette from '../components/canvas/UnitOpPalette';
+import LiveConfigPanel from '../components/canvas/LiveConfigPanel';
 import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
@@ -699,6 +700,19 @@ function CanvasPageInner() {
     sendEvent('params:update', { nodeId, params: { [key]: value } });
   }, [sendEvent]);
 
+  // ── Update a live-data binding for a parameter ──────────────────────────────
+  const updateLiveBinding = useCallback((nodeId, paramKey, binding) => {
+    const apply = (data) => {
+      const lb = { ...(data.liveBindings || {}) };
+      if (binding == null) delete lb[paramKey];
+      else lb[paramKey] = binding;
+      return { ...data, liveBindings: lb };
+    };
+    setNodes(ns => ns.map(n => (n.id === nodeId ? { ...n, data: apply(n.data) } : n)));
+    setSelectedNode(sn => (sn?.id === nodeId ? { ...sn, data: apply(sn.data) } : sn));
+    setSaved(false);
+  }, []);
+
   // ── Background OPC polling (runs even when tag table is closed) ──────────
   useOpcPolling(nodes, updateParam);
 
@@ -888,6 +902,7 @@ function CanvasPageInner() {
                       node={selectedNode}
                       unitResult={simResults?.results?.unitResults?.[selectedNode.id]}
                       onUpdateParam={updateParam}
+                      onUpdateBinding={updateLiveBinding}
                       onClose={() => setSelectedNode(null)}
                     />
               )}
@@ -1005,8 +1020,20 @@ function CanvasPageInner() {
 
 // ── Param Panel ───────────────────────────────────────────────────────────────
 
-const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onClose }) {
+const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onUpdateBinding, onClose }) {
   const defs = PARAM_DEFS[node.data.opType] || [];
+  const [tab, setTab] = React.useState('sim');
+  const liveCount = Object.values(node.data.liveBindings || {}).filter(b => b?.enabled).length;
+
+  const tabBtn = (id, label, badge) => (
+    <button onClick={() => setTab(id)} style={{
+      flex: 1, padding: '9px 8px', border: 'none', background: 'none', cursor: 'pointer',
+      fontSize: 12.5, fontWeight: 600, color: tab === id ? '#0891B2' : '#6B7280',
+      borderBottom: tab === id ? '2px solid #0891B2' : '2px solid transparent',
+    }}>
+      {label}{badge ? <span style={{ marginLeft: 5, fontSize: 10, background: '#0891B2', color: '#fff', borderRadius: 8, padding: '1px 6px' }}>{badge}</span> : null}
+    </button>
+  );
 
   return (
     <div>
@@ -1018,34 +1045,45 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
         <button style={S.closeBtn} onClick={onClose}>✕</button>
       </div>
 
-      <div style={S.panelSection}>
-        <div style={S.secTitle}>Parameters</div>
-        {defs.length === 0 && <p style={S.noParams}>No configurable parameters.</p>}
-        {defs.map(def => (
-          <ParamRow
-            key={def.key}
-            def={def}
-            value={node.data.params?.[def.key]}
-            onChange={v => onUpdateParam(node.id, def.key, v)}
-          />
-        ))}
+      <div style={{ display: 'flex', borderBottom: '1px solid #E5E7EB' }}>
+        {tabBtn('sim', 'Simulation')}
+        {tabBtn('live', 'Live Configuration', liveCount || null)}
       </div>
 
-      {unitResult && (
-        <div style={S.panelSection}>
-          <div style={S.secTitle}>Simulation Output</div>
-          {Object.entries(unitResult.metrics).map(([k, v]) => {
-            if (Array.isArray(v) || v === null || v === undefined) return null;
-            return (
-              <div key={k} style={S.metricRow}>
-                <span style={S.metricKey}>{k.replace(/_/g,' ')}</span>
-                <span style={S.metricVal}>
-                  {typeof v === 'boolean' ? (v ? '✓ Yes' : '✗ No') : String(v)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+      {tab === 'sim' ? (
+        <>
+          <div style={S.panelSection}>
+            <div style={S.secTitle}>Parameters</div>
+            {defs.length === 0 && <p style={S.noParams}>No configurable parameters.</p>}
+            {defs.map(def => (
+              <ParamRow
+                key={def.key}
+                def={def}
+                value={node.data.params?.[def.key]}
+                onChange={v => onUpdateParam(node.id, def.key, v)}
+              />
+            ))}
+          </div>
+
+          {unitResult && (
+            <div style={S.panelSection}>
+              <div style={S.secTitle}>Simulation Output</div>
+              {Object.entries(unitResult.metrics).map(([k, v]) => {
+                if (Array.isArray(v) || v === null || v === undefined) return null;
+                return (
+                  <div key={k} style={S.metricRow}>
+                    <span style={S.metricKey}>{k.replace(/_/g,' ')}</span>
+                    <span style={S.metricVal}>
+                      {typeof v === 'boolean' ? (v ? '✓ Yes' : '✗ No') : String(v)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : (
+        <LiveConfigPanel node={node} defs={defs} onUpdateBinding={onUpdateBinding} />
       )}
     </div>
   );
