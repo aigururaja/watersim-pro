@@ -52,7 +52,7 @@ const UnitOpNode = memo(({ data, selected }) => {
       {!isOpc && <Handle type="target" position={Position.Left} style={styles.handle} />}
 
       <div style={styles.body}>
-        <span style={styles.icon}><UnitOpIcon opType={data.opType} size={26} /></span>
+        <span style={styles.icon}><UnitOpIcon opType={data.opType} cat={data.icon} animated={data.animated} size={26} /></span>
         <span style={styles.label}>{data.label}</span>
       </div>
 

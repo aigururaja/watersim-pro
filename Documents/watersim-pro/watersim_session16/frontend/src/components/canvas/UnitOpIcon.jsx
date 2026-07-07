@@ -1,9 +1,10 @@
 /**
  * UnitOpIcon — shared equipment glyphs for the palette, canvas nodes, and
- * (conceptually) the live diagram. One source of truth so the flowsheet
- * editor reads as one visual system.
+ * the live diagram. One source of truth so the flowsheet editor reads as one
+ * visual system.
  *
- *   <UnitOpIcon opType="sand_filter" size={22} />
+ *   <UnitOpIcon opType="sand_filter" size={22} />       // icon from opType
+ *   <UnitOpIcon cat="pump" animated size={26} />        // explicit + animated
  */
 import { memo } from 'react';
 
@@ -12,6 +13,23 @@ const C = {
   steel: '#94A3B8', water: '#2F86BD', accent: '#0891B2', accent2: '#22B8CF',
   solid2: '#A87142', mediaA: '#D8C48A', mediaB: '#7C8794',
 };
+
+/** Icon categories the palette lets users choose from, with a base solver model. */
+export const ICON_OPTIONS = [
+  { cat: 'inlet',     label: 'Inlet',              base: 'inlet' },
+  { cat: 'outlet',    label: 'Outlet',             base: 'outlet' },
+  { cat: 'pump',      label: 'Pump',               base: 'pump' },
+  { cat: 'blower',    label: 'Blower',             base: 'blower' },
+  { cat: 'clarifier', label: 'Clarifier / Agitator', base: 'primary_clarifier' },
+  { cat: 'vessel',    label: 'Filter / Vessel',    base: 'sand_filter' },
+  { cat: 'basin',     label: 'Aeration Basin',     base: 'activated_sludge' },
+  { cat: 'tank',      label: 'Storage Tank',       base: 'tank' },
+  { cat: 'dosing',    label: 'Dosing',             base: 'chemical_dosing' },
+  { cat: 'uv',        label: 'UV / Disinfection',  base: 'uv_disinfection' },
+  { cat: 'valve',     label: 'Valve',              base: 'control_valve' },
+  { cat: 'screen',    label: 'Screen',             base: 'screening' },
+  { cat: 'unit',      label: 'Generic Unit',       base: 'tank' },
+];
 
 /** Map any opType to one of the glyph categories. */
 export function iconCategory(op) {
@@ -32,32 +50,58 @@ export function iconCategory(op) {
   return 'unit';
 }
 
+// Inject the animation keyframes once.
+const STYLE_ID = 'uoi-anim-style';
+if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
+  const el = document.createElement('style');
+  el.id = STYLE_ID;
+  el.textContent = `
+    .uoi-spin{transform-box:view-box;transform-origin:22px 22px}
+    .uoi-anim .uoi-spin{animation:uoiSpin 1.1s linear infinite}
+    .uoi-anim .uoi-spin.fast{animation-duration:.6s}
+    .uoi-bubble{opacity:0}
+    .uoi-anim .uoi-bubble{animation:uoiRise 1.5s ease-in infinite}
+    .uoi-drop{opacity:0}
+    .uoi-anim .uoi-drop{animation:uoiDrip 1.3s ease-in infinite}
+    @keyframes uoiSpin{to{transform:rotate(360deg)}}
+    @keyframes uoiRise{0%{opacity:0;transform:translateY(0)}25%{opacity:.9}100%{opacity:0;transform:translateY(-14px)}}
+    @keyframes uoiDrip{0%{opacity:0;transform:translateY(-3px)}30%{opacity:1}100%{opacity:0;transform:translateY(9px)}}
+    @media (prefers-reduced-motion:reduce){.uoi-anim .uoi-spin,.uoi-anim .uoi-bubble,.uoi-anim .uoi-drop{animation:none}}
+  `;
+  document.head.appendChild(el);
+}
+
 function Glyph({ cat }) {
-  const s = { fill: 'none', stroke: C.steel, strokeWidth: 2 };
   switch (cat) {
     case 'pump':
       return (<g>
         <circle cx="22" cy="22" r="15" fill={C.panel} stroke={C.steel} strokeWidth="2" />
-        <path d="M22 22 L34 17 L34 27 Z" fill={C.accent} />
-        <path d="M22 22 L10 27 L10 17 Z" fill={C.accent} />
-        <path d="M22 22 L17 8 L27 8 Z" fill={C.accent} opacity="0.85" />
+        <g className="uoi-spin fast">
+          <path d="M22 22 L34 17 L34 27 Z" fill={C.accent} />
+          <path d="M22 22 L10 27 L10 17 Z" fill={C.accent} />
+          <path d="M22 22 L17 8 L27 8 Z" fill={C.accent} opacity="0.85" />
+        </g>
         <circle cx="22" cy="22" r="3" fill={C.panel} stroke={C.steel} strokeWidth="1" />
       </g>);
     case 'blower':
       return (<g>
         <circle cx="22" cy="22" r="15" fill={C.panel} stroke={C.steel} strokeWidth="2" />
-        <path d="M22 22 L34 22 L28 29 Z" fill={C.accent} />
-        <path d="M22 22 L16 32 L10 25 Z" fill={C.accent} />
-        <path d="M22 22 L16 12 L24 8 Z" fill={C.accent} />
+        <g className="uoi-spin fast">
+          <path d="M22 22 L34 22 L28 29 Z" fill={C.accent} />
+          <path d="M22 22 L16 32 L10 25 Z" fill={C.accent} />
+          <path d="M22 22 L16 12 L24 8 Z" fill={C.accent} />
+        </g>
         <circle cx="22" cy="22" r="3" fill={C.accent} />
       </g>);
     case 'clarifier':
       return (<g>
         <circle cx="22" cy="22" r="16" fill={C.panel2} stroke={C.steel} strokeWidth="2" />
         <circle cx="22" cy="22" r="10" fill="none" stroke={C.line} strokeWidth="1" />
-        <rect x="8" y="20.4" width="28" height="3.2" rx="1.5" fill={C.solid2} />
-        <path d="M8 22 l3 -3 l0 6 Z" fill={C.solid2} />
-        <path d="M36 22 l-3 -3 l0 6 Z" fill={C.solid2} />
+        <g className="uoi-spin">
+          <rect x="8" y="20.4" width="28" height="3.2" rx="1.5" fill={C.solid2} />
+          <path d="M8 22 l3 -3 l0 6 Z" fill={C.solid2} />
+          <path d="M36 22 l-3 -3 l0 6 Z" fill={C.solid2} />
+        </g>
         <rect x="11" y="2" width="22" height="6" rx="2" fill={C.ink2} />
         <circle cx="22" cy="22" r="3" fill={C.steel} />
       </g>);
@@ -74,10 +118,10 @@ function Glyph({ cat }) {
       return (<g>
         <rect x="4" y="10" width="36" height="26" rx="3" fill={C.water} fillOpacity="0.4" stroke={C.steel} strokeWidth="2" />
         <line x1="8" y1="33" x2="36" y2="33" stroke={C.steel} strokeWidth="1.5" strokeDasharray="2 3" />
-        <circle cx="12" cy="30" r="2" fill={C.accent2} />
-        <circle cx="20" cy="26" r="2" fill={C.accent2} />
-        <circle cx="28" cy="29" r="2" fill={C.accent2} />
-        <circle cx="34" cy="24" r="2" fill={C.accent2} />
+        <circle className="uoi-bubble" cx="12" cy="30" r="2" fill={C.accent2} style={{ animationDelay: '0s' }} />
+        <circle className="uoi-bubble" cx="20" cy="30" r="2" fill={C.accent2} style={{ animationDelay: '.3s' }} />
+        <circle className="uoi-bubble" cx="28" cy="30" r="2" fill={C.accent2} style={{ animationDelay: '.6s' }} />
+        <circle className="uoi-bubble" cx="34" cy="30" r="2" fill={C.accent2} style={{ animationDelay: '.9s' }} />
       </g>);
     case 'tank':
       return (<g>
@@ -88,7 +132,7 @@ function Glyph({ cat }) {
       return (<g>
         <rect x="13" y="12" width="18" height="22" rx="2" fill={C.panel2} stroke={C.steel} strokeWidth="2" />
         <path d="M22 5 l4 6 a4 4 0 1 1 -8 0 Z" fill={C.accent} />
-        <circle cx="22" cy="36" r="2.2" fill={C.accent2} />
+        <circle className="uoi-drop" cx="22" cy="36" r="2.2" fill={C.accent2} />
       </g>);
     case 'uv':
       return (<g>
@@ -108,7 +152,7 @@ function Glyph({ cat }) {
     case 'inlet':
       return (<g>
         <path d="M6 10 H38 V20 L26 32 H18 L6 20 Z" fill={C.panel2} stroke={C.steel} strokeWidth="2" strokeLinejoin="round" />
-        <circle cx="22" cy="37" r="3" fill={C.accent2} />
+        <circle className="uoi-drop" cx="22" cy="37" r="3" fill={C.accent2} />
       </g>);
     case 'outlet':
       return (<g>
@@ -128,11 +172,13 @@ function Glyph({ cat }) {
   }
 }
 
-const UnitOpIcon = memo(function UnitOpIcon({ opType, size = 22 }) {
+const UnitOpIcon = memo(function UnitOpIcon({ opType, cat, size = 22, animated = false }) {
+  const category = cat || iconCategory(opType);
   return (
     <svg width={size} height={size} viewBox="0 0 44 44" aria-hidden="true"
+      className={animated ? 'uoi-anim' : undefined}
       style={{ flexShrink: 0, display: 'block' }}>
-      <Glyph cat={iconCategory(opType)} />
+      <Glyph cat={category} />
     </svg>
   );
 });

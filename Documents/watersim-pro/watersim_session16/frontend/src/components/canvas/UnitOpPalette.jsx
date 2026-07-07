@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import UnitOpIcon from './UnitOpIcon';
+import UnitOpIcon, { ICON_OPTIONS } from './UnitOpIcon';
 import useCustomUnitStore from '../../store/customUnitStore';
 import api from '../../utils/api';
 
@@ -58,15 +58,8 @@ const PALETTE = [
 // OPC nodes are singletons — only one of each allowed on the canvas
 const SINGLETON_TYPES = new Set(['opc_read', 'opc_write']);
 
-// Built-in types a custom unit can be based on (so it still simulates).
-const BASE_TYPES = (() => {
-  const seen = new Set(); const out = [];
-  for (const g of PALETTE) for (const it of g.items) {
-    if (SINGLETON_TYPES.has(it.type) || seen.has(it.type)) continue;
-    seen.add(it.type); out.push({ type: it.type, label: it.label });
-  }
-  return out;
-})();
+// Base solver model for a chosen icon (so the unit still simulates).
+const baseForIcon = (cat) => ICON_OPTIONS.find(o => o.cat === cat)?.base || 'tank';
 
 /** Coerce a params row value into number / boolean / string. */
 function coerce(v) {
@@ -127,11 +120,13 @@ function CustomPaletteItem({ unit, onEdit, onDelete }) {
     e.dataTransfer.setData('application/unitop-type', unit.baseType);
     e.dataTransfer.setData('application/unitop-label', unit.label);
     e.dataTransfer.setData('application/unitop-params', JSON.stringify(unit.params || {}));
+    if (unit.icon) e.dataTransfer.setData('application/unitop-icon', unit.icon);
+    if (unit.animated) e.dataTransfer.setData('application/unitop-animated', '1');
     e.dataTransfer.effectAllowed = 'move';
   };
   return (
     <div draggable onDragStart={onDragStart} style={styles.item} title={`Drag to add: ${unit.label}`}>
-      <span style={styles.itemIcon}><UnitOpIcon opType={unit.baseType} size={22} /></span>
+      <span style={styles.itemIcon}><UnitOpIcon cat={unit.icon} opType={unit.baseType} animated={unit.animated} size={22} /></span>
       <span style={styles.itemText}>{unit.label}</span>
       <button style={styles.iconBtn} title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(unit); }}>✎</button>
       <button style={{ ...styles.iconBtn, color: '#DC2626' }} title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(unit.id); }}>🗑</button>
@@ -145,7 +140,8 @@ function EditModal({ spec, onSaveCustom, onSaveBuiltin, onReset, onCancel }) {
   const isBuiltin = spec.mode === 'builtin';
   const src = spec.data || {};
   const [label, setLabel]       = useState(src.label || '');
-  const [baseType, setBaseType] = useState(src.baseType || BASE_TYPES[0]?.type || 'tank');
+  const [icon, setIcon]         = useState(src.icon || 'clarifier');
+  const [animated, setAnimated] = useState(!!src.animated);
   const [category, setCategory] = useState(src.category || 'Custom Units');
   const [hidden, setHidden]     = useState(!!src.hidden);
   const [rows, setRows]         = useState(() => Object.entries(src.params || {}).map(([k, v]) => ({ k, v: String(v) })));
@@ -163,7 +159,7 @@ function EditModal({ spec, onSaveCustom, onSaveBuiltin, onReset, onCancel }) {
     } else {
       const params = {};
       for (const r of rows) { const k = r.k.trim(); if (k) params[k] = coerce(r.v); }
-      onSaveCustom({ label: label.trim(), baseType, category: category.trim() || 'Custom Units', params });
+      onSaveCustom({ label: label.trim(), icon, animated, baseType: baseForIcon(icon), category: category.trim() || 'Custom Units', params });
     }
   };
 
@@ -180,13 +176,20 @@ function EditModal({ spec, onSaveCustom, onSaveBuiltin, onReset, onCancel }) {
 
         {!isBuiltin && (
           <>
-            <label style={styles.fieldLabel} htmlFor="cu-base">Based on (simulation model)</label>
-            <div style={styles.baseRow}>
-              <UnitOpIcon opType={baseType} size={24} />
-              <select id="cu-base" style={{ ...styles.input, margin: 0 }} value={baseType} onChange={(e) => setBaseType(e.target.value)}>
-                {BASE_TYPES.map(b => <option key={b.type} value={b.type}>{b.label}</option>)}
-              </select>
+            <label style={styles.fieldLabel}>Icon</label>
+            <div style={styles.iconGrid}>
+              {ICON_OPTIONS.map(o => (
+                <button type="button" key={o.cat} title={o.label} onClick={() => setIcon(o.cat)}
+                  style={{ ...styles.iconChoice, ...(icon === o.cat ? styles.iconChoiceOn : {}) }}>
+                  <UnitOpIcon cat={o.cat} animated={animated && icon === o.cat} size={26} />
+                </button>
+              ))}
             </div>
+            <label style={styles.checkRow}>
+              <input type="checkbox" checked={animated} onChange={(e) => setAnimated(e.target.checked)} />
+              Live animated icon
+              <span style={styles.previewBox}><UnitOpIcon cat={icon} animated={animated} size={26} /></span>
+            </label>
           </>
         )}
 
@@ -357,7 +360,10 @@ const styles = {
   modalTitle:{ fontSize: 16, fontWeight: 700, color: '#1F4E79', marginBottom: 12 },
   fieldLabel:{ fontSize: 12, fontWeight: 600, color: '#374151', margin: '8px 0 4px' },
   input:     { width: '100%', padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, color: '#111', margin: '0 0 4px', boxSizing: 'border-box' },
-  baseRow:   { display: 'flex', alignItems: 'center', gap: 8 },
+  iconGrid:  { display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, marginBottom: 4 },
+  iconChoice:{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 6, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, cursor: 'pointer' },
+  iconChoiceOn: { border: '2px solid #0891B2', background: '#ECFEFF' },
+  previewBox:{ marginLeft: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8 },
   paramRow:  { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 },
   addParam:  { fontSize: 12, fontWeight: 600, color: '#0891B2', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', textAlign: 'left' },
   checkRow:  { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', margin: '8px 0 4px' },

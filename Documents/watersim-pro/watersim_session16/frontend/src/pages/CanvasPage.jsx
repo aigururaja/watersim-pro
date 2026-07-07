@@ -635,9 +635,11 @@ function CanvasPageInner() {
     const type  = event.dataTransfer.getData('application/unitop-type');
     const label = event.dataTransfer.getData('application/unitop-label');
     if (!type) return;
-    // Custom palette units may carry default parameters
+    // Custom palette units may carry default parameters, a chosen icon, and animation
     let customParams = {};
     try { const raw = event.dataTransfer.getData('application/unitop-params'); if (raw) customParams = JSON.parse(raw); } catch { /* ignore */ }
+    const iconCat = event.dataTransfer.getData('application/unitop-icon') || undefined;
+    const animatedIcon = event.dataTransfer.getData('application/unitop-animated') === '1';
 
     // Enforce single OPC read / single OPC write
     if (SINGLETON_OPC_TYPES.has(type)) {
@@ -654,7 +656,7 @@ function CanvasPageInner() {
       id:   getId(),
       type: 'unitOp',
       position,
-      data: { label, opType: type, params: {
+      data: { label, opType: type, icon: iconCat, animated: animatedIcon, params: {
         // Inject default ebpr_config for advanced EBPR dedicated nodes
         ...(type === 'uct_reactor' ? { ebpr_config: 'uct', MLR_ratio: 3.0, anaerobic_fraction: 0.15, uct_anoxic_fraction: 0.25 } : {}),
         ...(type === 'jhb_reactor' ? { ebpr_config: 'jhb', MLR_ratio: 2.0, jhb_preanoxic_fraction: 0.08, anaerobic_fraction: 0.15, uct_anoxic_fraction: 0.22 } : {}),
