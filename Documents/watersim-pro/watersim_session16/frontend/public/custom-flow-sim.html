@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WaterSim Pro — Live Flowsheet Simulation</title>
+<style>
+  :root{
+    --bg:#e9edf1;--panel:#fff;--panel-2:#f3f6f9;--line:#d4dbe2;
+    --ink:#141b22;--ink-2:#4a5763;--ink-3:#808c97;
+    --accent:#0f8fa8;--accent-2:#22b8cf;--run:#1f9e64;--idle:#8695a1;--warn:#c98a1e;--err:#d83b40;
+    --water:#2f86bd;--water-2:#4aa8dd;--solid:#8a5a34;--solid-2:#a87142;--recycle:#7b5ea7;--steel:#9aa6b1;
+    --shadow:0 1px 2px rgba(16,24,32,.06),0 8px 24px rgba(16,24,32,.07);
+    --mono:ui-monospace,"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+    --sans:"Segoe UI",Roboto,ui-sans-serif,system-ui,-apple-system,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0c1116;--panel:#121a22;--panel-2:#0f161d;--line:#26323d;
+    --ink:#e7eef4;--ink-2:#a4b2be;--ink-3:#6f7d89;
+    --accent:#2bb7cf;--accent-2:#46d3e6;--run:#2fbe7c;--idle:#6b7a86;--warn:#e0a83a;--err:#e5595d;
+    --water:#3f95c8;--water-2:#57b3e6;--solid:#a06a3e;--solid-2:#c08a55;--recycle:#a98fd0;--steel:#6b7883;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.4);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0c1116;--panel:#121a22;--panel-2:#0f161d;--line:#26323d;
+    --ink:#e7eef4;--ink-2:#a4b2be;--ink-3:#6f7d89;
+    --accent:#2bb7cf;--accent-2:#46d3e6;--run:#2fbe7c;--idle:#6b7a86;--warn:#e0a83a;--err:#e5595d;
+    --water:#3f95c8;--water-2:#57b3e6;--solid:#a06a3e;--solid-2:#c08a55;--recycle:#a98fd0;--steel:#6b7883;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.4);
+  }
+  :root[data-theme="light"]{
+    --bg:#e9edf1;--panel:#fff;--panel-2:#f3f6f9;--line:#d4dbe2;
+    --ink:#141b22;--ink-2:#4a5763;--ink-3:#808c97;
+    --accent:#0f8fa8;--accent-2:#22b8cf;--run:#1f9e64;--idle:#8695a1;--warn:#c98a1e;--err:#d83b40;
+    --water:#2f86bd;--water-2:#4aa8dd;--solid:#8a5a34;--solid-2:#a87142;--recycle:#7b5ea7;--steel:#9aa6b1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.45}
+  .wrap{max-width:1360px;margin:0 auto;padding:18px clamp(12px,3vw,26px) 40px}
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;padding:12px 16px;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);margin-bottom:14px}
+  .brand{margin-right:auto;display:flex;flex-direction:column;gap:2px}
+  h1{font-size:clamp(15px,2vw,19px);margin:0;font-weight:660;letter-spacing:-.01em}
+  .sub{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.12em}
+  select,input,button{font-family:var(--sans);font-size:13px;color:var(--ink);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:9px;padding:8px 11px}
+  select,input{min-width:150px}
+  button{cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  button:hover{border-color:var(--accent)}
+  button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.primary{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  label.pick{display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+
+  .statusbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:9px 14px;margin-bottom:14px;
+    background:var(--panel);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);font-size:12px;color:var(--ink-2)}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px}
+  .led{width:9px;height:9px;border-radius:50%;background:var(--idle)}
+  .led.ok{background:var(--run);box-shadow:0 0 0 3px color-mix(in srgb,var(--run) 25%,transparent)}
+  .led.warn{background:var(--warn)} .led.err{background:var(--err)}
+  .switch{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+
+  .board{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);
+    padding:10px;overflow-x:auto;margin-bottom:14px}
+  svg.flow{width:100%;min-width:820px;height:auto;display:block}
+  .legend{display:flex;flex-wrap:wrap;gap:7px 16px;padding:8px 8px 2px;font-size:11.5px;color:var(--ink-2)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:50%}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .metric{background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);
+    padding:12px 15px;display:flex;flex-direction:column;gap:3px}
+  .metric .k{font-size:10.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+  .metric .v{font-family:var(--mono);font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+  .metric .v small{font-size:11px;color:var(--ink-3);font-weight:500}
+  .cards-title{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-3);font-weight:650;margin:4px 2px 10px}
+
+  /* svg */
+  .edge{fill:none;stroke:var(--steel);stroke-width:6;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+  .efl{fill:none;stroke-width:4;stroke-linecap:round;stroke-dasharray:2 12;opacity:0}
+  .efl.on{opacity:.95} body.run .efl.on{animation:march .8s linear infinite}
+  .efl.water{stroke:var(--water-2)} .efl.solid{stroke:var(--solid-2)} .efl.recycle{stroke:var(--recycle)}
+  .edge.solid{stroke:var(--solid)} .edge.recycle{stroke:var(--recycle);stroke-dasharray:9 7}
+  @keyframes march{to{stroke-dashoffset:-28}}
+  .nodebox{fill:var(--panel-2);stroke:var(--steel);stroke-width:2}
+  .nlabel{font-family:var(--sans);font-weight:700;font-size:12px;fill:var(--ink);text-anchor:middle}
+  .ntype{font-family:var(--mono);font-size:9px;fill:var(--ink-3);text-anchor:middle;letter-spacing:.03em}
+  .nval{font-family:var(--mono);font-size:9.5px;fill:var(--accent);text-anchor:middle;font-weight:600}
+  .elabel{font-family:var(--mono);font-size:9px;fill:var(--ink-2);text-anchor:middle}
+  .elabel .q{fill:var(--ink)}
+  .spin{transform-box:fill-box;transform-origin:center}
+  body.run .running .spin{animation:spin .9s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){body.run .efl.on,body.run .running .spin{animation:none}}
+
+  /* login overlay */
+  .overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(3px);
+    display:grid;place-items:center;z-index:20}
+  .login{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);
+    padding:24px;width:min(340px,92vw);display:flex;flex-direction:column;gap:12px}
+  .login h2{margin:0;font-size:16px}
+  .login p{margin:0;font-size:12.5px;color:var(--ink-3)}
+  .login input{width:100%}
+  .err-msg{color:var(--err);font-size:12px;min-height:16px}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Live Flowsheet Simulation</h1>
+      <div class="sub">WaterSim Pro · connected to your project</div>
+    </div>
+    <div class="row">
+      <label class="pick">Project<select id="sel-project"></select></label>
+      <label class="pick">Flowsheet<select id="sel-flowsheet"></select></label>
+      <button id="btn-refresh" class="primary">↻ Refresh</button>
+    </div>
+  </header>
+
+  <div class="statusbar">
+    <span class="pill"><i id="led" class="led"></i><span id="status">Connecting…</span></span>
+    <span class="pill">nodes <b id="s-nodes">–</b></span>
+    <span class="pill">edges <b id="s-edges">–</b></span>
+    <span class="pill">recycle <b id="s-recyc">–</b></span>
+    <span class="pill">iters <b id="s-iters">–</b></span>
+    <span class="pill" id="s-warn"></span>
+    <span style="margin-left:auto" class="switch">
+      <input type="checkbox" id="auto" checked><label for="auto">Auto-refresh</label>
+      <select id="interval" style="min-width:auto">
+        <option value="3000">3s</option><option value="5000" selected>5s</option><option value="10000">10s</option>
+      </select>
+    </span>
+    <span class="pill" id="updated" style="color:var(--ink-3)"></span>
+    <button id="btn-logout" style="padding:6px 10px">Sign out</button>
+  </div>
+
+  <div class="board">
+    <svg class="flow" id="svg" viewBox="0 0 1200 460" role="img" aria-label="Live flowsheet rendered from your WaterSim project"></svg>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--water-2)"></i>Water / liquid</span>
+      <span><i class="dot" style="background:var(--solid-2)"></i>Solids (underflow)</span>
+      <span><i class="dot" style="background:var(--recycle)"></i>Recycle (RAS/WAS)</span>
+      <span><i class="dot" style="background:var(--run)"></i>Running (Q &gt; 0)</span>
+    </div>
+  </div>
+
+  <div class="cards-title">Live telemetry — from the solver</div>
+  <div class="grid" id="metrics"></div>
+</div>
+
+<!-- login overlay -->
+<div class="overlay hidden" id="overlay">
+  <form class="login" id="login-form">
+    <h2>Sign in to WaterSim</h2>
+    <p>Use your WaterSim account. The token is shared with the app on this browser.</p>
+    <input id="li-email" type="email" placeholder="email" value="admin@gmail.com" autocomplete="username">
+    <input id="li-pass" type="password" placeholder="password" autocomplete="current-password">
+    <div class="err-msg" id="li-err"></div>
+    <button class="primary" type="submit" style="justify-content:center">Sign in</button>
+  </form>
+</div>
+
+<script>
+"use strict";
+const API='/api/v1';
+const $=id=>document.getElementById(id);
+const LS={pid:'sim_pid',fid:'sim_fid'};
+
+/* ---------- auth ---------- */
+const getToken=()=>localStorage.getItem('accessToken')||sessionStorage.getItem('accessToken')||'';
+const authHeaders=()=>{const t=getToken();return t?{Authorization:'Bearer '+t}:{};};
+async function apiGet(path){
+  const r=await fetch(API+path,{headers:authHeaders()});
+  if(r.status===401){throw {code:401};} if(!r.ok) throw new Error('GET '+path+' → '+r.status);
+  return r.json();
+}
+async function apiPost(path,body){
+  const r=await fetch(API+path,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.status===401){throw {code:401};} if(!r.ok){let m='';try{m=(await r.json()).error||''}catch(_){}
+    throw new Error('POST '+path+' → '+r.status+(m?' · '+m:''));}
+  return r.json();
+}
+async function doLogin(email,pw){
+  const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pw})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||('Login failed ('+r.status+')'));
+  const tok=(j.data&&j.data.accessToken)||j.accessToken;
+  if(!tok) throw new Error('No token in login response');
+  localStorage.setItem('accessToken',tok);
+  return tok;
+}
+function showLogin(show){$("overlay").classList.toggle('hidden',!show);}
+$("login-form").addEventListener('submit',async e=>{
+  e.preventDefault(); $("li-err").textContent='';
+  try{ await doLogin($("li-email").value.trim(),$("li-pass").value); showLogin(false); await boot(); }
+  catch(err){ $("li-err").textContent=err.message; }
+});
+$("btn-logout").onclick=()=>{localStorage.removeItem('accessToken');sessionStorage.removeItem('accessToken');stopPoll();setStatus('err','Signed out');showLogin(true);};
+
+/* ---------- status ---------- */
+function setStatus(kind,msg){ $("led").className='led '+(kind||''); $("status").textContent=msg; }
+
+/* ---------- node param builder (mirrors the app) ---------- */
+function buildNodeParams(nodes){
+  const np={};
+  for(const n of nodes){
+    const p0=n.data&&n.data.params;
+    if(p0&&Object.keys(p0).length){
+      const p={...p0};
+      ['denitrification','ebpr','dewatering'].forEach(k=>{if(p[k]!==undefined)p[k]=(p[k]===true||p[k]==='true');});
+      if((!p.ebpr_config||p.ebpr_config==='none')&&p.ebpr)p.ebpr_config='simple';
+      np[n.id]=p;
+    }
+  }
+  return np;
+}
+
+/* ---------- classification ---------- */
+const SOLIDS=new Set(['sludge','solids','underflow','primary_sludge','thickened','concentrate','backwash','screenings']);
+const RECYCLE=new Set(['ras','was','recycle','internal_recycle']);
+const edgeClass=e=>{
+  const st=e.data&&e.data.streamType;
+  if((e.data&&e.data.isSolids)||SOLIDS.has(st))return 'solid';
+  if((e.data&&e.data.isRecycle)||RECYCLE.has(st))return 'recycle';
+  return 'water';
+};
+const SPINNY=new Set(['pump','blower','aeration','activated_sludge','primary_clarifier','secondary_clarifier','sludge_thickener','thickener','uct_reactor','jhb_reactor','membrane_bioreactor']);
+const num=v=>(v==null||isNaN(v))?null:v;
+const fmt=n=>n==null?'–':Math.abs(n)>=1000?Math.round(n).toLocaleString():(+n).toFixed(Math.abs(n)<10?1:0);
+
+/* ---------- render ---------- */
+const NW=150,NH=60;
+function nodeCenter(n){return {x:n.position.x+NW/2,y:n.position.y+NH/2};}
+function elbow(sx,sy,tx,ty){const mx=(sx+tx)/2;return `M ${sx} ${sy} L ${mx} ${sy} L ${mx} ${ty} L ${tx} ${ty}`;}
+
+function render(canvas,results){
+  const svg=$("svg"); svg.innerHTML='';
+  const nodes=canvas.nodes||[], edges=canvas.edges||[];
+  const sr=(results&&results.streamResults)||{}, ur=(results&&results.unitResults)||{};
+  if(!nodes.length){ setStatus('warn','Flowsheet is empty — add nodes in the app'); return; }
+  const byId=Object.fromEntries(nodes.map(n=>[n.id,n]));
+
+  // viewBox from node bounds
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  for(const n of nodes){minX=Math.min(minX,n.position.x);minY=Math.min(minY,n.position.y);
+    maxX=Math.max(maxX,n.position.x+NW);maxY=Math.max(maxY,n.position.y+NH);}
+  const pad={l:24,r:150,t:30,b:44};
+  svg.setAttribute('viewBox',`${minX-pad.l} ${minY-pad.t} ${(maxX-minX)+pad.l+pad.r} ${(maxY-minY)+pad.t+pad.b}`);
+
+  const NS='http://www.w3.org/2000/svg';
+  const el=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+  // edges first
+  for(const e of edges){
+    const s=byId[e.source],t=byId[e.target]; if(!s||!t)continue;
+    const sx=s.position.x+NW, sy=s.position.y+NH/2;      // source right-center
+    const tx=t.position.x,    ty=t.position.y+NH/2;      // target left-center
+    const d=elbow(sx,sy,tx,ty), cls=edgeClass(e);
+    svg.appendChild(el('path',{d,class:'edge '+(cls==='water'?'':cls)}));
+    const res=sr[e.id]||{}; const q=num(res.Q);
+    const flow=el('path',{d,class:'efl '+cls+(q&&q>0.001?' on':'')});
+    svg.appendChild(flow);
+    // edge label at mid
+    const mx=(sx+tx)/2, my=(sy+ty)/2;
+    if(res.Q!=null){
+      const g=el('g',{});
+      const tx1=el('text',{x:mx,y:my-4,class:'elabel'});
+      tx1.innerHTML=`<tspan class="q">${fmt(res.Q)}</tspan> m³/d`;
+      const tx2=el('text',{x:mx,y:my+8,class:'elabel'});
+      tx2.textContent='TSS '+fmt(res.TSS);
+      g.appendChild(tx1);g.appendChild(tx2);svg.appendChild(g);
+    }
+  }
+  // nodes
+  for(const n of nodes){
+    const x=n.position.x,y=n.position.y, op=(n.data&&n.data.opType)||'', label=(n.data&&n.data.label)||op||n.id;
+    const u=ur[n.id]||{}; const out=(u.outputs&&(u.outputs.effluent||u.outputs.filtrate||u.outputs.permeate||u.outputs.thickened||u.outputs.digestate))||null;
+    const running = out ? num(out.Q)>0.001 : false;
+    const g=el('g',{class:running?'running':''});
+    // stripe color by role
+    let stripe='var(--water)';
+    if(op.includes('outlet'))stripe='var(--accent)'; else if(op.includes('inlet'))stripe='var(--accent-2)';
+    else if(op.includes('pump')||op.includes('blower'))stripe='var(--steel)';
+    else if(op.includes('thicken')||op.includes('clarifier'))stripe='var(--solid-2)';
+    g.appendChild(el('rect',{x,y,width:NW,height:NH,rx:9,class:'nodebox'}));
+    g.appendChild(el('rect',{x,y,width:5,height:NH,rx:2,fill:stripe}));
+    g.appendChild(el('rect',{x,y:y-17,width:NW,height:15,rx:4,fill:stripe,opacity:.16}));
+    const lt=el('text',{x:x+NW/2,y:y+22,class:'nlabel'});lt.textContent=label.length>20?label.slice(0,19)+'…':label;
+    g.appendChild(lt);
+    const tt=el('text',{x:x+NW/2,y:y+35,class:'ntype'});tt.textContent=op;
+    g.appendChild(tt);
+    if(out){const vt=el('text',{x:x+NW/2,y:y+50,class:'nval'});
+      vt.textContent='Q '+fmt(out.Q)+'  ·  TSS '+fmt(out.TSS);g.appendChild(vt);}
+    // running indicator (spinning) for rotating equipment
+    if(SPINNY.has(op)){
+      const cx=x+NW-14,cy=y+13, spin=el('g',{class:'spin',style:`transform-origin:${cx}px ${cy}px`});
+      spin.setAttribute('transform-box','view-box');
+      for(let i=0;i<4;i++){const a=i*Math.PI/2;
+        spin.appendChild(el('path',{d:`M ${cx} ${cy} L ${cx+7*Math.cos(a)} ${cy+7*Math.sin(a)} L ${cx+3*Math.cos(a+0.5)} ${cy+3*Math.sin(a+0.5)} Z`,fill:running?'var(--run)':'var(--idle)'}));}
+      spin.appendChild(el('circle',{cx,cy,r:2.4,fill:running?'var(--run)':'var(--idle)'}));
+      g.appendChild(spin);
+    }
+    svg.appendChild(g);
+  }
+}
+
+/* ---------- telemetry cards ---------- */
+function renderMetrics(results){
+  const m=$("metrics"); m.innerHTML='';
+  const sum=(results&&results.summary)||{};
+  const card=(k,v,unit)=>{const d=document.createElement('div');d.className='metric';
+    d.innerHTML=`<span class="k">${k}</span><span class="v">${v}<small> ${unit||''}</small></span>`;m.appendChild(d);};
+  const inf=sum.influent||{}, eff=sum.effluent||{};
+  card('Influent flow',fmt(inf.Q),'m³/d');
+  card('Influent TSS',fmt(inf.TSS),'mg/L');
+  card('Final effluent Q',fmt(eff.Q),'m³/d');
+  card('Effluent TSS',fmt(eff.TSS),'mg/L');
+  card('Effluent BOD',fmt(eff.BOD),'mg/L');
+  if(sum.compliant!=null){const d=document.createElement('div');d.className='metric';
+    d.innerHTML=`<span class="k">Permit</span><span class="v" style="color:${sum.compliant?'var(--run)':'var(--err)'}">${sum.compliant?'PASS':'CHECK'}</span>`;m.appendChild(d);}
+}
+
+/* ---------- data flow ---------- */
+let state={pid:null,fid:null,projects:[],flowsheets:[]};
+const URLQ=new URLSearchParams(location.search);
+const urlPid=URLQ.get('pid'), urlFid=URLQ.get('fid');
+async function loadProjects(){
+  const rows=await apiGet('/projects');
+  state.projects=rows||[];
+  const sel=$("sel-project"); sel.innerHTML='';
+  for(const p of state.projects){const o=document.createElement('option');o.value=p.id;o.textContent=p.name;sel.appendChild(o);}
+  const saved=localStorage.getItem(LS.pid);
+  const has=id=>id&&state.projects.some(p=>p.id===id);
+  state.pid=has(urlPid)?urlPid:has(saved)?saved:(state.projects[0]&&state.projects[0].id);
+  sel.value=state.pid; localStorage.setItem(LS.pid,state.pid);
+  await loadFlowsheets();
+}
+async function loadFlowsheets(){
+  if(!state.pid){setStatus('warn','No projects found');return;}
+  const rows=await apiGet(`/projects/${state.pid}/flowsheets`);
+  state.flowsheets=rows||[];
+  const sel=$("sel-flowsheet"); sel.innerHTML='';
+  for(const f of state.flowsheets){const o=document.createElement('option');o.value=f.id;o.textContent=f.name;sel.appendChild(o);}
+  const saved=localStorage.getItem(LS.fid);
+  const has=id=>id&&state.flowsheets.some(f=>f.id===id);
+  const prefer=state.flowsheets.find(f=>/filtration|solid/i.test(f.name));
+  state.fid=has(urlFid)?urlFid:has(saved)?saved
+           :(prefer?prefer.id:(state.flowsheets[0]&&state.flowsheets[0].id));
+  sel.value=state.fid; if(state.fid)localStorage.setItem(LS.fid,state.fid);
+  await refresh();
+}
+$("sel-project").onchange=async e=>{state.pid=e.target.value;localStorage.setItem(LS.pid,state.pid);localStorage.removeItem(LS.fid);await loadFlowsheets();};
+$("sel-flowsheet").onchange=async e=>{state.fid=e.target.value;localStorage.setItem(LS.fid,state.fid);await refresh();};
+
+let refreshing=false;
+async function refresh(){
+  if(!state.pid||!state.fid||refreshing)return;
+  refreshing=true;
+  try{
+    setStatus('',' Loading…');
+    const fs=await apiGet(`/projects/${state.pid}/flowsheets/${state.fid}`);
+    const canvas=fs.canvas_data||{nodes:[],edges:[]};
+    let results=null,warn=[];
+    try{
+      const resp=await apiPost(`/projects/${state.pid}/flowsheets/${state.fid}/simulate`,
+        {mode:'steady_state',nodeParams:buildNodeParams(canvas.nodes||[])});
+      results=resp.results||resp.data?.results||null;
+      warn=resp.warnings||(results&&results.warnings)||[];
+    }catch(err){ warn=['Simulate: '+err.message]; }
+    render(canvas,results);
+    renderMetrics(results);
+    const sum=(results&&results.summary)||{};
+    $("s-nodes").textContent=(canvas.nodes||[]).length;
+    $("s-edges").textContent=(canvas.edges||[]).length;
+    $("s-recyc").textContent=sum.recycleEdges??0;
+    $("s-iters").textContent=sum.iterations??'–';
+    $("s-warn").innerHTML=warn.length?`<i class="led warn"></i>${warn.length} warning(s)`:'';
+    $("s-warn").title=warn.join('\n');
+    $("updated").textContent='updated '+new Date().toLocaleTimeString();
+    setStatus('ok',`${fs.name} · live`);
+  }catch(err){
+    if(err&&err.code===401){stopPoll();setStatus('err','Session expired — sign in');showLogin(true);}
+    else setStatus('err',(err&&err.message)||'Error');
+  }finally{ refreshing=false; }
+}
+
+/* ---------- polling ---------- */
+let pollTimer=null;
+function startPoll(){stopPoll(); if($("auto").checked){pollTimer=setInterval(refresh,parseInt($("interval").value,10));}}
+function stopPoll(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
+$("auto").onchange=startPoll; $("interval").onchange=startPoll;
+$("btn-refresh").onclick=refresh;
+document.body.classList.add('run');
+
+/* ---------- boot ---------- */
+async function boot(){
+  if(!getToken()){showLogin(true);setStatus('warn','Not signed in');return;}
+  showLogin(false);
+  try{ await loadProjects(); startPoll(); }
+  catch(err){ if(err&&err.code===401){showLogin(true);setStatus('err','Session expired — sign in');} else setStatus('err',err.message); }
+}
+boot();
+</script>
+</body>
+</html>
