@@ -20,7 +20,12 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    const url = original?.url || '';
+    // The auth endpoints' own 401s must NOT trigger the refresh-and-redirect
+    // logic — otherwise a "no session" refresh 401 redirects to /login, which
+    // reloads the app, which calls refresh again → infinite flicker loop.
+    const isAuthCall = url.includes('/auth/refresh') || url.includes('/auth/login');
+    if (error.response?.status === 401 && !original._retry && !isAuthCall) {
       original._retry = true;
       try {
         if (!refreshPromise) {
