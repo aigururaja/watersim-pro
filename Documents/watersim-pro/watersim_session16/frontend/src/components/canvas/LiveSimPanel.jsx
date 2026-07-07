@@ -796,7 +796,7 @@ function LiveDiagram({ canvasData }) {
 
 // ── Main Dashboard Overlay ──────────────────────────────────────────────────
 
-export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, wsConnected, onClose }) {
+export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, wsConnected, onClose, compareContent }) {
   const status    = useLiveSimStore(s => s.status);
   const startedBy = useLiveSimStore(s => s.startedBy);
   const error     = useLiveSimStore(s => s.error);
@@ -859,7 +859,7 @@ export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, w
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, padding: '0 20px', borderBottom: '1px solid #E5E7EB' }}>
-          {[['diagram', 'Live Diagram'], ['trends', 'Trends']].map(([k, lbl]) => (
+          {[['diagram', 'Live Diagram'], ['trends', 'Trend'], ...(compareContent ? [['compare', 'Compare']] : [])].map(([k, lbl]) => (
             <button key={k} onClick={() => setTab(k)} style={{
               padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
               fontSize: 13, fontWeight: 600, color: tab === k ? '#0891B2' : '#6B7280',
@@ -869,7 +869,11 @@ export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, w
         </div>
 
         {/* Body */}
-        {tab === 'diagram' ? (
+        {tab === 'compare' ? (
+          <div style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}>
+            {compareContent}
+          </div>
+        ) : tab === 'diagram' ? (
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
             <LiveDiagram canvasData={canvasData} />
           </div>

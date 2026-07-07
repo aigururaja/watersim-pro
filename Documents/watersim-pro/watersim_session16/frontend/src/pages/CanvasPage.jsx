@@ -18,7 +18,7 @@ import UnitOpPalette from '../components/canvas/UnitOpPalette';
 import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
-import LiveSimPanel, { TrendOverlay } from '../components/canvas/LiveSimPanel';
+import LiveSimPanel from '../components/canvas/LiveSimPanel';
 import OpcConnectionDialog from '../components/canvas/OpcConnectionDialog';
 import OpcTagTable from '../components/canvas/OpcTagTable';
 import { useCollaboration } from '../hooks/useCollaboration';
@@ -777,19 +777,6 @@ function CanvasPageInner() {
                 >
                   Live Sim
                 </button>
-                <button
-                  style={{ ...S.btn, background: '#0D9488', color: '#fff' }}
-                  onClick={() => setShowTrend(true)}
-                >
-                  Trend
-                </button>
-                <button
-                  style={{ ...S.btn, background: '#B45309', color: '#fff', opacity: scenariosRunning ? 0.7 : 1 }}
-                  onClick={() => { setShowScenarios(true); setShowDynamic(false); setShowSummary(false); setShowLiveSim(false); setSelectedNode(null); }}
-                  disabled={nodes.length === 0}
-                >
-                  Compare
-                </button>
                 {nodes.some(n => n.data?.opType === 'opc_read' || n.data?.opType === 'opc_write') && (
                   <>
                     <OpcToolbarBtn onClick={() => setShowOpcConnection(true)} />
@@ -827,19 +814,6 @@ function CanvasPageInner() {
               disabled={nodes.length === 0}
             >
               Snapshot
-            </button>
-            <button
-              title="Open the live animated simulation of this flowsheet in a new tab"
-              style={{ ...S.btn, background: '#6D28D9', color: '#fff' }}
-              onClick={() => {
-                // Bridge the session token into localStorage so the standalone
-                // page (a separate tab) can reuse it without a fresh login.
-                const t = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
-                if (t) localStorage.setItem('accessToken', t);
-                window.open(`/custom-flow-sim.html?pid=${projectId}&fid=${flowsheetId}`, '_blank', 'noopener');
-              }}
-            >
-              Live Sim ↗
             </button>
           </div>
         </div>
@@ -932,21 +906,12 @@ function CanvasPageInner() {
                   onClose={() => setShowDynamic(false)}
                 />
               )}
-              {showScenarios && !selectedNode && (
-                <ScenariosPanel
-                  nodes={nodes}
-                  running={scenariosRunning}
-                  results={scenarioResults}
-                  onRun={runBatch}
-                  onClose={() => setShowScenarios(false)}
-                />
-              )}
             </aside>
           )}
         </div>
       </div>
 
-      {/* Live Simulation Dashboard (full-screen overlay) */}
+      {/* Live Simulation Dashboard (full-screen overlay) — Trend & Compare live here as tabs */}
       {showLiveSim && (
         <LiveSimPanel
           sendEvent={sendEvent}
@@ -954,12 +919,16 @@ function CanvasPageInner() {
           canvasData={{ nodes, edges }}
           wsConnected={wsConnected}
           onClose={() => setShowLiveSim(false)}
+          compareContent={
+            <ScenariosPanel
+              nodes={nodes}
+              running={scenariosRunning}
+              results={scenarioResults}
+              onRun={runBatch}
+              embedded
+            />
+          }
         />
-      )}
-
-      {/* Quick Trend Overlay (read-only chart, no controls) */}
-      {showTrend && (
-        <TrendOverlay onClose={() => setShowTrend(false)} />
       )}
 
       {/* OPC Connection Dialog */}
@@ -1624,7 +1593,7 @@ const DEFAULT_SCENARIOS = [
   { name: 'Low SRT',     nodeParams: {} },
 ];
 
-function ScenariosPanel({ nodes, running, results, onRun, onClose }) {
+function ScenariosPanel({ nodes, running, results, onRun, onClose, embedded }) {
   const [scenarios, setScenarios] = useState(DEFAULT_SCENARIOS.map(s => ({ ...s })));
   const [activeScenario, setActiveScenario] = useState(0);
   const [compareParam, setCompareParam] = useState('BOD');
@@ -1688,7 +1657,7 @@ function ScenariosPanel({ nodes, running, results, onRun, onClose }) {
     <div>
       <div style={S.panelHdr}>
         <div style={{ fontWeight: 700, fontSize: 13, color: '#1F4E79' }}>⚖ Scenario Comparison</div>
-        <button style={S.closeBtn} onClick={onClose}>✕</button>
+        {!embedded && <button style={S.closeBtn} onClick={onClose}>✕</button>}
       </div>
 
       {/* Scenario list */}
