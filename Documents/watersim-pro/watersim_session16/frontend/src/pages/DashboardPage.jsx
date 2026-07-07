@@ -30,8 +30,8 @@ export default function DashboardPage() {
   const statCards = [
     { icon: FolderOpen, label: 'Projects',       value: loading ? null : projects.length,       color: 'bg-blue-50 text-blue-600' },
     { icon: Cpu,        label: 'Flowsheets',      value: loading ? null : totalFlowsheets,        color: 'bg-purple-50 text-purple-600' },
-    { icon: Activity,   label: 'Simulation Runs', value: '—',                                    color: 'bg-green-50 text-green-600' },
-    { icon: Droplets,   label: 'Unit Operations', value: '0',                                    color: 'bg-teal-50 text-teal-600' },
+    { icon: Activity,   label: 'Simulation',      value: 'Live',                                 color: 'bg-green-50 text-green-600' },
+    { icon: Droplets,   label: 'Unit Operations', value: '28',                                   color: 'bg-teal-50 text-teal-600' },
   ];
 
   return (
@@ -117,20 +117,21 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Phase indicator */}
-        <div className="card p-6 border-l-4 border-brand-500" role="note" aria-label="Phase status">
+        {/* Platform capabilities */}
+        <div className="card p-6 border-l-4 border-brand-500" role="note" aria-label="Platform capabilities">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0 mt-0.5" aria-hidden="true">
-              <span className="text-brand-700 font-bold text-xs">1</span>
+              <Droplets className="w-4 h-4 text-brand-700" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">Phase 1 — Foundation</p>
+              <p className="font-semibold text-gray-900">Everything you need to design, simulate, and monitor</p>
               <p className="text-sm text-gray-500 mt-1">
-                Auth, RBAC, project/flowsheet management, and canvas shell are active. Simulation engine coming in Phase 2.
+                Build a flowsheet on the canvas, run the steady-state or live dynamic solver, and watch the animated
+                live diagram update in real time — with OPC integration and PDF reporting.
               </p>
-              <div className="flex gap-2 mt-3 flex-wrap" role="list" aria-label="Phase features">
-                {['Auth & RBAC ✅', 'Projects CRUD ✅', 'Flowsheet CRUD ✅', 'Canvas Shell ✅', 'Simulation Engine 🔜'].map(s => (
-                  <span key={s} role="listitem" className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">{s}</span>
+              <div className="flex gap-2 mt-3 flex-wrap" role="list" aria-label="Available capabilities">
+                {['Flowsheet canvas', 'Steady-state solver', 'Live simulation', 'Animated diagram', 'OPC integration', 'Reports & cost'].map(s => (
+                  <span key={s} role="listitem" className="text-xs px-2.5 py-1 bg-brand-50 text-brand-700 font-medium rounded-full">{s}</span>
                 ))}
               </div>
             </div>
