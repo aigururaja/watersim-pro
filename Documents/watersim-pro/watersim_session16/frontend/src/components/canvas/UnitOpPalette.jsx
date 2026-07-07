@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import UnitOpIcon from './UnitOpIcon';
 
 const PALETTE = [
   {
@@ -98,6 +99,7 @@ function PaletteItem({ type, label, disabled }) {
       style={{ ...styles.item, ...(disabled ? { opacity: 0.4, cursor: 'default' } : {}) }}
       title={disabled ? `${label} already on canvas (only one allowed)` : `Drag to add: ${label}`}
     >
+      <span style={styles.itemIcon}><UnitOpIcon opType={type} size={22} /></span>
       <span style={styles.itemText}>{label}</span>
       {disabled
         ? <span style={{ color: '#9CA3AF', fontSize: 10 }}>{'\u2713'}</span>
@@ -177,7 +179,8 @@ const styles = {
   scrollArea:{ flex: 1, overflowY: 'auto', padding: '8px 0' },
   group:     { marginBottom: 8 },
   groupTitle:{ padding: '6px 14px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em' },
-  item:      { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', cursor: 'grab', fontSize: 13, color: '#374151', userSelect: 'none' },
+  item:      { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', cursor: 'grab', fontSize: 13, color: '#374151', userSelect: 'none', borderRadius: 8 },
+  itemIcon:  { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, flexShrink: 0 },
   itemText:  { flex: 1 },
   dragHint:  { color: '#CBD5E1', fontSize: 14 },
   hint:      { padding: '10px 14px', fontSize: 11, color: '#9CA3AF', borderTop: '1px solid #E5E7EB', fontStyle: 'italic' },

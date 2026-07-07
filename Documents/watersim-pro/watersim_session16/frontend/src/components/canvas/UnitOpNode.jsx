@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
+import UnitOpIcon from './UnitOpIcon';
 
 const TYPE_COLORS = {
   inlet:              { bg: '#F0FDF4', border: '#16A34A', icon: '🌊' },
@@ -40,15 +41,18 @@ const UnitOpNode = memo(({ data, selected }) => {
   return (
     <div style={{
       ...styles.node,
-      background: style.bg,
-      border: `2px solid ${selected ? '#1F4E79' : style.border}`,
+      background: '#fff',
+      border: `1.5px solid ${selected ? '#1F4E79' : style.border}`,
       boxShadow: selected ? `0 0 0 3px rgba(31,78,121,0.25)` : '0 2px 6px rgba(0,0,0,0.08)',
     }}>
+      {/* colored role accent stripe */}
+      <div style={{ ...styles.stripe, background: style.border }} />
+
       {/* Input handle (left) — not for OPC nodes */}
       {!isOpc && <Handle type="target" position={Position.Left} style={styles.handle} />}
 
       <div style={styles.body}>
-        <span style={styles.icon}>{style.icon}</span>
+        <span style={styles.icon}><UnitOpIcon opType={data.opType} size={26} /></span>
         <span style={styles.label}>{data.label}</span>
       </div>
 
@@ -62,9 +66,10 @@ UnitOpNode.displayName = 'UnitOpNode';
 export default UnitOpNode;
 
 const styles = {
-  node:   { borderRadius: 8, padding: '10px 14px', minWidth: 150, cursor: 'grab', userSelect: 'none' },
-  body:   { display: 'flex', alignItems: 'center', gap: 8 },
-  icon:   { fontSize: 18 },
-  label:  { fontSize: 12, fontWeight: 600, color: '#111', fontFamily: 'Arial, sans-serif', lineHeight: 1.3 },
+  node:   { position: 'relative', borderRadius: 10, padding: '10px 14px 10px 16px', minWidth: 150, cursor: 'grab', userSelect: 'none', overflow: 'hidden' },
+  stripe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
+  body:   { display: 'flex', alignItems: 'center', gap: 9 },
+  icon:   { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, flexShrink: 0 },
+  label:  { fontSize: 12, fontWeight: 600, color: '#111', fontFamily: 'system-ui, Arial, sans-serif', lineHeight: 1.3 },
   handle: { width: 10, height: 10, background: '#2E75B6', border: '2px solid #fff' },
 };
