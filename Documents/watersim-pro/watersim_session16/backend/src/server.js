@@ -128,6 +128,7 @@ app.use(`${API}/permit-templates`,                               permitRoutes);
 app.use(`${API}/admin`,                                          adminRoutes);
 app.use(`${API}/reports`,                                        reportsOrgRoutes);
 app.use(`${API}/opc`,                                  opcLimiter, require('./routes/opc'));
+app.use(`${API}/live`,                                           require('./routes/live'));
 
 // ── Health check (unauthenticated — used by load balancers + k8s probes) ─────
 app.get('/health', async (_req, res) => {

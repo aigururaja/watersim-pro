@@ -8,10 +8,11 @@
  * protocol. A backend device-gateway service polls these sources and pushes
  * the (scaled) values, which override the parameter for live runs.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import api from '../../utils/api';
 
 // Supported connection types and their configuration fields.
-export const PROTOCOLS = [
+const PROTOCOLS = [
   { id: 'siemens_s7', label: 'Siemens S7 PLC (Snap7)', pkg: 'node-snap7', fields: [
     { k: 'host', label: 'IP address', ph: '192.168.0.1' },
     { k: 'rack', label: 'Rack', type: 'number', def: 0 },
@@ -128,6 +129,18 @@ function BindingEditor({ paramLabel, binding, onChange }) {
   const setCfg = (k, v)    => onChange({ ...b, config: { ...(b.config || {}), [k]: v } });
   const setScale = (k, v)  => onChange({ ...b, scale: { ...(b.scale || {}), [k]: v } });
 
+  const [testing, setTesting] = useState(false);
+  const [result, setResult]   = useState(null);
+  const runTest = async () => {
+    setTesting(true); setResult(null);
+    try {
+      const { data } = await api.post('/live/test', { protocol: b.protocol, config: b.config || {}, scale: b.scale });
+      setResult(data);
+    } catch (e) {
+      setResult({ ok: false, error: e.response?.data?.error || e.message });
+    } finally { setTesting(false); }
+  };
+
   return (
     <div style={s.card}>
       <label style={s.cardHdr}>
@@ -163,6 +176,15 @@ function BindingEditor({ paramLabel, binding, onChange }) {
           </div>
 
           <div style={s.bound}>value = raw × factor + offset &nbsp;·&nbsp; {addressSummary(b)}</div>
+
+          <div style={s.testRow}>
+            <button type="button" style={s.testBtn} onClick={runTest} disabled={testing}>
+              {testing ? 'Reading…' : 'Test connection'}
+            </button>
+            {result && (result.ok
+              ? <span style={s.ok}>✓ {Number(result.value).toFixed(2)} <span style={s.rawNote}>(raw {String(result.raw)})</span></span>
+              : <span style={s.err}>✕ {result.error}</span>)}
+          </div>
         </div>
       )}
     </div>
@@ -216,4 +238,9 @@ const s = {
   pkgNote:  { fontSize: 10.5, color: '#9CA3AF', margin: '2px 0 4px' },
   subTitle: { fontSize: 10.5, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 8 },
   bound:    { fontSize: 10.5, color: '#0891B2', fontFamily: 'ui-monospace, Consolas, monospace', marginTop: 6, wordBreak: 'break-all' },
+  testRow:  { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' },
+  testBtn:  { padding: '6px 12px', background: '#0891B2', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 600, fontSize: 12, cursor: 'pointer' },
+  ok:       { fontSize: 12.5, fontWeight: 700, color: '#059669' },
+  err:      { fontSize: 11.5, color: '#DC2626' },
+  rawNote:  { fontWeight: 400, color: '#9CA3AF' },
 };
