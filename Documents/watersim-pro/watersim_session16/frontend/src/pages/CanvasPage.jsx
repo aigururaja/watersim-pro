@@ -635,6 +635,9 @@ function CanvasPageInner() {
     const type  = event.dataTransfer.getData('application/unitop-type');
     const label = event.dataTransfer.getData('application/unitop-label');
     if (!type) return;
+    // Custom palette units may carry default parameters
+    let customParams = {};
+    try { const raw = event.dataTransfer.getData('application/unitop-params'); if (raw) customParams = JSON.parse(raw); } catch { /* ignore */ }
 
     // Enforce single OPC read / single OPC write
     if (SINGLETON_OPC_TYPES.has(type)) {
@@ -658,6 +661,7 @@ function CanvasPageInner() {
         // Valves
         ...(type === 'on_off_valve'  ? { state: 'open' } : {}),
         ...(type === 'control_valve' ? { opening_pct: 100 } : {}),
+        ...customParams,
       } },
     };
     setNodes(ns => [...ns, newNode]);
@@ -827,7 +831,7 @@ function CanvasPageInner() {
         )}
 
         <div style={S.body}>
-          {mode === 'design' && <UnitOpPalette nodes={nodes} />}
+          {mode === 'design' && <UnitOpPalette nodes={nodes} projectId={projectId} />}
 
           <div
             style={S.canvasWrap}

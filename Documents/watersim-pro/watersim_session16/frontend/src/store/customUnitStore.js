@@ -1,42 +1,61 @@
 /**
- * customUnitStore — user-defined unit operations for the palette.
+ * customUnitStore — palette customization.
  *
- * A custom unit is a labelled preset over an existing solver model (baseType),
- * so it drags onto the canvas and simulates exactly like the built-in it is
- * based on. Persisted per-browser in localStorage.
+ *   units:     user-defined units  [{ id, label, category, baseType, params }]
+ *   overrides: edits to built-ins   { [builtinType]: { label?, category?, hidden? } }
  *
- *   { id, label, category, baseType }
+ * Cached per-browser in localStorage and (when a project is open) synced to
+ * that project's settings.paletteCustom so it follows the user across devices.
  */
 import { create } from 'zustand';
 
-const KEY = 'watersim_custom_units';
+const KEY = 'watersim_palette_custom';
 
 function load() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
+  try {
+    const j = JSON.parse(localStorage.getItem(KEY));
+    return { units: j?.units || [], overrides: j?.overrides || {} };
+  } catch { return { units: [], overrides: {} }; }
 }
-function persist(units) {
-  try { localStorage.setItem(KEY, JSON.stringify(units)); } catch { /* quota / private mode */ }
+function persist(s) {
+  try { localStorage.setItem(KEY, JSON.stringify({ units: s.units, overrides: s.overrides })); }
+  catch { /* quota / private mode */ }
 }
 
 let seq = Date.now();
 const nextId = () => `cu_${seq++}`;
+const init = load();
 
 const useCustomUnitStore = create((set) => ({
-  units: load(),
+  units: init.units,
+  overrides: init.overrides,
+
   addUnit: (u) => set((s) => {
-    const units = [...s.units, { id: nextId(), category: 'Custom Units', ...u }];
-    persist(units);
-    return { units };
+    const units = [...s.units, { id: nextId(), category: 'Custom Units', params: {}, ...u }];
+    persist({ ...s, units }); return { units };
   }),
   updateUnit: (id, patch) => set((s) => {
     const units = s.units.map((u) => (u.id === id ? { ...u, ...patch } : u));
-    persist(units);
-    return { units };
+    persist({ ...s, units }); return { units };
   }),
   removeUnit: (id) => set((s) => {
     const units = s.units.filter((u) => u.id !== id);
-    persist(units);
-    return { units };
+    persist({ ...s, units }); return { units };
+  }),
+
+  setOverride: (type, patch) => set((s) => {
+    const overrides = { ...s.overrides, [type]: { ...(s.overrides[type] || {}), ...patch } };
+    persist({ ...s, overrides }); return { overrides };
+  }),
+  resetOverride: (type) => set((s) => {
+    const overrides = { ...s.overrides }; delete overrides[type];
+    persist({ ...s, overrides }); return { overrides };
+  }),
+
+  /** Replace state from a project's saved blob (no re-save loop needed). */
+  hydrate: (data) => set(() => {
+    const next = { units: data?.units || [], overrides: data?.overrides || {} };
+    persist(next); return next;
   }),
 }));
 
