@@ -30,6 +30,9 @@ const MODELS = {
   // OPC integration
   opc_read:         require('./models/opcRead'),
   opc_write:        require('./models/opcWrite'),
+  // Valves & actuators
+  on_off_valve:     require('./models/onOffValve'),
+  control_valve:    require('./models/controlValve'),
 };
 
 const PALETTE_TYPE_MAP = {
@@ -58,11 +61,29 @@ const PALETTE_TYPE_MAP = {
   ph_adjustment: 'chemical_dosing',
   pump: null, blower: null, tank: null,
   opc_read: 'opc_read', opc_write: 'opc_write',
+  on_off_valve: 'on_off_valve', control_valve: 'control_valve',
 };
 
 const SOURCE_TYPES = new Set(['inlet']);
 const SINK_TYPES   = new Set(['outlet']);
 const RECYCLE_STREAM_TYPES = new Set(['ras', 'was', 'recycle', 'internal_recycle']);
+// Forward edges that carry a unit's SOLIDS output (underflow) rather than its
+// liquid effluent. These are NOT recycle edges — they flow downstream normally,
+// but receive primarySludge / thickened / WAS / concentrate / backwash / screenings.
+const SOLIDS_STREAM_TYPES = new Set([
+  'sludge', 'solids', 'underflow', 'primary_sludge', 'thickened', 'concentrate', 'backwash', 'screenings',
+]);
+
+function isSolidsEdge(edge) {
+  if (!edge) return false;
+  return SOLIDS_STREAM_TYPES.has(edge.data?.streamType) || edge.data?.isSolids === true;
+}
+
+/** Pick a unit's solids/underflow output stream, if the model produced one. */
+function pickSolidsOutput(result) {
+  return result.primarySludge || result.thickened || result.WAS
+      || result.concentrate  || result.backwash  || result.screenings || null;
+}
 const CONVERGENCE_TOL = 0.0001;
 const MAX_ITERATIONS  = 50;
 const OPC_STREAM_VARS = new Set(['Q', 'TSS', 'BOD', 'COD', 'TN', 'NH4', 'NO3', 'NO2', 'TP', 'DO', 'pH', 'temp']);
@@ -178,7 +199,7 @@ function hasConverged(prev, curr) {
   return true;
 }
 
-function executePass(order, nodeMap, edgesByTarget, edgesBySource, edgeStreams, nodeParams, recycleEdgeIds, warnings) {
+function executePass(order, nodeMap, edgesByTarget, edgesBySource, edgeStreams, nodeParams, recycleEdgeIds, warnings, edgeMap = {}) {
   const unitResults = {};
 
   for (const nodeId of order) {
@@ -256,12 +277,30 @@ function executePass(order, nodeMap, edgesByTarget, edgesBySource, edgeStreams, 
     // For digester-type nodes, primary forward stream is digestate; UV/filter use effluent
     const effluent    = result.effluent || result.digestate || result.filtrate || influent;
 
-    if (forwardOut.length === 1) {
-      edgeStreams[forwardOut[0]] = effluent;
-    } else if (forwardOut.length > 1) {
-      const ratios = params.splitRatios || forwardOut.map(() => 1 / forwardOut.length);
-      forwardOut.forEach((eid, i) => {
-        edgeStreams[eid] = effluent.clone({ Q: effluent.Q * (ratios[i] ?? 1 / forwardOut.length) });
+    // A forward edge may be tagged as a SOLIDS (underflow) line — it carries the
+    // unit's sludge output instead of the liquid effluent. Everything else is liquid.
+    const liquidOut = forwardOut.filter(eid => !isSolidsEdge(edgeMap[eid]));
+    const solidsOut = forwardOut.filter(eid =>  isSolidsEdge(edgeMap[eid]));
+
+    if (liquidOut.length === 1) {
+      edgeStreams[liquidOut[0]] = effluent;
+    } else if (liquidOut.length > 1) {
+      const ratios = params.splitRatios || liquidOut.map(() => 1 / liquidOut.length);
+      liquidOut.forEach((eid, i) => {
+        edgeStreams[eid] = effluent.clone({ Q: effluent.Q * (ratios[i] ?? 1 / liquidOut.length) });
+      });
+    }
+
+    if (solidsOut.length) {
+      const solids = pickSolidsOutput(result);
+      if (!solids) {
+        warnings.push(`Node ${nodeId} (${node.data?.opType || type}) has a solids line but produced no sludge output — sending zero flow`);
+      }
+      const solidsStream = solids || effluent.clone({ Q: 0 });
+      solidsOut.forEach((eid, i) => {
+        edgeStreams[eid] = solidsOut.length === 1
+          ? solidsStream
+          : solidsStream.clone({ Q: solidsStream.Q / solidsOut.length });
       });
     }
 
@@ -332,6 +371,7 @@ function runSteadyState(canvasData, config = {}) {
 
   const warnings = [];
   const nodeMap  = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const edgeMap  = Object.fromEntries(edges.map(e => [e.id, e]));
 
   // Pass 1 — topo order without recycle detection (to build index map)
   const g0 = buildGraph(nodes, edges, null);
@@ -366,7 +406,7 @@ function runSteadyState(canvasData, config = {}) {
 
     unitResults = executePass(
       order, nodeMap, edgesByTarget, edgesBySource,
-      edgeStreams, augmentedParams, recycleEdgeIds, warnings
+      edgeStreams, augmentedParams, recycleEdgeIds, warnings, edgeMap
     );
 
     if (recycleEdges.length > 0) {

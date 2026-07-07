@@ -60,6 +60,13 @@ const PALETTE = [
     ]
   },
   {
+    category: 'Valves & Actuators',
+    items: [
+      { type: 'on_off_valve',  label: 'On/Off Valve' },
+      { type: 'control_valve', label: 'Control Valve' },
+    ]
+  },
+  {
     category: 'Utilities',
     items: [
       { type: 'pump',    label: 'Pump' },

@@ -38,9 +38,11 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
-        // Refresh failed — clear session and redirect to login
+        // Refresh failed — session expired: clear it and redirect to login
         sessionStorage.removeItem('accessToken');
-        window.location.href = '/login';
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login?expired=1';
+        }
         return Promise.reject(error);
       }
     }

@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Droplets, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get('expired') === '1';
   const [form, setForm] = useState({ email: '', password: '', orgSlug: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,6 +34,11 @@ export default function LoginPage() {
         </div>
         <div className="card p-8 shadow-2xl">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in to your account</h2>
+          {sessionExpired && !error && (
+            <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800" role="status">
+              Your session has expired. Please sign in again.
+            </div>
+          )}
           {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700" role="alert">{error}</div>}
           <form onSubmit={handleSubmit} className="space-y-4" aria-label="Sign in form" noValidate>
             <div>

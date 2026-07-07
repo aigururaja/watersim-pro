@@ -25,6 +25,8 @@ const TYPE_COLORS = {
   thickener:          { bg: '#FDF4FF', border: '#9333EA', icon: '🪣' },
   opc_read:           { bg: '#EFF6FF', border: '#1D4ED8', icon: '📡' },
   opc_write:          { bg: '#FEF3C7', border: '#B45309', icon: '📤' },
+  on_off_valve:       { bg: '#F1F5F9', border: '#475569', icon: '🔀' },
+  control_valve:      { bg: '#F1F5F9', border: '#0EA5E9', icon: '🎛️' },
   default:            { bg: '#F8FAFC', border: '#94A3B8', icon: '⬡' },
 };
 

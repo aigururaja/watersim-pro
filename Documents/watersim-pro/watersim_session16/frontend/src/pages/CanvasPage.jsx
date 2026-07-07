@@ -101,6 +101,14 @@ const PARAM_DEFS = {
     { key: 'chamberType', label: 'Chamber Type', type: 'select', options: ['vortex','aerated','horizontal'] },
     { key: 'HRT_min',     label: 'HRT (min)',    type: 'number', step: 0.5 },
   ],
+  on_off_valve: [
+    { key: 'state', label: 'Valve State', type: 'select', options: ['open','closed'],
+      hint: 'closed = stops flow downstream (Q → 0)' },
+  ],
+  control_valve: [
+    { key: 'opening_pct', label: 'Opening (%)', type: 'number', step: 5, min: 0, max: 100,
+      hint: 'Throttles delivered flow. 0 = shut, 100 = full flow' },
+  ],
   primary_clarifier: [
     { key: 'SOR_m3_m2_d', label: 'SOR (m³/m²/d)',   type: 'number', step: 2 },
     { key: 'depth_m',     label: 'Depth (m)',         type: 'number', step: 0.5 },
@@ -647,6 +655,9 @@ function CanvasPageInner() {
         // Inject default ebpr_config for advanced EBPR dedicated nodes
         ...(type === 'uct_reactor' ? { ebpr_config: 'uct', MLR_ratio: 3.0, anaerobic_fraction: 0.15, uct_anoxic_fraction: 0.25 } : {}),
         ...(type === 'jhb_reactor' ? { ebpr_config: 'jhb', MLR_ratio: 2.0, jhb_preanoxic_fraction: 0.08, anaerobic_fraction: 0.15, uct_anoxic_fraction: 0.22 } : {}),
+        // Valves
+        ...(type === 'on_off_valve'  ? { state: 'open' } : {}),
+        ...(type === 'control_valve' ? { opening_pct: 100 } : {}),
       } },
     };
     setNodes(ns => [...ns, newNode]);
