@@ -1,0 +1,42 @@
+# WaterSim Pro — Live Device Gateway driver requirements
+#
+# These npm packages power the per-parameter "Live Configuration" bindings
+# (src/live/gateway.js). They are declared in package.json under
+# "optionalDependencies" so a missing/failed driver degrades gracefully to a
+# "Driver not installed" message instead of crashing the server.
+#
+# Install everything:
+#     cd backend
+#     npm install
+#
+# Or install a single driver:
+#     npm install --save-optional <package>
+#
+# ---------------------------------------------------------------------------
+# Protocol / device            npm package        Notes
+# ---------------------------------------------------------------------------
+# HTTP / REST                  (built-in)         Node http/https — no install
+# Generic TCP socket           (built-in)         Node net — no install
+# OPC UA                       node-opcua         already a core dependency
+#
+# Modbus TCP                   modbus-serial      pure JS
+# Modbus RTU (serial)          modbus-serial      needs serialport for the COM port
+# Siemens S7 PLC (Snap7)       node-snap7         NATIVE build (node-gyp + toolchain)
+# EtherNet/IP (Allen-Bradley)  ethernet-ip        pure JS
+# MQTT                         mqtt               pure JS
+# Embedded board (Arduino/ESP) serialport         native, ships prebuilt binaries
+# BACnet/IP                    node-bacnet        native build
+#
+# ---------------------------------------------------------------------------
+# Native builds (node-snap7, serialport, node-bacnet) require build tools:
+#   Windows : "npm i -g windows-build-tools" or Visual Studio Build Tools + Python
+#   Linux   : build-essential + python3
+#   macOS   : Xcode command line tools
+# ---------------------------------------------------------------------------
+
+modbus-serial@^8.0.17
+node-snap7@^1.0.7
+ethernet-ip@^1.2.1
+mqtt@^5.10.1
+serialport@^12.0.0
+node-bacnet@^0.2.4
