@@ -10,9 +10,28 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { readBinding, driverStatus } = require('../live/gateway');
+const gatewaySession = require('../live/gatewaySession');
 
 const router = express.Router();
 router.use(authenticate);
+
+// ── Continuous gateway: poll bindings and inject into the running live sim ──
+router.post('/gateway/start', (req, res) => {
+  const { flowsheetId, bindings } = req.body || {};
+  if (!flowsheetId || !Array.isArray(bindings)) {
+    return res.status(400).json({ error: 'flowsheetId and bindings[] are required' });
+  }
+  res.json(gatewaySession.start(flowsheetId, bindings));
+});
+
+router.post('/gateway/stop', (req, res) => {
+  const { flowsheetId } = req.body || {};
+  res.json({ stopped: gatewaySession.stop(flowsheetId) });
+});
+
+router.get('/gateway/status', (req, res) => {
+  res.json(gatewaySession.status(req.query.flowsheetId));
+});
 
 router.get('/drivers', (req, res) => {
   res.json({ drivers: driverStatus() });

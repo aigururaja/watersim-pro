@@ -18,6 +18,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import useLiveSimStore, { STREAM_PARAMS } from '../../store/liveSimStore';
+import api from '../../utils/api';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -594,6 +595,79 @@ function QuickTags() {
   );
 }
 
+// ── Live inputs bar — start/stop the device gateway for this flowsheet ───────
+
+function LiveInputsBar({ flowsheetId, canvasData }) {
+  const [on, setOn] = useState(false);
+  const [values, setValues] = useState([]);
+  const timerRef = useRef(null);
+
+  const bindings = useMemo(() => {
+    const out = [];
+    for (const n of (canvasData?.nodes || [])) {
+      const lb = n.data?.liveBindings || {};
+      for (const [paramKey, b] of Object.entries(lb)) {
+        if (b?.enabled && b.protocol) {
+          out.push({ nodeId: n.id, paramKey, protocol: b.protocol, config: b.config || {}, scale: b.scale, poll_ms: b.poll_ms });
+        }
+      }
+    }
+    return out;
+  }, [canvasData]);
+
+  const labelOf = useMemo(
+    () => Object.fromEntries((canvasData?.nodes || []).map(n => [n.id, n.data?.label || n.id])),
+    [canvasData]
+  );
+
+  const poll = async () => {
+    try { const { data } = await api.get('/live/gateway/status', { params: { flowsheetId } }); setValues(data.values || []); }
+    catch { /* ignore */ }
+  };
+  const start = async () => {
+    if (!bindings.length) return;
+    try {
+      await api.post('/live/gateway/start', { flowsheetId, bindings });
+      setOn(true); poll();
+      timerRef.current = setInterval(poll, 3000);
+    } catch { /* ignore */ }
+  };
+  const stop = async () => {
+    clearInterval(timerRef.current); timerRef.current = null;
+    setOn(false); setValues([]);
+    try { await api.post('/live/gateway/stop', { flowsheetId }); } catch { /* ignore */ }
+  };
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    if (on) api.post('/live/gateway/stop', { flowsheetId }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '8px 20px', borderBottom: '1px solid #E5E7EB', background: '#F0F9FF' }}>
+      <button onClick={on ? stop : start} disabled={!bindings.length}
+        style={{ padding: '6px 14px', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 12.5, color: '#fff',
+          cursor: bindings.length ? 'pointer' : 'not-allowed', background: on ? '#DC2626' : (bindings.length ? '#059669' : '#9CA3AF') }}>
+        {on ? '■ Stop live inputs' : '▶ Start live inputs'}
+      </button>
+      {on && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669', boxShadow: '0 0 0 3px rgba(5,150,105,.25)' }} />}
+      <span style={{ fontSize: 12, color: '#4B5563' }}>
+        {bindings.length
+          ? `${bindings.length} bound parameter${bindings.length > 1 ? 's' : ''} — device values override the simulation`
+          : 'No live bindings yet — set them in a node’s Live Configuration tab'}
+      </span>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' }}>
+        {values.map(v => (
+          <span key={v.nodeId + v.paramKey} title={`${labelOf[v.nodeId]} · ${v.protocol}`}
+            style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid',
+              ...(v.ok ? { borderColor: '#A7F3D0', background: '#ECFDF5', color: '#065F46' } : { borderColor: '#FCA5A5', background: '#FEF2F2', color: '#991B1B' }) }}>
+            {labelOf[v.nodeId]}·{v.paramKey} = {v.ok ? Number(v.value).toFixed(2) : '✕'}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Live animated flowsheet diagram ─────────────────────────────────────────
 
 const DC = {
@@ -796,7 +870,7 @@ function LiveDiagram({ canvasData }) {
 
 // ── Main Dashboard Overlay ──────────────────────────────────────────────────
 
-export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, wsConnected, onClose, compareContent }) {
+export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, flowsheetId, wsConnected, onClose, compareContent }) {
   const status    = useLiveSimStore(s => s.status);
   const startedBy = useLiveSimStore(s => s.startedBy);
   const error     = useLiveSimStore(s => s.error);
@@ -853,6 +927,9 @@ export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, w
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #E5E7EB' }}>
           <TransportControls sendEvent={sendEvent} buildNodeParams={buildNodeParams} canvasData={canvasData} wsConnected={wsConnected} />
         </div>
+
+        {/* Live device inputs — start/stop the gateway; values override the sim */}
+        <LiveInputsBar flowsheetId={flowsheetId} canvasData={canvasData} />
 
         {/* KPI strip — always visible, informative without any setup */}
         <KpiStrip />

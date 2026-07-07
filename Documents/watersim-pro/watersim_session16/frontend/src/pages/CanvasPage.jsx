@@ -938,6 +938,7 @@ function CanvasPageInner() {
           sendEvent={sendEvent}
           buildNodeParams={buildNodeParams}
           canvasData={{ nodes, edges }}
+          flowsheetId={flowsheetId}
           wsConnected={wsConnected}
           onClose={() => setShowLiveSim(false)}
           compareContent={
