@@ -532,12 +532,273 @@ function ValuesTable() {
   );
 }
 
+// ── Always-visible KPI strip ────────────────────────────────────────────────
+
+function KpiStrip() {
+  const steps  = useLiveSimStore(s => s.steps);
+  const latest = steps.length ? steps[steps.length - 1] : null;
+  const inf = latest?.summary?.influent || {};
+  const eff = latest?.summary?.effluent || {};
+  const fmt = v => (v == null ? '—' : (+v).toFixed(0));
+  const cell = (label, val, unit, color) => (
+    <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 92 }}>
+      <span style={{ fontSize: 10, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</span>
+      <span style={{ fontSize: 17, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
+        {fmt(val)}<span style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 500 }}> {unit}</span>
+      </span>
+    </div>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', padding: '11px 20px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+      {cell('Influent Q', inf.Q, 'm³/d', '#1F4E79')}
+      {cell('Influent TSS', inf.TSS, 'mg/L', '#1F4E79')}
+      {cell('Influent BOD', inf.BOD, 'mg/L', '#1F4E79')}
+      <div style={{ width: 1, background: '#E5E7EB', alignSelf: 'stretch' }} />
+      {cell('Effluent Q', eff.Q, 'm³/d', '#059669')}
+      {cell('Effluent TSS', eff.TSS, 'mg/L', '#059669')}
+      {cell('Effluent BOD', eff.BOD, 'mg/L', '#059669')}
+      {cell('Effluent TN', eff.TN, 'mg/L', '#059669')}
+      {cell('Effluent TP', eff.TP, 'mg/L', '#059669')}
+    </div>
+  );
+}
+
+// ── Simple one-click tag chips (replaces the nested picker) ──────────────────
+
+const QUICK_TAGS = [
+  ['Q', 'influent', 'Influent'], ['TSS', 'influent', 'Influent'], ['BOD', 'influent', 'Influent'],
+  ['Q', 'effluent', 'Effluent'], ['TSS', 'effluent', 'Effluent'], ['BOD', 'effluent', 'Effluent'],
+  ['TN', 'effluent', 'Effluent'], ['TP', 'effluent', 'Effluent'],
+];
+function QuickTags() {
+  const watched = useLiveSimStore(s => s.watchedParams);
+  const add     = useLiveSimStore(s => s.addWatchedParam);
+  const remove  = useLiveSimStore(s => s.removeWatchedParam);
+  const on = (k, out) => watched.some(w => w.key === k && w.nodeId === '__summary__' && w.outputKey === out);
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginRight: 4 }}>Plot lines:</span>
+      {QUICK_TAGS.map(([k, out, lbl]) => {
+        const active = on(k, out);
+        return (
+          <button key={out + k}
+            onClick={() => active ? remove(k, '__summary__', out) : add(k, '__summary__', out, lbl)}
+            style={{
+              padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+              border: '1px solid ' + (active ? '#0891B2' : '#D1D5DB'),
+              background: active ? '#0891B2' : '#fff', color: active ? '#fff' : '#374151',
+            }}>{lbl} {k}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Live animated flowsheet diagram ─────────────────────────────────────────
+
+const DC = {
+  panel: '#ffffff', panel2: '#F3F4F6', line: '#E5E7EB', ink: '#111827', ink2: '#4B5563', ink3: '#9CA3AF',
+  steel: '#94A3B8', run: '#059669', idle: '#9CA3AF', water: '#2F86BD', water2: '#4AA8DD',
+  solid: '#8A5A34', solid2: '#A87142', recycle: '#7C3AED', accent: '#0891B2', accent2: '#22B8CF',
+  mediaA: '#D8C48A', mediaB: '#7C8794',
+};
+const SOLIDS_ST  = new Set(['sludge', 'solids', 'underflow', 'primary_sludge', 'thickened', 'concentrate', 'backwash', 'screenings']);
+const RECYCLE_ST = new Set(['ras', 'was', 'recycle', 'internal_recycle']);
+const diagEdgeClass = e => {
+  const st = e.data && e.data.streamType;
+  if ((e.data && e.data.isSolids) || SOLIDS_ST.has(st)) return 'solid';
+  if ((e.data && e.data.isRecycle) || RECYCLE_ST.has(st)) return 'recycle';
+  return 'water';
+};
+function diagIconCat(op) {
+  op = op || '';
+  if (op.includes('inlet')) return 'inlet';
+  if (op.includes('outlet')) return 'outlet';
+  if (op.includes('pump')) return 'pump';
+  if (op.includes('blower')) return 'blower';
+  if (op.includes('thicken') || op.includes('clarifier')) return 'clarifier';
+  if (op.includes('aeration') || op.includes('activated') || op.includes('reactor') || op.includes('bioreactor') || op.includes('digest')) return 'basin';
+  if (op.includes('filter') || op.includes('sand') || op.includes('gac') || op.includes('membrane') || op === 'ro' || op.includes('ro_') || op.includes('uf')) return 'vessel';
+  if (op.includes('dos') || op.includes('coagul') || op.includes('polymer') || op === 'ph_adjustment' || op.includes('chlor')) return 'dosing';
+  if (op.includes('uv')) return 'uv';
+  if (op.includes('valve')) return 'valve';
+  if (op.includes('screen') || op.includes('grit')) return 'screen';
+  if (op.includes('tank')) return 'tank';
+  return 'unit';
+}
+const pickLiquid = out => (out && (out.effluent || out.filtrate || out.permeate || out.thickened || out.digestate)) || null;
+const pickSolids = out => (out && (out.primarySludge || out.thickened || out.WAS || out.concentrate || out.backwash || out.screenings)) || null;
+const dfmt = n => (n == null ? '–' : Math.abs(n) >= 1000 ? Math.round(n).toLocaleString() : (+n).toFixed(Math.abs(n) < 10 ? 1 : 0));
+
+function drawDiagram(svg, canvasData, latest) {
+  if (!svg) return;
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const nodes = (canvasData && canvasData.nodes) || [], edges = (canvasData && canvasData.edges) || [];
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  if (!nodes.length) {
+    svg.setAttribute('viewBox', '0 0 420 100');
+    const tx = el('text', { x: 210, y: 54, 'text-anchor': 'middle', fill: DC.ink3, 'font-size': 13, 'font-family': 'system-ui' });
+    tx.textContent = 'No units on this flowsheet yet.'; svg.appendChild(tx); return;
+  }
+  const NW = 156, NH = 88;
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const ur = (latest && latest.unitResults) || {};
+  let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+  for (const n of nodes) { const p = n.position || { x: 0, y: 0 }; minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x + NW); maxY = Math.max(maxY, p.y + NH); }
+  svg.setAttribute('viewBox', `${minX - 24} ${minY - 24} ${(maxX - minX) + 180} ${(maxY - minY) + 50}`);
+  const elbow = (sx, sy, tx, ty) => { const mx = (sx + tx) / 2; return `M ${sx} ${sy} L ${mx} ${sy} L ${mx} ${ty} L ${tx} ${ty}`; };
+  const spinG = (cx, cy, fast) => { const s = el('g', { class: 'ispin' + (fast ? ' fast' : '') }); s.setAttribute('style', `transform-box:view-box;transform-origin:${cx}px ${cy}px`); return s; };
+
+  function drawIcon(g, cat, cx, cy, running) {
+    const stk = running ? DC.run : DC.steel, mv = running ? DC.run : DC.idle;
+    const add = (t, a) => g.appendChild(el(t, a));
+    if (cat === 'pump') {
+      add('circle', { cx, cy, r: 16, fill: DC.panel, stroke: stk, 'stroke-width': 2.5 });
+      const s = spinG(cx, cy, true);
+      s.appendChild(el('path', { d: `M${cx} ${cy} L${cx + 10} ${cy - 4} L${cx + 10} ${cy + 4} Z`, fill: mv }));
+      s.appendChild(el('path', { d: `M${cx} ${cy} L${cx - 10} ${cy + 4} L${cx - 10} ${cy - 4} Z`, fill: mv }));
+      s.appendChild(el('path', { d: `M${cx} ${cy} L${cx - 4} ${cy - 10} L${cx + 4} ${cy - 10} Z`, fill: mv, opacity: .85 }));
+      g.appendChild(s); add('circle', { cx, cy, r: 3, fill: DC.panel, stroke: stk, 'stroke-width': 1 });
+    } else if (cat === 'blower') {
+      add('circle', { cx, cy, r: 16, fill: DC.panel, stroke: stk, 'stroke-width': 2.5 });
+      const s = spinG(cx, cy, true);
+      for (let i = 0; i < 3; i++) { const a = i * 2 * Math.PI / 3; s.appendChild(el('path', { d: `M${cx} ${cy} L${cx + 11 * Math.cos(a)} ${cy + 11 * Math.sin(a)} L${cx + 6 * Math.cos(a + 0.9)} ${cy + 6 * Math.sin(a + 0.9)} Z`, fill: mv })); }
+      g.appendChild(s); add('circle', { cx, cy, r: 3, fill: mv });
+    } else if (cat === 'clarifier') {
+      add('circle', { cx, cy, r: 18, fill: DC.panel2, stroke: stk, 'stroke-width': 2.5 });
+      add('circle', { cx, cy, r: 11, fill: 'none', stroke: DC.line, 'stroke-width': 1 });
+      const s = spinG(cx, cy, false);
+      s.appendChild(el('rect', { x: cx - 16, y: cy - 1.6, width: 32, height: 3.2, rx: 1.5, fill: mv }));
+      s.appendChild(el('path', { d: `M${cx - 16} ${cy} l4 -4 l0 8 Z`, fill: mv }));
+      s.appendChild(el('path', { d: `M${cx + 16} ${cy} l-4 -4 l0 8 Z`, fill: mv }));
+      g.appendChild(s);
+      add('rect', { x: cx - 13, y: cy - 25, width: 26, height: 7, rx: 2, fill: DC.ink2 });
+      add('circle', { cx, cy, r: 3.4, fill: DC.steel });
+    } else if (cat === 'vessel') {
+      add('ellipse', { cx, cy: cy - 16, rx: 16, ry: 5, fill: DC.panel, stroke: stk, 'stroke-width': 2 });
+      add('rect', { x: cx - 16, y: cy - 16, width: 32, height: 32, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+      add('rect', { x: cx - 15, y: cy - 14, width: 30, height: 13, fill: DC.mediaA, opacity: .9 });
+      add('rect', { x: cx - 15, y: cy - 1, width: 30, height: 15, fill: DC.mediaB, opacity: .85 });
+      add('line', { x1: cx - 15, y1: cy - 1, x2: cx + 15, y2: cy - 1, stroke: DC.ink2, 'stroke-width': 1, 'stroke-dasharray': '3 3' });
+      add('ellipse', { cx, cy: cy + 16, rx: 16, ry: 5, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+    } else if (cat === 'basin') {
+      add('rect', { x: cx - 22, y: cy - 15, width: 44, height: 32, rx: 3, fill: DC.water, 'fill-opacity': .4, stroke: stk, 'stroke-width': 2 });
+      add('line', { x1: cx - 18, y1: cy + 14, x2: cx + 18, y2: cy + 14, stroke: stk, 'stroke-width': 1.5, 'stroke-dasharray': '2 3' });
+      for (let i = 0; i < 4; i++) { const bx = cx - 14 + i * 9; g.appendChild(el('circle', { cx: bx, cy: cy + 12, r: 2.4, class: 'bubble', style: `animation-delay:${i * 0.25}s` })); }
+    } else if (cat === 'tank') {
+      add('rect', { x: cx - 16, y: cy - 16, width: 32, height: 32, rx: 4, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+      add('rect', { x: cx - 14, y: cy - 2, width: 28, height: 16, rx: 2, fill: DC.water, 'fill-opacity': .5 });
+    } else if (cat === 'dosing') {
+      add('rect', { x: cx - 9, y: cy - 8, width: 18, height: 22, rx: 2, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+      add('path', { d: `M${cx} ${cy - 17} l4 6 a4 4 0 1 1 -8 0 Z`, fill: DC.accent });
+      g.appendChild(el('circle', { cx, cy: cy + 16, r: 2.2, class: 'idrop' }));
+    } else if (cat === 'uv') {
+      add('rect', { x: cx - 18, y: cy - 7, width: 36, height: 14, rx: 3, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+      add('rect', { x: cx - 14, y: cy - 3, width: 28, height: 6, rx: 3, fill: running ? DC.accent2 : DC.idle });
+    } else if (cat === 'valve') {
+      add('path', { d: `M${cx - 14} ${cy - 10} L${cx} ${cy} L${cx - 14} ${cy + 10} Z`, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+      add('path', { d: `M${cx + 14} ${cy - 10} L${cx} ${cy} L${cx + 14} ${cy + 10} Z`, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+    } else if (cat === 'screen') {
+      add('rect', { x: cx - 16, y: cy - 15, width: 32, height: 30, rx: 3, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+      for (let i = 0; i < 4; i++) add('line', { x1: cx - 10 + i * 7, y1: cy - 12, x2: cx - 10 + i * 7, y2: cy + 12, stroke: stk, 'stroke-width': 1.5 });
+    } else if (cat === 'inlet') {
+      add('path', { d: `M${cx - 16} ${cy - 12} h32 v10 l-12 12 h-8 l-12 -12 Z`, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+      g.appendChild(el('circle', { cx, cy: cy + 16, r: 3, class: 'idrop' }));
+    } else if (cat === 'outlet') {
+      add('rect', { x: cx - 16, y: cy - 14, width: 32, height: 22, rx: 3, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+      add('path', { d: `M${cx} ${cy + 6} l7 -8 h-14 Z`, fill: running ? DC.accent : DC.idle });
+    } else {
+      add('rect', { x: cx - 16, y: cy - 14, width: 32, height: 28, rx: 5, fill: DC.panel2, stroke: stk, 'stroke-width': 2 });
+    }
+  }
+
+  const playing = !!latest;
+  for (const e of edges) {
+    const s = byId[e.source], t = byId[e.target]; if (!s || !t) continue;
+    const sp = s.position || { x: 0, y: 0 }, tp = t.position || { x: 0, y: 0 };
+    const sx = sp.x + NW, sy = sp.y + NH / 2, tx = tp.x, ty = tp.y + NH / 2;
+    const d = elbow(sx, sy, tx, ty), cls = diagEdgeClass(e);
+    const col = cls === 'solid' ? DC.solid2 : cls === 'recycle' ? DC.recycle : DC.water2;
+    const casing = cls === 'solid' ? DC.solid : cls === 'recycle' ? DC.recycle : DC.steel;
+    svg.appendChild(el('path', { d, fill: 'none', stroke: casing, 'stroke-width': 6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: .85 }));
+    const out = ur[e.source] && ur[e.source].outputs;
+    const stream = cls === 'solid' ? pickSolids(out) : pickLiquid(out);
+    const q = stream ? stream.Q : null;
+    const on = playing ? (q && q > 0.001) : false;
+    svg.appendChild(el('path', { d, fill: 'none', stroke: col, 'stroke-width': 4, 'stroke-linecap': 'round', class: 'efl' + (on ? ' on' : '') }));
+    if (stream) {
+      const mx = (sx + tx) / 2, my = (sy + ty) / 2;
+      const t1 = el('text', { x: mx, y: my - 4, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9, fill: DC.ink2 });
+      t1.textContent = dfmt(stream.Q) + ' m³/d';
+      const t2 = el('text', { x: mx, y: my + 8, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9, fill: DC.ink3 });
+      t2.textContent = 'TSS ' + dfmt(stream.TSS);
+      svg.appendChild(t1); svg.appendChild(t2);
+    }
+  }
+  for (const n of nodes) {
+    const p = n.position || { x: 0, y: 0 }, x = p.x, y = p.y;
+    const op = (n.data && n.data.opType) || '', label = (n.data && n.data.label) || op || n.id;
+    const out = ur[n.id] && ur[n.id].outputs;
+    const liq = pickLiquid(out);
+    const running = liq ? (liq.Q > 0.001) : false;
+    const g = el('g', { class: running ? 'running' : '' });
+    let stripe = DC.water;
+    if (op.includes('outlet')) stripe = DC.accent; else if (op.includes('inlet')) stripe = DC.accent2;
+    else if (op.includes('thicken') || op.includes('clarifier')) stripe = DC.solid2;
+    else if (op.includes('pump') || op.includes('blower')) stripe = DC.steel;
+    g.appendChild(el('rect', { x, y, width: NW, height: NH, rx: 11, fill: DC.panel2, stroke: DC.steel, 'stroke-width': 1.5 }));
+    g.appendChild(el('rect', { x, y, width: NW, height: 4, rx: 2, fill: stripe }));
+    drawIcon(g, diagIconCat(op), x + NW / 2, y + 30, running);
+    const lt = el('text', { x: x + NW / 2, y: y + 60, 'text-anchor': 'middle', 'font-family': 'system-ui', 'font-weight': 700, 'font-size': 12, fill: DC.ink });
+    lt.textContent = label.length > 22 ? label.slice(0, 21) + '…' : label; g.appendChild(lt);
+    const tt = el('text', { x: x + NW / 2, y: y + 72, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9, fill: DC.ink3 });
+    tt.textContent = op; g.appendChild(tt);
+    if (liq) {
+      const vt = el('text', { x: x + NW / 2, y: y + 83, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9.5, 'font-weight': 600, fill: DC.accent });
+      vt.textContent = 'Q ' + dfmt(liq.Q) + ' · TSS ' + dfmt(liq.TSS); g.appendChild(vt);
+    }
+    svg.appendChild(g);
+  }
+}
+
+const DIAGRAM_CSS = `
+.lsimdiag .efl{fill:none;stroke-linecap:round;stroke-dasharray:2 12;opacity:0}
+.lsimdiag .efl.on{opacity:.95;animation:lmarch .8s linear infinite}
+.lsimdiag .ispin{transform-box:view-box}
+.lsimdiag .running .ispin{animation:lspin 1.05s linear infinite}
+.lsimdiag .running .ispin.fast{animation-duration:.55s}
+.lsimdiag .bubble{opacity:0;fill:#22B8CF}
+.lsimdiag .running .bubble{animation:lrise 1.5s ease-in infinite}
+.lsimdiag .idrop{opacity:0;fill:#4AA8DD}
+.lsimdiag .running .idrop{animation:ldrip 1.3s ease-in infinite}
+@keyframes lmarch{to{stroke-dashoffset:-28}}
+@keyframes lspin{to{transform:rotate(360deg)}}
+@keyframes lrise{0%{opacity:0;transform:translateY(0)}25%{opacity:.9}100%{opacity:0;transform:translateY(-22px)}}
+@keyframes ldrip{0%{opacity:0;transform:translateY(-4px)}30%{opacity:1}100%{opacity:0;transform:translateY(12px)}}
+@media (prefers-reduced-motion:reduce){.lsimdiag .efl.on,.lsimdiag .running .ispin,.lsimdiag .running .bubble,.lsimdiag .running .idrop{animation:none}}
+`;
+
+function LiveDiagram({ canvasData }) {
+  const steps  = useLiveSimStore(s => s.steps);
+  const ref    = useRef(null);
+  const latest = steps.length ? steps[steps.length - 1] : null;
+  useEffect(() => { drawDiagram(ref.current, canvasData, latest); }, [canvasData, latest]);
+  return (
+    <div className="lsimdiag" style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: '10px 16px' }}>
+      <style>{DIAGRAM_CSS}</style>
+      <svg ref={ref} viewBox="0 0 1200 460" style={{ width: '100%', height: '100%', minWidth: 820, display: 'block' }} />
+    </div>
+  );
+}
+
 // ── Main Dashboard Overlay ──────────────────────────────────────────────────
 
 export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, wsConnected, onClose }) {
   const status    = useLiveSimStore(s => s.status);
   const startedBy = useLiveSimStore(s => s.startedBy);
   const error     = useLiveSimStore(s => s.error);
+  const [tab, setTab] = useState('diagram');
 
   const statusLabel = {
     idle: 'Ready', running: 'Running', paused: 'Paused',
@@ -591,35 +852,46 @@ export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, w
           <TransportControls sendEvent={sendEvent} buildNodeParams={buildNodeParams} canvasData={canvasData} wsConnected={wsConnected} />
         </div>
 
-        {/* Tag picker row */}
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid #E5E7EB' }}>
-          <VariablePicker canvasData={canvasData} />
+        {/* KPI strip — always visible, informative without any setup */}
+        <KpiStrip />
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 4, padding: '0 20px', borderBottom: '1px solid #E5E7EB' }}>
+          {[['diagram', 'Live Diagram'], ['trends', 'Trends']].map(([k, lbl]) => (
+            <button key={k} onClick={() => setTab(k)} style={{
+              padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, color: tab === k ? '#0891B2' : '#6B7280',
+              borderBottom: tab === k ? '2px solid #0891B2' : '2px solid transparent',
+            }}>{lbl}</button>
+          ))}
         </div>
 
-        {/* Main content: chart + values table */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {/* Chart area (takes most space) */}
-          <div style={{ flex: 1, padding: '12px 20px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase' }}>
-                Live Trend
-              </span>
-              <XAxisSelector />
-              <CsvExportButton />
-            </div>
-            <div style={{ flex: 1, minHeight: 200 }}>
-              <LiveTrendChart />
-            </div>
+        {/* Body */}
+        {tab === 'diagram' ? (
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+            <LiveDiagram canvasData={canvasData} />
           </div>
-
-          {/* Values table (right side) */}
-          <div style={{ width: 320, borderLeft: '1px solid #E5E7EB', padding: '12px 16px', overflowY: 'auto' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 8 }}>
-              Current Values
+        ) : (
+          <>
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid #E5E7EB' }}>
+              <QuickTags />
             </div>
-            <ValuesTable />
-          </div>
-        </div>
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+              <div style={{ flex: 1, padding: '12px 20px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase' }}>Live Trend</span>
+                  <XAxisSelector />
+                  <CsvExportButton />
+                </div>
+                <div style={{ flex: 1, minHeight: 200 }}><LiveTrendChart /></div>
+              </div>
+              <div style={{ width: 320, borderLeft: '1px solid #E5E7EB', padding: '12px 16px', overflowY: 'auto' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 8 }}>Current Values</div>
+                <ValuesTable />
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -847,11 +1119,11 @@ const S = {
     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
     background: 'rgba(0,0,0,0.5)', zIndex: 1000,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 24,
+    padding: 12,
   },
   dashboard: {
-    background: '#fff', borderRadius: 12, boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
-    width: '100%', maxWidth: 1100, height: '85vh', maxHeight: 720,
+    background: '#fff', borderRadius: 10, boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+    width: '100%', maxWidth: 1500, height: '94vh', maxHeight: '94vh',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   header: {
