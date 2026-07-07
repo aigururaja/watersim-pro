@@ -644,6 +644,7 @@ function drawDiagram(svg, canvasData, latest) {
   const NW = 156, NH = 88;
   const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
   const ur = (latest && latest.unitResults) || {};
+  const sr = (latest && latest.streamResults) || {};   // true per-edge stream table
   let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
   for (const n of nodes) { const p = n.position || { x: 0, y: 0 }; minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x + NW); maxY = Math.max(maxY, p.y + NH); }
   svg.setAttribute('viewBox', `${minX - 24} ${minY - 24} ${(maxX - minX) + 180} ${(maxY - minY) + 50}`);
@@ -722,8 +723,9 @@ function drawDiagram(svg, canvasData, latest) {
     const col = cls === 'solid' ? DC.solid2 : cls === 'recycle' ? DC.recycle : DC.water2;
     const casing = cls === 'solid' ? DC.solid : cls === 'recycle' ? DC.recycle : DC.steel;
     svg.appendChild(el('path', { d, fill: 'none', stroke: casing, 'stroke-width': 6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: .85 }));
+    // Prefer the true per-edge stream value; fall back to the source unit's output
     const out = ur[e.source] && ur[e.source].outputs;
-    const stream = cls === 'solid' ? pickSolids(out) : pickLiquid(out);
+    const stream = sr[e.id] || (cls === 'solid' ? pickSolids(out) : pickLiquid(out));
     const q = stream ? stream.Q : null;
     const on = playing ? (q && q > 0.001) : false;
     svg.appendChild(el('path', { d, fill: 'none', stroke: col, 'stroke-width': 4, 'stroke-linecap': 'round', class: 'efl' + (on ? ' on' : '') }));
