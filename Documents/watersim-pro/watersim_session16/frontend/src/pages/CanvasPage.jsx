@@ -831,7 +831,13 @@ function CanvasPageInner() {
             <button
               title="Open the live animated simulation of this flowsheet in a new tab"
               style={{ ...S.btn, background: '#6D28D9', color: '#fff' }}
-              onClick={() => window.open(`/custom-flow-sim.html?pid=${projectId}&fid=${flowsheetId}`, '_blank', 'noopener')}
+              onClick={() => {
+                // Bridge the session token into localStorage so the standalone
+                // page (a separate tab) can reuse it without a fresh login.
+                const t = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+                if (t) localStorage.setItem('accessToken', t);
+                window.open(`/custom-flow-sim.html?pid=${projectId}&fid=${flowsheetId}`, '_blank', 'noopener');
+              }}
             >
               Live Sim ↗
             </button>

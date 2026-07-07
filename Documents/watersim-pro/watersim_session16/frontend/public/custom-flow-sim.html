@@ -154,7 +154,8 @@
 <div class="overlay hidden" id="overlay">
   <form class="login" id="login-form">
     <h2>Sign in to WaterSim</h2>
-    <p>Use your WaterSim account. The token is shared with the app on this browser.</p>
+    <p>Use your WaterSim account. Opening from the app's “Live Sim” button signs you in automatically.</p>
+    <input id="li-org" type="text" placeholder="organisation" value="infercon" autocomplete="organization">
     <input id="li-email" type="email" placeholder="email" value="admin@gmail.com" autocomplete="username">
     <input id="li-pass" type="password" placeholder="password" autocomplete="current-password">
     <div class="err-msg" id="li-err"></div>
@@ -182,10 +183,13 @@ async function apiPost(path,body){
     throw new Error('POST '+path+' → '+r.status+(m?' · '+m:''));}
   return r.json();
 }
-async function doLogin(email,pw){
-  const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pw})});
+async function doLogin(orgSlug,email,pw){
+  const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orgSlug,email,password:pw})});
   const j=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(j.error||('Login failed ('+r.status+')'));
+  if(!r.ok){
+    const v=(j.errors&&j.errors[0]&&(j.errors[0].msg||j.errors[0].path))||j.error;
+    throw new Error(v?('Login failed: '+v):('Login failed ('+r.status+')'));
+  }
   const tok=(j.data&&j.data.accessToken)||j.accessToken;
   if(!tok) throw new Error('No token in login response');
   localStorage.setItem('accessToken',tok);
@@ -194,7 +198,7 @@ async function doLogin(email,pw){
 function showLogin(show){$("overlay").classList.toggle('hidden',!show);}
 $("login-form").addEventListener('submit',async e=>{
   e.preventDefault(); $("li-err").textContent='';
-  try{ await doLogin($("li-email").value.trim(),$("li-pass").value); showLogin(false); await boot(); }
+  try{ await doLogin($("li-org").value.trim(),$("li-email").value.trim(),$("li-pass").value); showLogin(false); await boot(); }
   catch(err){ $("li-err").textContent=err.message; }
 });
 $("btn-logout").onclick=()=>{localStorage.removeItem('accessToken');sessionStorage.removeItem('accessToken');stopPoll();setStatus('err','Signed out');showLogin(true);};

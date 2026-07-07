@@ -224,6 +224,11 @@ export default function ProjectPage() {
                 onOpen={() => navigate(`/projects/${projectId}/flowsheets/${fs.id}`)}
                 onSnapshot={() => { setSnapTarget(fs); setSnapName(`${fs.name} — ${new Date().toLocaleDateString()}`); }}
                 onDelete={() => deleteFlowsheet(fs)}
+                onLiveSim={() => {
+                  const t = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+                  if (t) localStorage.setItem('accessToken', t);
+                  window.open(`/custom-flow-sim.html?pid=${projectId}&fid=${fs.id}`, '_blank', 'noopener');
+                }}
                 deleting={deletingFs === fs.id}
               />
             ))}
@@ -343,7 +348,7 @@ export default function ProjectPage() {
 
 // ── FlowsheetCard ──────────────────────────────────────────────────────────────
 
-function FlowsheetCard({ fs, onOpen, onSnapshot, onDelete, deleting }) {
+function FlowsheetCard({ fs, onOpen, onSnapshot, onDelete, onLiveSim, deleting }) {
   const [hover, setHover] = useState(false);
 
   return (
@@ -358,6 +363,9 @@ function FlowsheetCard({ fs, onOpen, onSnapshot, onDelete, deleting }) {
         <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
           {hover && (
             <>
+              <button title="Open live simulation" style={{ ...S.iconBtn, color: '#6D28D9' }} onClick={e => { e.stopPropagation(); onLiveSim(); }}>
+                ▶
+              </button>
               <button title="Save snapshot" style={S.iconBtn} onClick={e => { e.stopPropagation(); onSnapshot(); }}>
                 📸
               </button>
