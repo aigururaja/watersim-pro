@@ -85,10 +85,14 @@ function integrateTankLevels(sim, result) {
     if (!ur) continue;
 
     const outputs = ur.outputs || {};
-    const Q_in = Object.values(outputs).reduce((s, o) => s + (o?.Q || 0), 0);   // = inflow (conserved)
     const params = sim.nodeParams[node.id] || {};
     const setOut = params.Q_out_m3d;
-    const Q_out = (setOut != null && setOut !== '' && Number(setOut) > 0) ? Number(setOut) : Q_in;
+    const sumOut = Object.values(outputs).reduce((s, o) => s + (o?.Q || 0), 0);
+    // Prefer the true inflow/outflow the solver recorded when throttling; else
+    // fall back to the conserved (balanced) flow so nothing accumulates.
+    const Q_in  = ur.metrics?.tank_in_m3d ?? sumOut;
+    const Q_out = ur.metrics?.tank_out_m3d
+      ?? ((setOut != null && setOut !== '' && Number(setOut) > 0) ? Number(setOut) : Q_in);
 
     const depth = Number(params.depth_m) || Number(params.height_m) || 4;
     const area  = tankArea(params, Q_in);

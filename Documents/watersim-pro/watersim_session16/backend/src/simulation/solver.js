@@ -79,6 +79,13 @@ function isSolidsEdge(edge) {
   return SOLIDS_STREAM_TYPES.has(edge.data?.streamType) || edge.data?.isSolids === true;
 }
 
+// Units that behave as a buffer tank: an editable Q_out_m3d throttles the
+// forward (downstream) flow; the inflow − outflow difference accumulates and
+// drives the unit's level (integrated per step by the live runner).
+const TANK_THROTTLE_TYPES = new Set([
+  'secondary_clarifier', 'primary_clarifier', 'sludge_thickener', 'thickener', 'tank',
+]);
+
 /** Pick a unit's solids/underflow output stream, if the model produced one. */
 function pickSolidsOutput(result) {
   return result.primarySludge || result.thickened || result.WAS
@@ -282,12 +289,27 @@ function executePass(order, nodeMap, edgesByTarget, edgesBySource, edgeStreams, 
     const liquidOut = forwardOut.filter(eid => !isSolidsEdge(edgeMap[eid]));
     const solidsOut = forwardOut.filter(eid =>  isSolidsEdge(edgeMap[eid]));
 
+    // Buffer-tank throttle: cap the forward (downstream) flow to Q_out_m3d.
+    // The inflow − outflow difference is stored in the unit (its level rises).
+    let release = effluent;
+    if (TANK_THROTTLE_TYPES.has(node.data?.opType)) {
+      const qout = Number(params.Q_out_m3d);
+      if (qout > 0) {
+        const m = (unitResults[nodeId].metrics = unitResults[nodeId].metrics || {});
+        // Normal forward flow (already excludes RAS/underflow) is what the tank
+        // would release when balanced; the difference vs Q_out drives the level.
+        m.tank_in_m3d  = Math.round(effluent.Q);
+        m.tank_out_m3d = Math.round(qout);
+        release = effluent.clone({ Q: Math.max(0, qout) });
+      }
+    }
+
     if (liquidOut.length === 1) {
-      edgeStreams[liquidOut[0]] = effluent;
+      edgeStreams[liquidOut[0]] = release;
     } else if (liquidOut.length > 1) {
       const ratios = params.splitRatios || liquidOut.map(() => 1 / liquidOut.length);
       liquidOut.forEach((eid, i) => {
-        edgeStreams[eid] = effluent.clone({ Q: effluent.Q * (ratios[i] ?? 1 / liquidOut.length) });
+        edgeStreams[eid] = release.clone({ Q: release.Q * (ratios[i] ?? 1 / liquidOut.length) });
       });
     }
 
