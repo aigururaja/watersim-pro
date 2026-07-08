@@ -54,6 +54,9 @@ function resolveValue(step, wp) {
       : step.summary?.effluent;
     return src?.[wp.key] ?? null;
   }
+  if (wp.outputKey === 'metric') {
+    return step.unitResults?.[wp.nodeId]?.metrics?.[wp.key] ?? null;
+  }
   return step.unitResults?.[wp.nodeId]?.outputs?.[wp.outputKey]?.[wp.key] ?? null;
 }
 
@@ -626,6 +629,98 @@ function QuickTags() {
   );
 }
 
+// ── Trend picker: node tabs + dynamic per-node parameter chips ───────────────
+
+function NodeTrendPicker({ canvasData }) {
+  const steps   = useLiveSimStore(s => s.steps);
+  const watched = useLiveSimStore(s => s.watchedParams);
+  const add     = useLiveSimStore(s => s.addWatchedParam);
+  const remove  = useLiveSimStore(s => s.removeWatchedParam);
+  const latest  = steps.length ? steps[steps.length - 1] : null;
+
+  const nodes = (canvasData?.nodes || []).filter(n => !['opc_read', 'opc_write'].includes(n.data?.opType));
+  const [tab, setTab] = useState('__summary__');
+
+  const isOn = (key, nodeId, outKey) => watched.some(w => w.key === key && w.nodeId === nodeId && w.outputKey === outKey);
+  const toggle = (key, nodeId, outKey, label) =>
+    isOn(key, nodeId, outKey) ? remove(key, nodeId, outKey) : add(key, nodeId, outKey, label);
+
+  const chip = (key, nodeId, outKey, label) => {
+    const on = isOn(key, nodeId, outKey);
+    return (
+      <button key={outKey + ':' + key} onClick={() => toggle(key, nodeId, outKey, label)}
+        style={{ padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 600,
+          border: '1px solid ' + (on ? '#0891B2' : '#D1D5DB'), background: on ? '#0891B2' : '#fff', color: on ? '#fff' : '#374151' }}>
+        {key}
+      </button>
+    );
+  };
+
+  const grpLabel = { fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.05em', margin: '6px 0 4px' };
+  const chipRow  = { display: 'flex', flexWrap: 'wrap', gap: 5 };
+
+  let content;
+  if (tab === '__summary__') {
+    content = (
+      <>
+        <div style={grpLabel}>Influent</div>
+        <div style={chipRow}>{STREAM_PARAMS.map(p => chip(p.key, '__summary__', 'influent', 'Influent'))}</div>
+        <div style={grpLabel}>Effluent (final)</div>
+        <div style={chipRow}>{STREAM_PARAMS.map(p => chip(p.key, '__summary__', 'effluent', 'Effluent'))}</div>
+      </>
+    );
+  } else {
+    const node = nodes.find(n => n.id === tab);
+    const outKey = PRIMARY_OUTPUT_KEY[node?.data?.opType] || 'effluent';
+    const label = node?.data?.label || tab;
+    const metrics = latest?.unitResults?.[tab]?.metrics || {};
+    const metricKeys = Object.keys(metrics).filter(k => typeof metrics[k] === 'number');
+    content = (
+      <>
+        <div style={grpLabel}>Output stream ({outKey})</div>
+        <div style={chipRow}>{STREAM_PARAMS.map(p => chip(p.key, tab, outKey, label))}</div>
+        {metricKeys.length > 0 && (
+          <>
+            <div style={grpLabel}>Calculated metrics</div>
+            <div style={chipRow}>{metricKeys.map(k => chip(k, tab, 'metric', label))}</div>
+          </>
+        )}
+      </>
+    );
+  }
+
+  const tabBtn = (id, lbl) => (
+    <button key={id} onClick={() => setTab(id)} style={{
+      padding: '5px 11px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+      border: '1px solid ' + (tab === id ? '#0891B2' : '#E5E7EB'), background: tab === id ? '#ECFEFF' : '#fff', color: tab === id ? '#0369A1' : '#4B5563' }}>
+      {lbl}
+    </button>
+  );
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 5, overflowX: 'auto', paddingBottom: 6 }}>
+        {tabBtn('__summary__', 'Summary')}
+        {nodes.map(n => tabBtn(n.id, n.data?.label || n.id))}
+      </div>
+      {content}
+      {watched.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10, alignItems: 'center', borderTop: '1px dashed #E5E7EB', paddingTop: 8 }}>
+          <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>Plotting {watched.length}:</span>
+          {watched.map(w => (
+            <span key={w.nodeId + w.outputKey + w.key}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '2px 5px 2px 8px', borderRadius: 999, background: '#F3F4F6', color: '#374151' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: w.color }} />
+              {w.label}
+              <button onClick={() => remove(w.key, w.nodeId, w.outputKey)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12 }}>✕</button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Live inputs bar — start/stop the device gateway for this flowsheet ───────
 
 function LiveInputsBar({ flowsheetId, canvasData }) {
@@ -1068,7 +1163,7 @@ export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, f
         ) : (
           <>
             <div style={{ padding: '10px 20px', borderBottom: '1px solid #E5E7EB' }}>
-              <QuickTags />
+              <NodeTrendPicker canvasData={canvasData} />
             </div>
             <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
               <div style={{ flex: 1, padding: '12px 20px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
