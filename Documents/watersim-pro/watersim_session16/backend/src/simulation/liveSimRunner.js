@@ -50,6 +50,43 @@ class LiveSimulation {
     this.userId       = userId;
     this.broadcastFn  = broadcastFn;
     this.emittedSteps = [];               // Accumulated results for persistence
+    this.tankState    = {};               // nodeId → { level } for stateful tanks
+  }
+}
+
+/**
+ * Integrate stateful tank levels for units where the level accumulates over
+ * time from the imbalance between inflow and outflow. Currently: secondary
+ * clarifier sludge blanket. Each step ≈ 1 simulated hour.
+ *
+ *   dLevel = (Q_in − Q_out) / area × dt      (Q_out is an editable setpoint;
+ *   Q_in > Q_out → level rises,  Q_in < Q_out → level falls)
+ */
+function integrateTankLevels(sim, result) {
+  for (const node of sim.canvasData.nodes || []) {
+    if (node.data?.opType !== 'secondary_clarifier') continue;
+    const ur = result.unitResults[node.id];
+    if (!ur) continue;
+    const eff = ur.outputs?.effluent, ras = ur.outputs?.RAS;
+    const Q_in = (eff?.Q || 0) + (ras?.Q || 0);           // conserved influent
+    const params = sim.nodeParams[node.id] || {};
+    const setOut = params.Q_out_m3d;
+    const Q_out = (setOut != null && setOut !== '' && Number(setOut) > 0) ? Number(setOut) : Q_in;
+    const depth = Number(params.depth_m) || 4;
+    const SOR   = Number(params.SOR_m3_m2_d) || 16;
+    const area  = Q_in > 0 && SOR > 0 ? Q_in / SOR : 1;
+
+    const st = sim.tankState[node.id]
+      || (sim.tankState[node.id] = { level: ur.metrics?.blanket_level_m ?? depth * 0.4 });
+    const dLevel = ((Q_in - Q_out) / area) * (1 / 24);    // m per hourly step
+    st.level = Math.max(0.05, Math.min(depth, st.level + dLevel));
+
+    ur.metrics = ur.metrics || {};
+    ur.metrics.Q_in_m3d        = Math.round(Q_in);
+    ur.metrics.Q_out_m3d       = Math.round(Q_out);
+    ur.metrics.blanket_level_m = +st.level.toFixed(2);
+    ur.metrics.freeboard_m     = +(depth - st.level).toFixed(2);
+    ur.metrics.level_trend     = dLevel > 0.0005 ? 'rising' : dLevel < -0.0005 ? 'falling' : 'steady';
   }
 }
 
@@ -62,6 +99,9 @@ function computeStep(sim) {
 
   const scaledParams = scaleInletParams(sim.canvasData, sim.nodeParams, stepEntry, inletDefaults);
   const result       = runSteadyState(sim.canvasData, { nodeParams: scaledParams });
+
+  // Stateful tank levels (e.g. clarifier blanket) integrate across steps
+  integrateTankLevels(sim, result);
 
   const step = {
     tick:          stepIndex,

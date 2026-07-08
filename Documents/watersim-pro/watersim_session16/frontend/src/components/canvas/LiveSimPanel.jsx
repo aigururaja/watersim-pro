@@ -710,7 +710,7 @@ const pickLiquid = out => (out && (out.effluent || out.filtrate || out.permeate 
 const pickSolids = out => (out && (out.primarySludge || out.thickened || out.WAS || out.concentrate || out.backwash || out.screenings)) || null;
 const dfmt = n => (n == null ? '–' : Math.abs(n) >= 1000 ? Math.round(n).toLocaleString() : (+n).toFixed(Math.abs(n) < 10 ? 1 : 0));
 
-function drawDiagram(svg, canvasData, latest) {
+function drawDiagram(svg, canvasData, latest, onNodeClick) {
   if (!svg) return;
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const nodes = (canvasData && canvasData.nodes) || [], edges = (canvasData && canvasData.edges) || [];
@@ -825,6 +825,8 @@ function drawDiagram(svg, canvasData, latest) {
     const liq = pickLiquid(out);
     const running = liq ? (liq.Q > 0.001) : false;
     const g = el('g', { class: running ? 'running' : '' });
+    g.style.cursor = 'pointer';
+    g.addEventListener('click', () => { if (onNodeClick) onNodeClick(n.id); });
     let stripe = DC.water;
     if (op.includes('outlet')) stripe = DC.accent; else if (op.includes('inlet')) stripe = DC.accent2;
     else if (op.includes('thicken') || op.includes('clarifier')) stripe = DC.solid2;
@@ -836,7 +838,13 @@ function drawDiagram(svg, canvasData, latest) {
     lt.textContent = label.length > 22 ? label.slice(0, 21) + '…' : label; g.appendChild(lt);
     const tt = el('text', { x: x + NW / 2, y: y + 72, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9, fill: DC.ink3 });
     tt.textContent = op; g.appendChild(tt);
-    if (liq) {
+    const met = (ur[n.id] && ur[n.id].metrics) || {};
+    if (op.includes('clarifier') && met.blanket_level_m != null) {
+      const arrow = met.level_trend === 'rising' ? '▲' : met.level_trend === 'falling' ? '▼' : '■';
+      const col = met.level_trend === 'rising' ? '#DC2626' : met.level_trend === 'falling' ? '#059669' : DC.accent;
+      const vt = el('text', { x: x + NW / 2, y: y + 83, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9.5, 'font-weight': 700, fill: col });
+      vt.textContent = 'Lvl ' + met.blanket_level_m + ' m ' + arrow; g.appendChild(vt);
+    } else if (liq) {
       const vt = el('text', { x: x + NW / 2, y: y + 83, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9.5, 'font-weight': 600, fill: DC.accent });
       vt.textContent = 'Q ' + dfmt(liq.Q) + ' · TSS ' + dfmt(liq.TSS); g.appendChild(vt);
     }
@@ -861,22 +869,68 @@ const DIAGRAM_CSS = `
 @media (prefers-reduced-motion:reduce){.lsimdiag .efl.on,.lsimdiag .running .ispin,.lsimdiag .running .bubble,.lsimdiag .running .idrop{animation:none}}
 `;
 
-function LiveDiagram({ canvasData }) {
+function LiveDiagram({ canvasData, sendEvent, paramDefs }) {
   const steps  = useLiveSimStore(s => s.steps);
   const ref    = useRef(null);
   const latest = steps.length ? steps[steps.length - 1] : null;
-  useEffect(() => { drawDiagram(ref.current, canvasData, latest); }, [canvasData, latest]);
+  const [sel, setSel]   = useState(null);   // selected nodeId
+  const [edits, setEdits] = useState({});   // { nodeId: { key: value } } local overlay
+
+  useEffect(() => { drawDiagram(ref.current, canvasData, latest, setSel); }, [canvasData, latest]);
+
+  const node = (canvasData?.nodes || []).find(n => n.id === sel);
+  const defs = node ? (paramDefs?.[node.data?.opType] || []) : [];
+  const valOf = (key) => {
+    const e = edits[sel]?.[key];
+    if (e !== undefined) return e;
+    return node?.data?.params?.[key] ?? '';
+  };
+  const setVal = (key, raw, type) => {
+    const val = type === 'number' ? (raw === '' ? '' : Number(raw)) : raw;
+    setEdits(p => ({ ...p, [sel]: { ...(p[sel] || {}), [key]: val } }));
+    if (sendEvent && val !== '') sendEvent('params:update', { nodeId: sel, params: { [key]: val } });
+  };
+
   return (
-    <div className="lsimdiag" style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: '10px 16px' }}>
-      <style>{DIAGRAM_CSS}</style>
-      <svg ref={ref} viewBox="0 0 1200 460" style={{ width: '100%', height: '100%', minWidth: 820, display: 'block' }} />
+    <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
+      <div className="lsimdiag" style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: '10px 16px' }}>
+        <style>{DIAGRAM_CSS}</style>
+        <svg ref={ref} viewBox="0 0 1200 460" style={{ width: '100%', height: '100%', minWidth: 820, display: 'block' }} />
+      </div>
+      {node && (
+        <div style={{ width: 250, borderLeft: '1px solid #E5E7EB', padding: '12px 14px', overflowY: 'auto', background: '#FBFDFF' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#1F4E79' }}>{node.data?.label}</span>
+            <button onClick={() => setSel(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 15 }}>✕</button>
+          </div>
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 10 }}>Live edit — changes recompute the flow</div>
+          {defs.length === 0 && <div style={{ fontSize: 12, color: '#9CA3AF' }}>No editable inputs.</div>}
+          {defs.map(def => (
+            <label key={def.key} style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 9 }}>
+              <span style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600 }}>{def.label}</span>
+              {def.type === 'select' ? (
+                <select value={valOf(def.key)} onChange={e => setVal(def.key, e.target.value, 'select')}
+                  style={{ padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 7, fontSize: 12.5 }}>
+                  <option value="">—</option>
+                  {def.options.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input type="number" value={valOf(def.key)} step={def.step} min={def.min} max={def.max}
+                  onChange={e => setVal(def.key, e.target.value, 'number')}
+                  style={{ padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: 7, fontSize: 12.5 }} />
+              )}
+              {def.hint && <span style={{ fontSize: 10, color: '#9CA3AF' }}>{def.hint}</span>}
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Main Dashboard Overlay ──────────────────────────────────────────────────
 
-export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, flowsheetId, wsConnected, onClose, compareContent }) {
+export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, flowsheetId, paramDefs, wsConnected, onClose, compareContent }) {
   const status    = useLiveSimStore(s => s.status);
   const startedBy = useLiveSimStore(s => s.startedBy);
   const error     = useLiveSimStore(s => s.error);
@@ -958,7 +1012,7 @@ export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, f
           </div>
         ) : tab === 'diagram' ? (
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-            <LiveDiagram canvasData={canvasData} />
+            <LiveDiagram canvasData={canvasData} sendEvent={sendEvent} paramDefs={paramDefs} />
           </div>
         ) : (
           <>
