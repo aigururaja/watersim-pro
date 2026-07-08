@@ -1161,25 +1161,25 @@ export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, f
             <LiveDiagram canvasData={canvasData} sendEvent={sendEvent} paramDefs={paramDefs} />
           </div>
         ) : (
-          <>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             <div style={{ padding: '10px 20px', borderBottom: '1px solid #E5E7EB' }}>
               <NodeTrendPicker canvasData={canvasData} />
             </div>
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-              <div style={{ flex: 1, padding: '12px 20px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <div style={{ flex: '1 1 480px', padding: '12px 20px', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase' }}>Live Trend</span>
                   <XAxisSelector />
                   <CsvExportButton />
                 </div>
-                <div style={{ flex: 1, minHeight: 200 }}><LiveTrendChart /></div>
+                <div style={{ height: 340 }}><LiveTrendChart /></div>
               </div>
-              <div style={{ width: 320, borderLeft: '1px solid #E5E7EB', padding: '12px 16px', overflowY: 'auto' }}>
+              <div style={{ width: 320, borderLeft: '1px solid #E5E7EB', padding: '12px 16px' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 8 }}>Current Values</div>
                 <ValuesTable />
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
