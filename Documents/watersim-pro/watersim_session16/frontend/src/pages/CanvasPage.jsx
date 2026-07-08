@@ -114,6 +114,8 @@ const PARAM_DEFS = {
     { key: 'SOR_m3_m2_d', label: 'SOR (m³/m²/d)',   type: 'number', step: 2 },
     { key: 'depth_m',     label: 'Depth (m)',         type: 'number', step: 0.5 },
     { key: 'sludge_TSS',  label: 'Sludge TSS (mg/L)', type: 'number', step: 1000 },
+    { key: 'Q_out_m3d',   label: 'Outflow Setpoint (m³/d · 0 = balanced)', type: 'number', step: 100, min: 0,
+      hint: 'Live: outflow < inflow → level rises, > inflow → level falls' },
   ],
   activated_sludge: [
     { key: 'SRT_d',            label: 'SRT (days)',              type: 'number', step: 1 },
@@ -290,7 +292,9 @@ const PARAM_DEFS = {
     { key: 'volume_m3',  label: 'Volume (m³)',  type: 'number', step: 10, min: 0 },
     { key: 'diameter_m', label: 'Diameter (m)', type: 'number', step: 0.5, min: 0 },
     { key: 'height_m',   label: 'Height (m)',   type: 'number', step: 0.5, min: 0 },
-    { key: 'level_pct',  label: 'Level (%)',    type: 'number', step: 1, min: 0, max: 100, hint: 'Operating level — bind to a level sensor' },
+    { key: 'level_pct',  label: 'Starting Level (%)', type: 'number', step: 1, min: 0, max: 100, hint: 'Initial level — also bindable to a sensor' },
+    { key: 'Q_out_m3d',  label: 'Outflow Setpoint (m³/d · 0 = balanced)', type: 'number', step: 100, min: 0,
+      hint: 'Live: outflow < inflow → level rises, > inflow → level falls' },
   ],
   // ── OPC Integration — uses OpcConfigPanel instead of ParamPanel ─────────
   opc_read:  [],

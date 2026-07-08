@@ -54,39 +54,60 @@ class LiveSimulation {
   }
 }
 
+// Unit types that behave as a tank with a stateful level.
+const TANK_LEVEL_TYPES = new Set([
+  'secondary_clarifier', 'primary_clarifier', 'sludge_thickener', 'thickener', 'tank',
+]);
+
+/** Surface area (m²) from geometry, or sized from the flow. */
+function tankArea(params, Q_in) {
+  if (params.diameter_m) return (Math.PI / 4) * Math.pow(Number(params.diameter_m), 2);
+  if (params.volume_m3 && params.height_m) return Number(params.volume_m3) / Number(params.height_m);
+  const SOR = Number(params.SOR_m3_m2_d) || 16;
+  return Q_in > 0 && SOR > 0 ? Q_in / SOR : 100;
+}
+
 /**
- * Integrate stateful tank levels for units where the level accumulates over
- * time from the imbalance between inflow and outflow. Currently: secondary
- * clarifier sludge blanket. Each step ≈ 1 simulated hour.
+ * Tank mass-balance level logic — the level accumulates over time from the
+ * imbalance between inflow and outflow. Each step ≈ 1 simulated hour.
  *
- *   dLevel = (Q_in − Q_out) / area × dt      (Q_out is an editable setpoint;
- *   Q_in > Q_out → level rises,  Q_in < Q_out → level falls)
+ *   dLevel = (Q_in − Q_out) / area × dt
+ *     Q_in  = total flow entering the unit (= sum of its output streams, conserved)
+ *     Q_out = editable outflow setpoint (Q_out_m3d); defaults to Q_in (balanced)
+ *
+ *   Q_in > Q_out → level RISES ▲     Q_in < Q_out → level FALLS ▼
  */
 function integrateTankLevels(sim, result) {
   for (const node of sim.canvasData.nodes || []) {
-    if (node.data?.opType !== 'secondary_clarifier') continue;
+    const op = node.data?.opType;
+    if (!TANK_LEVEL_TYPES.has(op)) continue;
     const ur = result.unitResults[node.id];
     if (!ur) continue;
-    const eff = ur.outputs?.effluent, ras = ur.outputs?.RAS;
-    const Q_in = (eff?.Q || 0) + (ras?.Q || 0);           // conserved influent
+
+    const outputs = ur.outputs || {};
+    const Q_in = Object.values(outputs).reduce((s, o) => s + (o?.Q || 0), 0);   // = inflow (conserved)
     const params = sim.nodeParams[node.id] || {};
     const setOut = params.Q_out_m3d;
     const Q_out = (setOut != null && setOut !== '' && Number(setOut) > 0) ? Number(setOut) : Q_in;
-    const depth = Number(params.depth_m) || 4;
-    const SOR   = Number(params.SOR_m3_m2_d) || 16;
-    const area  = Q_in > 0 && SOR > 0 ? Q_in / SOR : 1;
 
-    const st = sim.tankState[node.id]
-      || (sim.tankState[node.id] = { level: ur.metrics?.blanket_level_m ?? depth * 0.4 });
-    const dLevel = ((Q_in - Q_out) / area) * (1 / 24);    // m per hourly step
+    const depth = Number(params.depth_m) || Number(params.height_m) || 4;
+    const area  = tankArea(params, Q_in);
+
+    const initLevel = ur.metrics?.blanket_level_m
+      ?? (params.level_pct != null && params.level_pct !== '' ? depth * Number(params.level_pct) / 100 : depth * 0.4);
+    const st = sim.tankState[node.id] || (sim.tankState[node.id] = { level: initLevel });
+
+    const dLevel = area > 0 ? ((Q_in - Q_out) / area) * (1 / 24) : 0;   // m per hourly step
     st.level = Math.max(0.05, Math.min(depth, st.level + dLevel));
 
     ur.metrics = ur.metrics || {};
-    ur.metrics.Q_in_m3d        = Math.round(Q_in);
-    ur.metrics.Q_out_m3d       = Math.round(Q_out);
-    ur.metrics.blanket_level_m = +st.level.toFixed(2);
-    ur.metrics.freeboard_m     = +(depth - st.level).toFixed(2);
-    ur.metrics.level_trend     = dLevel > 0.0005 ? 'rising' : dLevel < -0.0005 ? 'falling' : 'steady';
+    ur.metrics.Q_in_m3d       = Math.round(Q_in);
+    ur.metrics.Q_out_m3d      = Math.round(Q_out);
+    ur.metrics.tank_level_m   = +st.level.toFixed(2);
+    ur.metrics.tank_level_pct = +(st.level / depth * 100).toFixed(1);
+    ur.metrics.blanket_level_m = +st.level.toFixed(2);   // clarifier alias
+    ur.metrics.freeboard_m    = +(depth - st.level).toFixed(2);
+    ur.metrics.level_trend    = dLevel > 0.0005 ? 'rising' : dLevel < -0.0005 ? 'falling' : 'steady';
   }
 }
 

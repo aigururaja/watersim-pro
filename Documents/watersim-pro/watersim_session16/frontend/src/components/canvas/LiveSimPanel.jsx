@@ -870,11 +870,11 @@ function drawDiagram(svg, canvasData, latest, onNodeClick) {
     const tt = el('text', { x: x + NW / 2, y: y + 72, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9, fill: DC.ink3 });
     tt.textContent = op; g.appendChild(tt);
     const met = (ur[n.id] && ur[n.id].metrics) || {};
-    if (op.includes('clarifier') && met.blanket_level_m != null) {
+    if (met.tank_level_m != null) {
       const arrow = met.level_trend === 'rising' ? '▲' : met.level_trend === 'falling' ? '▼' : '■';
       const col = met.level_trend === 'rising' ? '#DC2626' : met.level_trend === 'falling' ? '#059669' : DC.accent;
       const vt = el('text', { x: x + NW / 2, y: y + 83, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9.5, 'font-weight': 700, fill: col });
-      vt.textContent = 'Lvl ' + met.blanket_level_m + ' m ' + arrow; g.appendChild(vt);
+      vt.textContent = 'Lvl ' + met.tank_level_m + ' m ' + arrow; g.appendChild(vt);
     } else if (liq) {
       const vt = el('text', { x: x + NW / 2, y: y + 83, 'text-anchor': 'middle', 'font-family': 'ui-monospace,Consolas,monospace', 'font-size': 9.5, 'font-weight': 600, fill: DC.accent });
       vt.textContent = 'Q ' + dfmt(liq.Q) + ' · TSS ' + dfmt(liq.TSS); g.appendChild(vt);
@@ -935,6 +935,26 @@ function LiveDiagram({ canvasData, sendEvent, paramDefs }) {
             <button onClick={() => setSel(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 15 }}>✕</button>
           </div>
           <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 10 }}>Live edit — changes recompute the flow</div>
+          {(() => {
+            const m = latest?.unitResults?.[sel]?.metrics;
+            if (!m || m.tank_level_m == null) return null;
+            const arrow = m.level_trend === 'rising' ? '▲ rising' : m.level_trend === 'falling' ? '▼ falling' : '■ steady';
+            const col = m.level_trend === 'rising' ? '#DC2626' : m.level_trend === 'falling' ? '#059669' : '#0891B2';
+            const row = (k, v) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12 }}>
+                <span style={{ color: '#6B7280' }}>{k}</span><span style={{ fontWeight: 700 }}>{v}</span>
+              </div>
+            );
+            return (
+              <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 8, padding: '8px 10px', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#0369A1', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 2 }}>Tank balance (live)</div>
+                {row('Inflow', (m.Q_in_m3d ?? '—') + ' m³/d')}
+                {row('Outflow', (m.Q_out_m3d ?? '—') + ' m³/d')}
+                {row('Level', m.tank_level_m + ' m (' + m.tank_level_pct + '%)')}
+                <div style={{ textAlign: 'right', fontWeight: 800, color: col, fontSize: 12 }}>{arrow}</div>
+              </div>
+            );
+          })()}
           {defs.length === 0 && <div style={{ fontSize: 12, color: '#9CA3AF' }}>No editable inputs.</div>}
           {defs.map(def => (
             <label key={def.key} style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 9 }}>
