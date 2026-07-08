@@ -137,7 +137,6 @@ const PARAM_DEFS = {
     { key: 'RAS_ratio',   label: 'RAS Ratio',            type: 'number', step: 0.1, min: 0.1, max: 1.5 },
     { key: 'TSS_effluent',label: 'Target Effluent TSS (mg/L)', type: 'number', step: 1 },
     { key: 'depth_m',     label: 'Side Water Depth (m)', type: 'number', step: 0.1, min: 1 },
-    { key: 'level_m',     label: 'Level — Sludge Blanket (m)', type: 'number', step: 0.1, min: 0 },
   ],
   membrane_bioreactor: [
     { key: 'SRT_d',           label: 'SRT (days)',           type: 'number', step: 1 },

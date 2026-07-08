@@ -23,7 +23,6 @@ const DEFAULTS = {
   RAS_ratio:   0.5,
   RAS_TSS:     8000,
   TSS_effluent: 12,
-  level_m:     2.0,   // sludge blanket level (dynamic — from a blanket sensor)
 };
 
 /**
@@ -44,19 +43,24 @@ function solve(inputs, params = {}) {
   const RAS_Q    = inf.Q * p.RAS_ratio;
   const eff_Q    = inf.Q - RAS_Q;
 
-  // Sludge blanket level (dynamic) → effluent solids carry-over.
-  // Below ~70% of the tank depth the blanket is safely contained; as it rises
-  // toward the surface / overflow weirs, solids escape and effluent TSS climbs.
-  const blanket = Number(p.level_m);
-  const depth   = p.depth_m || 4;
+  // ── Sludge blanket LEVEL (output) ────────────────────────────────────────
+  // Level is not a user input — it is set dynamically by the balance of what
+  // comes in against what leaves: it rises with influent solids/flow loading
+  // and hydraulic overflow, and falls as RAS (underflow) withdraws solids.
+  const depth      = p.depth_m || 4;
+  const solidsLoad = inf.Q * MLSS;                        // solids entering (∝ influent flow × MLSS)
+  const underflow  = RAS_Q * p.RAS_TSS;                   // solids removed via RAS underflow
+  const loadRatio  = underflow > 0 ? solidsLoad / underflow : 2;
+  const hydraulic  = Math.min(1.2, p.SOR_m3_m2_d / 24);   // overflow loading vs design limit
+  const blanketFrac = Math.max(0.05, Math.min(1, 0.35 * loadRatio + 0.25 * hydraulic));
+  const level      = +(depth * blanketFrac).toFixed(2);
+
+  // Effluent solids carry-over grows as the blanket rises toward the surface.
   let eff_TSS   = p.TSS_effluent;
   let carryover = 1;
-  if (!Number.isNaN(blanket) && depth > 0) {
-    const ratio = Math.max(0, Math.min(1, blanket / depth));
-    if (ratio > 0.7) {
-      carryover = 1 + 9 * ((ratio - 0.7) / 0.3);       // up to 10× as blanket nears the surface
-      eff_TSS   = +(p.TSS_effluent * carryover).toFixed(1);
-    }
+  if (blanketFrac > 0.7) {
+    carryover = 1 + 9 * ((blanketFrac - 0.7) / 0.3);      // up to 10× as blanket nears the surface
+    eff_TSS   = +(p.TSS_effluent * carryover).toFixed(1);
   }
 
   // Mass balance: all solids settled and split between RAS and effluent carry-over
@@ -100,7 +104,7 @@ function solve(inputs, params = {}) {
   if (SLR > 6.0)  warnings.push(`High solids loading rate (${SLR.toFixed(1)} kg/m²/d)`);
   if (p.SOR_m3_m2_d > 24) warnings.push('SOR exceeds typical design limit (24 m³/m²/d)');
   if (RAS_TSS > 12000) warnings.push('RAS TSS very high — risk of poor settleability');
-  if (carryover > 1) warnings.push(`Sludge blanket high (${blanket.toFixed(2)} m of ${depth} m) — solids carry-over`);
+  if (carryover > 1) warnings.push(`Sludge blanket high (${level.toFixed(2)} m of ${depth} m) — solids carry-over`);
 
   return {
     effluent,
@@ -114,8 +118,8 @@ function solve(inputs, params = {}) {
       RAS_ratio:     p.RAS_ratio,
       RAS_TSS_mg_L:  +RAS_TSS.toFixed(0),
       eff_TSS_mg_L:  eff_TSS,
-      blanket_level_m: Number.isNaN(blanket) ? null : +blanket.toFixed(2),
-      freeboard_m:     Number.isNaN(blanket) ? null : +(depth - blanket).toFixed(2),
+      blanket_level_m:  level,
+      freeboard_m:      +(depth - level).toFixed(2),
       carryover_factor: +carryover.toFixed(2),
       warnings,
     },
