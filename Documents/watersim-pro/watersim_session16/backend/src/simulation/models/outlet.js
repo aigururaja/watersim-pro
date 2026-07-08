@@ -37,8 +37,12 @@ function solve(inputs, params = {}) {
   const inf      = inputs.influent || new Stream();
   const effluent = inf.clone();
 
-  // Merge org permit template over defaults
+  // Merge org permit template over defaults, then any per-node flat limits
   const limits = { ...DEFAULT_LIMITS, ...(params.permitLimits || {}) };
+  for (const k of ['BOD', 'TSS', 'TN', 'TP', 'NH4', 'NO3']) {
+    const v = params[`limit_${k}`];
+    if (v != null && v !== '') limits[k] = Number(v);
+  }
 
   // Effluent quality compliance check
   const flags = [];
