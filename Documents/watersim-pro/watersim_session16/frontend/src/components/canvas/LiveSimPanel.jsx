@@ -537,31 +537,60 @@ function ValuesTable() {
 
 // ── Always-visible KPI strip ────────────────────────────────────────────────
 
-function KpiStrip() {
+function KpiStrip({ canvasData }) {
   const steps  = useLiveSimStore(s => s.steps);
   const latest = steps.length ? steps[steps.length - 1] : null;
   const inf = latest?.summary?.influent || {};
   const eff = latest?.summary?.effluent || {};
   const fmt = v => (v == null ? '—' : (+v).toFixed(0));
+
+  // Held inlet setpoints (the fixed values the sim runs at)
+  const inlets = (canvasData?.nodes || []).filter(n => n.data?.opType === 'inlet');
+  const sp = inlets[0]?.data?.params || {};
+  const spQ = inlets.reduce((s, n) => s + (Number(n.data?.params?.Q) || 0), 0) || sp.Q;
+
   const cell = (label, val, unit, color) => (
-    <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 92 }}>
+    <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 88 }}>
       <span style={{ fontSize: 10, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</span>
       <span style={{ fontSize: 17, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
         {fmt(val)}<span style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 500 }}> {unit}</span>
       </span>
     </div>
   );
+  const chip = (label, val) => (
+    <span key={label} style={{ fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 11, fontWeight: 700, color: '#92400E' }}>
+      {label} <span style={{ fontWeight: 800 }}>{val == null || val === '' ? '—' : val}</span>
+    </span>
+  );
+
   return (
-    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', padding: '11px 20px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-      {cell('Influent Q', inf.Q, 'm³/d', '#1F4E79')}
-      {cell('Influent TSS', inf.TSS, 'mg/L', '#1F4E79')}
-      {cell('Influent BOD', inf.BOD, 'mg/L', '#1F4E79')}
-      <div style={{ width: 1, background: '#E5E7EB', alignSelf: 'stretch' }} />
-      {cell('Effluent Q', eff.Q, 'm³/d', '#059669')}
-      {cell('Effluent TSS', eff.TSS, 'mg/L', '#059669')}
-      {cell('Effluent BOD', eff.BOD, 'mg/L', '#059669')}
-      {cell('Effluent TN', eff.TN, 'mg/L', '#059669')}
-      {cell('Effluent TP', eff.TP, 'mg/L', '#059669')}
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch', padding: '10px 20px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+      {inlets.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 12px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: '.05em', display: 'flex', alignItems: 'center', gap: 5 }}>
+            🔒 Fixed inlet setpoints
+          </span>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {chip('Q', fmt(spQ) + ' m³/d')}
+            {chip('BOD', fmt(sp.BOD))}
+            {chip('TSS', fmt(sp.TSS))}
+            {chip('TN', fmt(sp.TN))}
+            {chip('TP', sp.TP == null ? '—' : sp.TP)}
+            {chip('pH', sp.pH == null ? '—' : sp.pH)}
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {cell('Influent Q', inf.Q, 'm³/d', '#1F4E79')}
+        {cell('Influent TSS', inf.TSS, 'mg/L', '#1F4E79')}
+        {cell('Influent BOD', inf.BOD, 'mg/L', '#1F4E79')}
+        <div style={{ width: 1, background: '#E5E7EB', alignSelf: 'stretch' }} />
+        {cell('Effluent Q', eff.Q, 'm³/d', '#059669')}
+        {cell('Effluent TSS', eff.TSS, 'mg/L', '#059669')}
+        {cell('Effluent BOD', eff.BOD, 'mg/L', '#059669')}
+        {cell('Effluent TN', eff.TN, 'mg/L', '#059669')}
+        {cell('Effluent TP', eff.TP, 'mg/L', '#059669')}
+      </div>
     </div>
   );
 }
@@ -993,8 +1022,8 @@ export default function LiveSimPanel({ sendEvent, buildNodeParams, canvasData, f
         {/* Live device inputs — start/stop the gateway; values override the sim */}
         <LiveInputsBar flowsheetId={flowsheetId} canvasData={canvasData} />
 
-        {/* KPI strip — always visible, informative without any setup */}
-        <KpiStrip />
+        {/* KPI strip — pinned fixed setpoints + live influent/effluent */}
+        <KpiStrip canvasData={canvasData} />
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, padding: '0 20px', borderBottom: '1px solid #E5E7EB' }}>
