@@ -93,7 +93,9 @@ function TransportControls({ sendEvent, buildNodeParams, canvasData, wsConnected
   const speed       = useLiveSimStore(s => s.speed);
   const setSpeed    = useLiveSimStore(s => s.setSpeed);
 
-  const [constantInlet, setConstantInlet] = useState(false);
+  // Default ON: run at the fixed inlet values. Values then change only from the
+  // simulation/calculations (and live edits), not an automatic diurnal drift.
+  const [constantInlet, setConstantInlet] = useState(true);
 
   const isIdle = status === 'idle' || status === 'cancelled';
 
@@ -199,7 +201,7 @@ function TransportControls({ sendEvent, buildNodeParams, canvasData, wsConnected
       {/* Constant inlet toggle */}
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#374151', cursor: 'pointer', marginLeft: 'auto' }}>
         <input type="checkbox" checked={constantInlet} onChange={e => setConstantInlet(e.target.checked)} disabled={!isIdle} />
-        Constant Inlet (no diurnal variation)
+        Fixed inlet values (uncheck for diurnal variation)
       </label>
     </div>
   );
