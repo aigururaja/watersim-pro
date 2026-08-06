@@ -14,6 +14,7 @@ import {
 import api from '../utils/api';
 import AppLayout from '../components/layout/AppLayout';
 import UnitOpNode from '../components/canvas/UnitOpNode';
+import UnitOpIcon, { ICON_OPTIONS } from '../components/canvas/UnitOpIcon';
 import UnitOpPalette from '../components/canvas/UnitOpPalette';
 import LiveConfigPanel from '../components/canvas/LiveConfigPanel';
 import PresenceAvatars from '../components/canvas/PresenceAvatars';
@@ -770,6 +771,18 @@ function CanvasPageInner() {
     setSaved(false);
   }, []);
 
+  // ── Change the icon of an existing node ────────────────────────────────────
+  // Icons are normally fixed at drag-and-drop time from the palette entry.
+  // This lets a placed block be re-skinned without deleting and re-adding it.
+  // Only data.icon changes — opType (and therefore the solver model) is
+  // untouched, so simulation behaviour is unaffected.
+  const updateNodeIcon = useCallback((nodeId, cat) => {
+    const apply = (data) => ({ ...data, icon: cat || undefined });
+    setNodes(ns => ns.map(n => (n.id === nodeId ? { ...n, data: apply(n.data) } : n)));
+    setSelectedNode(sn => (sn?.id === nodeId ? { ...sn, data: apply(sn.data) } : sn));
+    setSaved(false);
+  }, []);
+
   // ── Background OPC polling (runs even when tag table is closed) ──────────
   useOpcPolling(nodes, updateParam);
 
@@ -960,6 +973,8 @@ function CanvasPageInner() {
                       unitResult={simResults?.results?.unitResults?.[selectedNode.id]}
                       onUpdateParam={updateParam}
                       onUpdateBinding={updateLiveBinding}
+                      onUpdateIcon={updateNodeIcon}
+                      canEditIcon={mode === 'design'}
                       onClose={() => setSelectedNode(null)}
                     />
               )}
@@ -1079,7 +1094,7 @@ function CanvasPageInner() {
 
 // ── Param Panel ───────────────────────────────────────────────────────────────
 
-const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onUpdateBinding, onClose }) {
+const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onUpdateBinding, onUpdateIcon, canEditIcon, onClose }) {
   const defs = PARAM_DEFS[node.data.opType] || [];
   const [tab, setTab] = React.useState('sim');
   const liveCount = Object.values(node.data.liveBindings || {}).filter(b => b?.enabled).length;
@@ -1103,6 +1118,49 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
         </div>
         <button style={S.closeBtn} onClick={onClose}>✕</button>
       </div>
+
+      {canEditIcon && onUpdateIcon && (
+        <div style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', background: '#FAFAFA' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>
+            BLOCK ICON
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {ICON_OPTIONS.map(o => {
+              const active = (node.data.icon || '') === o.cat;
+              return (
+                <button
+                  key={o.cat}
+                  type="button"
+                  title={o.label}
+                  aria-label={`Use ${o.label} icon`}
+                  aria-pressed={active}
+                  onClick={() => onUpdateIcon(node.id, o.cat)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 32, height: 32, cursor: 'pointer', borderRadius: 6,
+                    background: active ? '#E0F2FE' : '#fff',
+                    border: `1px solid ${active ? '#0891B2' : '#E5E7EB'}`,
+                  }}
+                >
+                  <UnitOpIcon cat={o.cat} size={20} />
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              title="Reset to the default icon for this unit type"
+              onClick={() => onUpdateIcon(node.id, null)}
+              style={{
+                height: 32, padding: '0 10px', cursor: 'pointer', borderRadius: 6,
+                background: node.data.icon ? '#fff' : '#E0F2FE', fontSize: 11, color: '#6B7280',
+                border: `1px solid ${node.data.icon ? '#E5E7EB' : '#0891B2'}`,
+              }}
+            >
+              Default
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', borderBottom: '1px solid #E5E7EB' }}>
         {tabBtn('sim', 'Simulation')}
