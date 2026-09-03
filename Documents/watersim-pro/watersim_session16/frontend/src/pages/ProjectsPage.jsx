@@ -5,7 +5,7 @@ import AppLayout from '../components/layout/AppLayout';
 import { SkeletonProjectCard } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import { useAnnounce } from '../components/AccessibilityProvider';
-import api from '../utils/api';
+import api from '../services/api';
 
 const PROJECT_TYPES = [
   { value: 'wastewater',        label: 'Wastewater Treatment' },

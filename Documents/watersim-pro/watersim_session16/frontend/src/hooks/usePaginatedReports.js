@@ -7,11 +7,11 @@
  *  – Each batch fetch is O(log n) on the DB index.
  *
  * Usage:
- *   const { runs, loading, loadingMore, error, hasMore, loadMore, refresh, total } =
+ *   const { runs, loading, loadingMore, error, hasMore, loadMore, refresh, patchRun, total } =
  *     usePaginatedReports({ projectId, mode, compliance, limit });
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
-import api from '../utils/api';
+import api from '../services/api';
 
 const DEFAULT_LIMIT = 40;
 
@@ -28,6 +28,7 @@ export function usePaginatedReports({
   const [loading,     setLoading]     = useState(false);  // initial fetch
   const [loadingMore, setLoadingMore] = useState(false);  // subsequent pages
   const [error,       setError]       = useState(null);
+  const [reloadTick,  setReloadTick]  = useState(0);      // bumped by refresh() to re-run the load effect
 
   // Track current filter params so we know when to reset
   const filtersRef = useRef({ projectId, mode, compliance });
@@ -84,9 +85,15 @@ export function usePaginatedReports({
     setCursor(null);
     setRuns([]);
     setHasMore(false);
+    setReloadTick(t => t + 1); // re-triggers the load effect below
   }, []);
 
-  // Re-run load when filters change or after refresh resets cursor
+  // ── Patch a single run in place (e.g. save/unsave metadata) ──────────────
+  const patchRun = useCallback((id, partial) => {
+    setRuns(rs => rs.map(r => (r.id === id ? { ...r, ...partial } : r)));
+  }, []);
+
+  // Re-run load when filters change or after refresh resets the cursor
   useEffect(() => {
     const prev = filtersRef.current;
     const filtersChanged =
@@ -102,19 +109,37 @@ export function usePaginatedReports({
     }
 
     load();
-  }, [projectId, mode, compliance, load]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projectId, mode, compliance, load, reloadTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Infinite scroll sentinel helper ──────────────────────────────────────
-  // Returns a ref to attach to a sentinel div at the bottom of the list.
+  // Returns a callback ref to attach to a sentinel div at the bottom of the
+  // list. Exactly one IntersectionObserver is kept alive at a time; it is
+  // disconnected when the sentinel unmounts or is replaced.
+  const observerRef = useRef(null);
+  const loadMoreRef = useRef(loadMore);
+  useEffect(() => { loadMoreRef.current = loadMore; }, [loadMore]);
+
   const sentinelRef = useCallback((node) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
     if (!node) return;
     const observer = new IntersectionObserver(
-      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      (entries) => { if (entries[0].isIntersecting) loadMoreRef.current(); },
       { rootMargin: '200px' },
     );
     observer.observe(node);
-    // Cleanup handled by GC when node unmounts
-  }, [loadMore]);
+    observerRef.current = observer;
+  }, []);
 
-  return { runs, total, loading, loadingMore, error, hasMore, loadMore, refresh, sentinelRef };
+  // Disconnect any live observer when the consuming component unmounts
+  useEffect(() => () => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+  }, []);
+
+  return { runs, total, loading, loadingMore, error, hasMore, loadMore, refresh, patchRun, sentinelRef };
 }

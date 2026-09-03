@@ -210,7 +210,7 @@ export default function OnboardingWizard({
     firstFocusable?.focus();
 
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') closeWizard();
+      if (e.key === 'Escape') dismissWizard();
       if (e.key === 'Tab') {
         const focusable = Array.from(
           modalRef.current?.querySelectorAll(
@@ -234,16 +234,20 @@ export default function OnboardingWizard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, step]);
 
-  const closeWizard = (goTo) => {
+  // Explicit Finish/Skip (X, "Get started", CTA) marks onboarding complete;
+  // backdrop click / Escape only dismisses, so the tour can reappear later.
+  const closeWizard = (goTo, { markComplete = true } = {}) => {
     setClosing(true);
     setTimeout(() => {
       setVisible(false);
       setClosing(false);
-      markOnboardingComplete(userId);
+      if (markComplete) markOnboardingComplete(userId);
       onComplete?.();
       if (goTo) navigate(goTo);
     }, 200);
   };
+
+  const dismissWizard = () => closeWizard(undefined, { markComplete: false });
 
   if (!visible) return null;
 
@@ -260,7 +264,7 @@ export default function OnboardingWizard({
       aria-modal="true"
       aria-labelledby="onboarding-title"
       aria-describedby="onboarding-body"
-      onClick={(e) => { if (e.target === e.currentTarget) closeWizard(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) dismissWizard(); }}
     >
       <div
         ref={modalRef}

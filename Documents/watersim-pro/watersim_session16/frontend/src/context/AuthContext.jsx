@@ -3,9 +3,11 @@ import { authService } from '../services/auth.service';
 
 const AuthContext = createContext(null);
 
+// Single source of truth for the access token: localStorage (survives tab
+// restarts; the httpOnly refresh cookie remains the security boundary).
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [accessToken, setAccessToken] = useState(() => sessionStorage.getItem('accessToken'));
+  const [accessToken, setAccessToken] = useState(() => localStorage.getItem('accessToken'));
   const [loading, setLoading] = useState(true);
 
   // On mount, try to restore session via refresh token cookie
@@ -15,10 +17,10 @@ export function AuthProvider({ children }) {
         const data = await authService.refresh();
         setUser(data.user);
         setAccessToken(data.accessToken);
-        sessionStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('accessToken', data.accessToken);
       } catch {
         // No valid session — stay logged out
-        sessionStorage.removeItem('accessToken');
+        localStorage.removeItem('accessToken');
       } finally {
         setLoading(false);
       }
@@ -30,7 +32,7 @@ export function AuthProvider({ children }) {
     const data = await authService.login(credentials);
     setUser(data.user);
     setAccessToken(data.accessToken);
-    sessionStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('accessToken', data.accessToken);
     return data;
   }, []);
 
@@ -38,14 +40,14 @@ export function AuthProvider({ children }) {
     try { await authService.logout(); } catch { /* ignore */ }
     setUser(null);
     setAccessToken(null);
-    sessionStorage.removeItem('accessToken');
+    localStorage.removeItem('accessToken');
   }, []);
 
   const refreshToken = useCallback(async () => {
     const data = await authService.refresh();
     setUser(data.user);
     setAccessToken(data.accessToken);
-    sessionStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('accessToken', data.accessToken);
     return data.accessToken;
   }, []);
 

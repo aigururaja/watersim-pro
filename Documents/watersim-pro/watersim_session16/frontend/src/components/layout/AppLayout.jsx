@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   Droplets, LayoutDashboard, FolderOpen, FileText, Settings,
-  LogOut, ChevronLeft, ChevronRight, User, Bell, Menu, X, ShieldCheck,
+  LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck,
 } from 'lucide-react';
 import { OnboardingTrigger } from '../OnboardingWizard';
 
@@ -16,32 +16,19 @@ const baseNavItems = [
 
 const adminNavItem = { icon: ShieldCheck, label: 'Admin', path: '/admin' };
 
-export default function AppLayout({ children }) {
-  const { user, logout } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  // Build nav items — show Admin link for admin and engineer roles
-  const canAccessAdmin = ['admin', 'engineer'].includes(user?.role);
-  const navItems = canAccessAdmin
-    ? [...baseNavItems, adminNavItem]
-    : baseNavItems;
-
-  // Close mobile drawer on route change
-  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
-
-  // Close drawer on resize to desktop
-  useEffect(() => {
-    const fn = () => { if (window.innerWidth >= 768) setDrawerOpen(false); };
-    window.addEventListener('resize', fn);
-    return () => window.removeEventListener('resize', fn);
-  }, []);
-
-  const handleLogout = async () => { await logout(); navigate('/login'); };
-
-  const SidebarContent = ({ mobile = false }) => (
+// Module-scope so React keeps the same component identity across renders —
+// declaring this inside AppLayout remounted the whole sidebar on every render.
+function SidebarContent({
+  mobile = false,
+  collapsed,
+  navItems,
+  user,
+  pathname,
+  onCloseDrawer,
+  onLogout,
+  onToggleCollapse,
+}) {
+  return (
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className={`flex items-center h-14 md:h-16 border-b border-brand-600 flex-shrink-0 px-4 ${mobile ? 'justify-between' : 'gap-3'}`}>
@@ -54,7 +41,7 @@ export default function AppLayout({ children }) {
           )}
         </div>
         {mobile && (
-          <button onClick={() => setDrawerOpen(false)}
+          <button onClick={onCloseDrawer}
             className="p-1.5 rounded-lg text-brand-100 hover:bg-white/10 hover:text-white transition-colors -mr-1">
             <X className="w-5 h-5" />
           </button>
@@ -64,7 +51,7 @@ export default function AppLayout({ children }) {
       {/* Nav */}
       <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto" aria-label="Main navigation">
         {navItems.map(({ icon: Icon, label, path }) => {
-          const active = location.pathname.startsWith(path);
+          const active = pathname.startsWith(path);
           const isAdmin = path === '/admin';
           return (
             <div key={path}>
@@ -102,13 +89,13 @@ export default function AppLayout({ children }) {
             </div>
           </div>
         )}
-        <button onClick={handleLogout}
+        <button onClick={onLogout}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-brand-100 hover:bg-white/10 hover:text-white transition-colors">
           <LogOut className="w-5 h-5 flex-shrink-0" />
           {(!collapsed || mobile) && <span>Sign out</span>}
         </button>
         {!mobile && (
-          <button onClick={() => setCollapsed(c => !c)}
+          <button onClick={onToggleCollapse}
             className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-brand-100 hover:bg-white/10 hover:text-white transition-colors mt-1">
             {collapsed
               ? <ChevronRight className="w-5 h-5" />
@@ -119,6 +106,42 @@ export default function AppLayout({ children }) {
       </div>
     </div>
   );
+}
+
+export default function AppLayout({ children }) {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Build nav items — show Admin link for admin and engineer roles
+  const canAccessAdmin = ['admin', 'engineer'].includes(user?.role);
+  const navItems = canAccessAdmin
+    ? [...baseNavItems, adminNavItem]
+    : baseNavItems;
+
+  // Close mobile drawer on route change
+  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
+
+  // Close drawer on resize to desktop
+  useEffect(() => {
+    const fn = () => { if (window.innerWidth >= 768) setDrawerOpen(false); };
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+
+  const handleLogout = async () => { await logout(); navigate('/login'); };
+
+  const sidebarProps = {
+    collapsed,
+    navItems,
+    user,
+    pathname: location.pathname,
+    onCloseDrawer: () => setDrawerOpen(false),
+    onLogout: handleLogout,
+    onToggleCollapse: () => setCollapsed(c => !c),
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
@@ -126,7 +149,7 @@ export default function AppLayout({ children }) {
       {/* Desktop sidebar */}
       <aside aria-label="Sidebar navigation" className={`hidden md:flex flex-col bg-brand-700 text-white transition-all duration-200 flex-shrink-0
         ${collapsed ? 'w-16' : 'w-60'}`}>
-        <SidebarContent />
+        <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* Mobile drawer backdrop */}
@@ -135,10 +158,10 @@ export default function AppLayout({ children }) {
       )}
 
       {/* Mobile drawer */}
-      <aside aria-label="Mobile navigation" aria-hidden={!drawerOpen} className={`md:hidden fixed top-0 left-0 h-full w-72 max-w-[85vw] bg-brand-700 text-white z-50
+      <aside id="mobile-drawer" aria-label="Mobile navigation" aria-hidden={!drawerOpen} className={`md:hidden fixed top-0 left-0 h-full w-72 max-w-[85vw] bg-brand-700 text-white z-50
         flex flex-col transition-transform duration-300
         ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <SidebarContent mobile />
+        <SidebarContent {...sidebarProps} mobile />
       </aside>
 
       {/* Main area */}
@@ -164,12 +187,6 @@ export default function AppLayout({ children }) {
             {/* Onboarding tour trigger */}
             <OnboardingTrigger userId={user?.id} userName={user?.firstName} />
 
-            <button
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-              aria-label="Notifications"
-            >
-              <Bell className="w-5 h-5" aria-hidden="true" />
-            </button>
             <div
               className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-medium text-sm flex-shrink-0"
               aria-label={`${user?.firstName} ${user?.lastName} — ${user?.role}`}

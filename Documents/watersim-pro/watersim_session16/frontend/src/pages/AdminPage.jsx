@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAnnounce } from '../components/AccessibilityProvider';
 import { SkeletonCard, SkeletonTable } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
-import api from '../utils/api';
+import api from '../services/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

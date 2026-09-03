@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import useAuthStore from '../store/authStore';
+import { useAuth } from '../context/AuthContext';
 
 const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:4000';
 
@@ -18,7 +18,7 @@ const RECONNECT_MAX_MS    = 30_000;
 const RECONNECT_FACTOR    = 1.5;
 
 export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
-  const user     = useAuthStore(s => s.user);
+  const { user } = useAuth();
   const wsRef    = useRef(null);
   const retryRef = useRef(null);
   const delayRef = useRef(RECONNECT_BASE_MS);

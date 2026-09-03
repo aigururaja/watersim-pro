@@ -8,6 +8,7 @@
 
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useReport } from '../hooks/useReport';
+import { downloadFile } from '../utils/download';
 import { useState } from 'react';
 import {
   ArrowLeft, Download, CheckCircle2, XCircle, AlertTriangle,
@@ -159,20 +160,7 @@ export default function ReportPage() {
   const handleExcel = async () => {
     setXlsxLoading(true);
     try {
-      const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
-      const resp  = await fetch(`/api/v1/reports/${runId}/excel`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error(`Excel download failed: ${resp.status}`);
-      const blob = await resp.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      const cd   = resp.headers.get('Content-Disposition') || '';
-      const m    = cd.match(/filename="([^"]+)"/);
-      a.download = m ? m[1] : `watersim_report.xlsx`;
-      a.href = url;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadFile(`/reports/${runId}/excel`, 'watersim_report.xlsx');
     } catch (e) {
       console.error('Excel download error', e);
     } finally {

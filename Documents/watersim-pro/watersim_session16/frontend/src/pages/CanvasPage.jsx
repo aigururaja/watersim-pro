@@ -10,7 +10,8 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar,
 } from 'recharts';
-import api from '../utils/api';
+import api from '../services/api';
+import { downloadFile } from '../utils/download';
 import AppLayout from '../components/layout/AppLayout';
 import UnitOpNode from '../components/canvas/UnitOpNode';
 import UnitOpPalette from '../components/canvas/UnitOpPalette';
@@ -19,6 +20,7 @@ import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCanvasPerf } from '../hooks/useCanvasPerf';
+import { useUndoRedo } from '../hooks/useUndoRedo';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 
@@ -244,9 +246,49 @@ export default function CanvasPage() {
   const [flowsheet, setFlowsheet]   = useState(null);
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(true);
+  // Version conflict from optimistic-concurrency save (409): { currentVersion }
+  // or null. While set, auto-save is paused until the user explicitly reloads.
+  const [saveConflict, setSaveConflict] = useState(null);
+  const [reloading, setReloading]       = useState(false);
+
+  // ── Undo/redo history ──────────────────────────────────────────────────────
+  const {
+    record: recordSnapshot, undo, redo, canUndo, canRedo, clear: clearHistory,
+  } = useUndoRedo();
+
+  // Latest-value refs so history records the post-change state without adding
+  // nodes/edges to every callback's dependency list.
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
+
+  // True while handleRemoteEvent is applying a collaborator's change — those
+  // must NOT create local history entries (each client keeps its own history).
+  const applyingRemoteRef = useRef(false);
+
+  // Record the post-change canvas state one tick later, after React has
+  // committed the setNodes/setEdges from the local action (so the refs above
+  // hold the updated arrays). Rapid bursts coalesce inside the hook.
+  const recordAfterChange = useCallback(() => {
+    if (applyingRemoteRef.current) return;
+    setTimeout(() => {
+      if (applyingRemoteRef.current) return;
+      recordSnapshot(nodesRef.current, edgesRef.current);
+    }, 0);
+  }, [recordSnapshot]);
 
   // ── Collab: remote event handler (must be defined before useCollaboration) ─
   const handleRemoteEvent = useCallback(({ type, payload, from }) => {
+    applyingRemoteRef.current = true;
+    try {
+      applyRemoteEvent({ type, payload, from });
+    } finally {
+      applyingRemoteRef.current = false;
+    }
+  }, []);
+
+  const applyRemoteEvent = ({ type, payload, from }) => {
     switch (type) {
       case 'node:add':
         setNodes(ns => {
@@ -294,7 +336,7 @@ export default function CanvasPage() {
       default:
         break;
     }
-  }, []);
+  };
 
   // ── Collaboration hook ────────────────────────────────────────────────────
   const { sendEvent, presence, self: collabSelf, remoteCursors, simBanner } =
@@ -302,6 +344,10 @@ export default function CanvasPage() {
 
   // Throttled cursor broadcast ref
   const cursorThrottleRef = useRef(null);
+
+  // ReactFlow instance + canvas wrapper (for palette add-at-centre placement)
+  const rfInstanceRef  = useRef(null);
+  const canvasWrapRef  = useRef(null);
 
   // Snapshot state
   const [showSnapModal, setShowSnapModal] = useState(false);
@@ -335,6 +381,9 @@ export default function CanvasPage() {
         setNodes(canvas.nodes || []);
         setEdges(canvas.edges || []);
         idCounter = (canvas.nodes?.length || 0) + 1;
+        // Seed undo history with the loaded state as the baseline entry.
+        clearHistory();
+        recordSnapshot(canvas.nodes || [], canvas.edges || []);
       })
       .catch(() => navigate(`/projects/${projectId}`));
   }, [flowsheetId]);
@@ -351,31 +400,63 @@ export default function CanvasPage() {
     setEdges(eds => addEdge(newEdge, eds));
     setSaved(false);
     sendEvent('edge:add', newEdge);
-  }, [sendEvent]);
+    recordAfterChange();
+  }, [sendEvent, recordAfterChange]);
 
-  // ── Save ───────────────────────────────────────────────────────────────────
+  // ── Save (optimistic concurrency via expectedVersion) ──────────────────────
   const save = useCallback(async () => {
+    if (saveConflict) return; // paused until the version conflict is resolved
     setSaving(true);
     try {
-      await api.patch(`/projects/${projectId}/flowsheets/${flowsheetId}`, {
-        canvasData: { nodes, edges, viewport: { x: 0, y: 0, zoom: 1 } },
-      });
+      const body = { canvasData: { nodes, edges, viewport: { x: 0, y: 0, zoom: 1 } } };
+      if (flowsheet?.version != null) body.expectedVersion = flowsheet.version;
+      const { data } = await api.patch(`/projects/${projectId}/flowsheets/${flowsheetId}`, body);
+      // PATCH returns the updated row (with the incremented `version`) — merge
+      // it in so the next save sends the right expectedVersion.
+      setFlowsheet(f => ({ ...f, ...data }));
       setSaved(true);
     } catch (err) {
-      alert('Save failed: ' + (err.response?.data?.error || err.message));
+      if (err.response?.status === 409) {
+        // Someone else saved a newer version — never overwrite silently.
+        setSaveConflict({ currentVersion: err.response.data?.currentVersion });
+      } else {
+        alert('Save failed: ' + (err.response?.data?.error || err.message));
+      }
     } finally {
       setSaving(false);
     }
-  }, [projectId, flowsheetId, nodes, edges]);
+  }, [projectId, flowsheetId, nodes, edges, flowsheet?.version, saveConflict]);
 
   // ── Debounced auto-save (3 s after last unsaved change) ────────────────────
   const autoSaveTimerRef = useRef(null);
   useEffect(() => {
-    if (saved) return;
+    if (saved || saveConflict) return; // a conflict pauses auto-save until reload
     clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => { save(); }, 3000);
     return () => clearTimeout(autoSaveTimerRef.current);
-  }, [saved, save]);
+  }, [saved, saveConflict, save]);
+
+  // ── Conflict resolution: explicit reload (discards unsaved local changes) ──
+  const reloadFlowsheet = useCallback(async () => {
+    setReloading(true);
+    try {
+      const { data } = await api.get(`/projects/${projectId}/flowsheets/${flowsheetId}`);
+      setFlowsheet(data);
+      const canvas = data.canvas_data || {};
+      setNodes(canvas.nodes || []);
+      setEdges(canvas.edges || []);
+      idCounter = Math.max(idCounter, (canvas.nodes?.length || 0) + 1);
+      setSelectedNode(null);
+      clearHistory();
+      recordSnapshot(canvas.nodes || [], canvas.edges || []);
+      setSaveConflict(null);
+      setSaved(true);
+    } catch (err) {
+      alert('Reload failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setReloading(false);
+    }
+  }, [projectId, flowsheetId, setNodes, setEdges, clearHistory, recordSnapshot]);
 
   const takeSnapshot = async (e) => {
     e?.preventDefault();
@@ -491,17 +572,8 @@ export default function CanvasPage() {
     setEdges(eds => eds.map(e => ({ ...e, data: { ...e.data, streamResult: null } })));
   };
 
-  // ── Drop ───────────────────────────────────────────────────────────────────
-  const onDrop = useCallback((event) => {
-    event.preventDefault();
-    const type  = event.dataTransfer.getData('application/unitop-type');
-    const label = event.dataTransfer.getData('application/unitop-label');
-    if (!type) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const position = {
-      x: event.clientX - bounds.left - 80,
-      y: event.clientY - bounds.top  - 30,
-    };
+  // ── Add nodes (drop + palette keyboard/click) ──────────────────────────────
+  const addNode = useCallback((type, label, position) => {
     const newNode = {
       id:   getId(),
       type: 'unitOp',
@@ -515,14 +587,62 @@ export default function CanvasPage() {
     setNodes(ns => [...ns, newNode]);
     setSaved(false);
     sendEvent('node:add', newNode);
-  }, [sendEvent]);
+    recordAfterChange();
+  }, [sendEvent, recordAfterChange]);
+
+  const onDrop = useCallback((event) => {
+    event.preventDefault();
+    const type  = event.dataTransfer.getData('application/unitop-type');
+    const label = event.dataTransfer.getData('application/unitop-label');
+    if (!type) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const position = {
+      x: event.clientX - bounds.left - 80,
+      y: event.clientY - bounds.top  - 30,
+    };
+    addNode(type, label, position);
+  }, [addNode]);
+
+  // Palette Enter/click handler — places the node at the canvas centre
+  // (keyboard-accessible alternative to drag-and-drop).
+  const addNodeAtCenter = useCallback((type, label) => {
+    let position = {
+      x: 220 + Math.round(Math.random() * 60),
+      y: 140 + Math.round(Math.random() * 60),
+    };
+    const wrap = canvasWrapRef.current;
+    const inst = rfInstanceRef.current;
+    if (wrap && typeof inst?.screenToFlowPosition === 'function') {
+      const b = wrap.getBoundingClientRect();
+      const center = inst.screenToFlowPosition({ x: b.left + b.width / 2, y: b.top + b.height / 2 });
+      // Small jitter so repeated adds don't stack perfectly on top of each other
+      position = {
+        x: center.x - 80 + Math.round(Math.random() * 40 - 20),
+        y: center.y - 30 + Math.round(Math.random() * 40 - 20),
+      };
+    }
+    addNode(type, label, position);
+  }, [addNode]);
 
   const onDragOver = (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; };
 
   const onNodesChangeWrapped = useCallback((changes) => {
     onNodesChange(changes);
     if (changes.some(c => c.type !== 'select' && c.type !== 'dimensions')) setSaved(false);
-  }, [onNodesChange]);
+    // Node delete (Backspace/Delete) arrives here as a 'remove' change.
+    // Per-tick position changes during a drag are NOT recorded — the end of
+    // the drag is (onNodeDragStop).
+    if (changes.some(c => c.type === 'remove')) recordAfterChange();
+  }, [onNodesChange, recordAfterChange]);
+
+  // Edge delete arrives as a 'remove' change on the edges handler.
+  const onEdgesChangeWrapped = useCallback((changes) => {
+    onEdgesChange(changes);
+    if (changes.some(c => c.type === 'remove')) {
+      setSaved(false);
+      recordAfterChange();
+    }
+  }, [onEdgesChange, recordAfterChange]);
 
   // ── Node click → param editor ──────────────────────────────────────────────
   const onNodeClick = useCallback((_evt, node) => {
@@ -543,12 +663,46 @@ export default function CanvasPage() {
     );
     setSaved(false);
     sendEvent('params:update', { nodeId, params: { [key]: value } });
-  }, [sendEvent]);
+    recordAfterChange();
+  }, [sendEvent, recordAfterChange]);
 
-  // Broadcast node position after drag ends
+  // Broadcast node position after drag ends + record ONE history entry for the
+  // whole drag (per-tick position updates were already committed to state).
   const onNodeDragStop = useCallback((_evt, node) => {
     sendEvent('node:move', { id: node.id, position: node.position });
-  }, [sendEvent]);
+    recordAfterChange();
+  }, [sendEvent, recordAfterChange]);
+
+  // ── Undo / redo ────────────────────────────────────────────────────────────
+  const applySnapshot = useCallback((snap) => {
+    if (!snap) return;
+    setNodes(snap.nodes);
+    setEdges(snap.edges);
+    // Keep the param panel consistent with the restored state.
+    setSelectedNode(sn => (sn ? snap.nodes.find(n => n.id === sn.id) || null : sn));
+    // Mark dirty — the normal debounced auto-save (and the usual collab/save
+    // propagation) picks the restored state up; nothing special is broadcast.
+    setSaved(false);
+  }, [setNodes, setEdges]);
+
+  const doUndo = useCallback(() => applySnapshot(undo()), [undo, applySnapshot]);
+  const doRedo = useCallback(() => applySnapshot(redo()), [redo, applySnapshot]);
+
+  // Keyboard: Ctrl/Cmd+Z = undo · Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y = redo.
+  // Ignored while typing in an input/textarea/select or contentEditable.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const el  = e.target;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      const key = (e.key || '').toLowerCase();
+      if (key === 'z' && !e.shiftKey)      { e.preventDefault(); doUndo(); }
+      else if (key === 'z' || key === 'y') { e.preventDefault(); doRedo(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [doUndo, doRedo]);
 
   // Broadcast cursor position (throttled 50 ms)
   const onMouseMoveCanvas = useCallback((evt) => {
@@ -610,7 +764,27 @@ export default function CanvasPage() {
               style={{ ...S.btn, background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', fontSize: 14 }}
               onClick={() => navigate(`/projects/${projectId}/settings`)}
             >⚙</button>
-            <button style={{ ...S.btn, background: '#1F4E79', color: '#fff', opacity: saving ? 0.7 : 1 }} onClick={save} disabled={saving}>
+            <button
+              title="Undo (Ctrl/Cmd+Z)"
+              style={{ ...S.btn, background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', opacity: canUndo ? 1 : 0.45 }}
+              onClick={doUndo}
+              disabled={!canUndo}
+            >
+              ↩ Undo
+            </button>
+            <button
+              title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+              style={{ ...S.btn, background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', opacity: canRedo ? 1 : 0.45 }}
+              onClick={doRedo}
+              disabled={!canRedo}
+            >
+              ↪ Redo
+            </button>
+            <button
+              style={{ ...S.btn, background: '#1F4E79', color: '#fff', opacity: saving || saveConflict ? 0.7 : 1 }}
+              onClick={save}
+              disabled={saving || !!saveConflict}
+            >
               {saving ? 'Saving…' : 'Save'}
             </button>
             <button
@@ -639,21 +813,41 @@ export default function CanvasPage() {
           </div>
         )}
 
-        <div style={S.body}>
-          <UnitOpPalette />
+        {/* Version-conflict banner (409 from optimistic-concurrency save) */}
+        {saveConflict && (
+          <div style={S.errBanner}>
+            ⚠️ This flowsheet was changed elsewhere
+            {saveConflict.currentVersion != null
+              ? ` (now at v${saveConflict.currentVersion} — you loaded v${flowsheet?.version ?? '?'})`
+              : ''}
+            . Saving is paused so your changes don't overwrite theirs.
+            <button
+              style={{ marginLeft: 'auto', padding: '5px 14px', background: '#991B1B', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer', opacity: reloading ? 0.7 : 1, flexShrink: 0 }}
+              onClick={reloadFlowsheet}
+              disabled={reloading}
+              title="Refetch the latest version (discards your unsaved local changes)"
+            >
+              {reloading ? 'Reloading…' : 'Reload latest'}
+            </button>
+          </div>
+        )}
 
-          <div style={S.canvasWrap} onDrop={onDrop} onDragOver={onDragOver} onMouseMove={onMouseMoveCanvas}>
+        <div style={S.body}>
+          <UnitOpPalette onAddNode={addNodeAtCenter} />
+
+          <div ref={canvasWrapRef} style={S.canvasWrap} onDrop={onDrop} onDragOver={onDragOver} onMouseMove={onMouseMoveCanvas}>
             {/* Remote collaborator cursors */}
             <RemoteCursors cursors={remoteCursors} />
             <ReactFlow
               nodes={nodes}
               edges={edges}
               onNodesChange={onNodesChangeWrapped}
-              onEdgesChange={onEdgesChange}
+              onEdgesChange={onEdgesChangeWrapped}
               onConnect={onConnect}
               onNodeClick={onNodeClick}
               onNodeDragStop={onNodeDragStop}
               onPaneClick={() => setSelectedNode(null)}
+              onInit={(instance) => { rfInstanceRef.current = instance; }}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               fitView
@@ -819,9 +1013,23 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
 const SummaryPanel = React.memo(function SummaryPanel({ summary, costBreakdown, unitResults, warnings, runId, projectId, flowsheetId, onClose }) {
   const c = summary.compliant;
   const [showCost, setShowCost] = React.useState(false);
+  const [exporting, setExporting] = React.useState(null); // null | 'csv' | 'json'
 
-  const exportURL = (format) =>
-    `/api/v1/projects/${projectId}/flowsheets/${flowsheetId}/simulate/${runId}/export/${format}`;
+  // Authenticated export via the shared axios client — a bare <a href> cannot
+  // send the Authorization header and 401s.
+  const exportRun = async (format) => {
+    setExporting(format);
+    try {
+      await downloadFile(
+        `/projects/${projectId}/flowsheets/${flowsheetId}/simulate/${runId}/export/${format}`,
+        `watersim_run_${String(runId).slice(0, 8)}.${format}`,
+      );
+    } catch (e) {
+      console.error(`${format.toUpperCase()} export failed`, e);
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const fmt = (n, dp = 0) => (n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: dp }) : '—');
 
@@ -1160,12 +1368,20 @@ const SummaryPanel = React.memo(function SummaryPanel({ summary, costBreakdown, 
             📊 View Full Report & Export PDF
           </a>
           <div style={{ display: 'flex', gap: 8 }}>
-            <a href={exportURL('csv')} download style={S.exportBtn}>
-              📄 CSV
-            </a>
-            <a href={exportURL('json')} download style={{ ...S.exportBtn, background: '#EEF2FF', color: '#3730A3', borderColor: '#C7D2FE' }}>
-              {} JSON
-            </a>
+            <button
+              onClick={() => exportRun('csv')}
+              disabled={!!exporting}
+              style={{ ...S.exportBtn, cursor: 'pointer', opacity: exporting ? 0.6 : 1 }}
+            >
+              {exporting === 'csv' ? '⏳' : '📄'} CSV
+            </button>
+            <button
+              onClick={() => exportRun('json')}
+              disabled={!!exporting}
+              style={{ ...S.exportBtn, background: '#EEF2FF', color: '#3730A3', borderColor: '#C7D2FE', cursor: 'pointer', opacity: exporting ? 0.6 : 1 }}
+            >
+              {exporting === 'json' ? '⏳' : '{ }'} JSON
+            </button>
           </div>
         </div>
       )}

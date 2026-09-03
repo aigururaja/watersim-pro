@@ -12,7 +12,8 @@ import {
   Loader2, ChevronDown, ChevronUp, TrendingDown, TrendingUp,
   Crown, Minus, ExternalLink,
 } from 'lucide-react';
-import api from '../utils/api';
+import api from '../services/api';
+import { downloadFile } from '../utils/download';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -200,19 +201,34 @@ export default function ComparisonPage() {
     if (!runIds.length) { setError('No runs specified'); setLoading(false); return; }
     setLoading(true);
     try {
-      // Use a single API call — load the history and match by ID
-      const { data } = await api.get(`/reports?limit=100`);
-      const allRuns = data.runs || [];
-      // Build map
-      const map = Object.fromEntries(allRuns.map(r => [r.id, r]));
+      // Resolve each selected run's projectId/flowsheetId from the org history.
+      // The history is cursor-paginated, so follow nextCursor until every
+      // selected run is found — a single limit-100 fetch missed older runs.
+      // (There is no JSON endpoint keyed by runId alone; the per-run report
+      // endpoint needs project + flowsheet ids.)
+      const wanted = new Set(runIds);
+      const map = {};
+      let cursor = null;
+      for (let page = 0; page < 20 && wanted.size > 0; page++) {
+        const params = new URLSearchParams({ limit: '100' });
+        if (cursor) params.set('cursor', cursor);
+        const { data } = await api.get(`/reports?${params.toString()}`);
+        for (const r of data.runs || []) {
+          if (wanted.has(r.id)) { map[r.id] = r; wanted.delete(r.id); }
+        }
+        cursor = data.nextCursor;
+        if (!cursor) break;
+      }
 
       // For full results (cost + quality) we need the full report JSON per run
       const fullRuns = await Promise.all(
-        runIds.map(id =>
-          api.get(`/projects/${map[id]?.projectId}/flowsheets/${map[id]?.flowsheetId}/simulate/${id}/report`)
-            .then(r => ({ ...r.data, _meta: map[id] }))
-            .catch(() => null)
-        )
+        runIds.map(id => {
+          const meta = map[id];
+          if (!meta) return null;
+          return api.get(`/projects/${meta.projectId}/flowsheets/${meta.flowsheetId}/simulate/${id}/report`)
+            .then(r => ({ ...r.data, _meta: meta }))
+            .catch(() => null);
+        })
       );
 
       const valid = fullRuns.filter(Boolean);
@@ -222,29 +238,17 @@ export default function ComparisonPage() {
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load runs');
     } finally { setLoading(false); }
-  }, [runIds.join(',')]);
+  }, [runIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
   const handleExcel = async () => {
     setExporting(true);
     try {
-      const token = localStorage.getItem('accessToken');
-      const resp  = await fetch('/api/v1/reports/compare/excel', {
+      await downloadFile('/reports/compare/excel', 'watersim_comparison.xlsx', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ runIds, labels }),
+        data: { runIds, labels },
       });
-      if (!resp.ok) throw new Error('Export failed');
-      const blob = await resp.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      const cd   = resp.headers.get('Content-Disposition') || '';
-      const m    = cd.match(/filename="([^"]+)"/);
-      a.download = m ? m[1] : 'watersim_comparison.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
     } catch { /* silent */ }
     finally { setExporting(false); }
   };

@@ -12,7 +12,7 @@ import {
   FileText, Download, Bookmark, BookmarkCheck, SlidersHorizontal,
   CheckCircle2, XCircle, AlertTriangle,
   Loader2, RefreshCw, GitCompare, X, ChevronDown,
-  ArrowRight, Clock, Layers, Search,
+  ArrowRight, Clock, Layers, Search, TableIcon,
 } from 'lucide-react';
 import AppLayout from '../components/layout/AppLayout';
 import { useAuth } from '../context/AuthContext';
@@ -20,7 +20,8 @@ import { useAnnounce } from '../components/AccessibilityProvider';
 import EmptyState from '../components/EmptyState';
 import VirtualTable from '../components/VirtualTable';
 import { usePaginatedReports } from '../hooks/usePaginatedReports';
-import api from '../utils/api';
+import api from '../services/api';
+import { downloadFile } from '../utils/download';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -119,111 +120,8 @@ function SaveModal({ run, onClose, onSaved }) {
   );
 }
 
-// ── RunRow ─────────────────────────────────────────────────────────────────────
-
-function RunRow({ run, selected, onSelect, onSave, onUnsave, showSelect }) {
-  const [downloading, setDownloading] = useState(null); // null | 'pdf' | 'excel'
-
-  const downloadExcel = async () => {
-    setDownloading('excel');
-    try {
-      const token = localStorage.getItem('accessToken');
-      const resp  = await fetch(`/api/v1/reports/${run.id}/excel`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error('Download failed');
-      const blob = await resp.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      const cd   = resp.headers.get('Content-Disposition') || '';
-      const m    = cd.match(/filename="([^"]+)"/);
-      a.download = m ? m[1] : `watersim_report.xlsx`;
-      a.href = url;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('Excel download failed', e);
-    } finally { setDownloading(null); }
-  };
-
-  const inf = run.summary?.influent || {};
-  const eff = run.summary?.effluent || {};
-  const bodRem = inf.BOD && eff.BOD
-    ? Math.round((inf.BOD - eff.BOD) / inf.BOD * 100) + '%'
-    : '—';
-  const unitCost = run.costSummary?.cost_per_m3_treated_USD;
-
-  return (
-    <tr className={`border-t border-gray-100 hover:bg-gray-50 transition-colors ${selected ? 'bg-brand-50' : ''}`}>
-      {showSelect && (
-        <td className="px-3 py-3 w-10">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => onSelect(run.id)}
-            aria-label={`Select ${run.flowsheetName} for comparison`}
-            className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-          />
-        </td>
-      )}
-      <td className="px-3 py-3 min-w-0">
-        <p className="text-sm font-semibold text-gray-900 truncate">{run.flowsheetName}</p>
-        <p className="text-xs text-gray-500 truncate">{run.projectName}</p>
-        {run.saved && run.savedLabel && (
-          <p className="text-xs text-brand-600 font-medium truncate mt-0.5">
-            <Bookmark className="w-3 h-3 inline -mt-0.5 mr-0.5" />{run.savedLabel}
-          </p>
-        )}
-      </td>
-      <td className="px-3 py-3 hidden sm:table-cell"><ModePill mode={run.mode} /></td>
-      <td className="px-3 py-3 hidden md:table-cell"><CompliancePill summary={run.summary} /></td>
-      <td className="px-3 py-3 hidden lg:table-cell text-xs text-gray-600 text-right font-mono">{bodRem}</td>
-      <td className="px-3 py-3 hidden xl:table-cell text-xs text-gray-600 text-right font-mono">
-        {unitCost != null ? fmtNum(unitCost, 3) : '—'}
-      </td>
-      <td className="px-3 py-3 hidden lg:table-cell text-xs text-gray-500 whitespace-nowrap">
-        {fmtDateShort(run.completedAt)}
-      </td>
-      <td className="px-3 py-3 text-right">
-        <div className="flex items-center justify-end gap-1">
-          {/* Save/unsave */}
-          <button
-            onClick={() => run.saved ? onUnsave(run) : onSave(run)}
-            aria-label={run.saved ? `Unsave ${run.flowsheetName}` : `Save ${run.flowsheetName}`}
-            title={run.saved ? 'Remove from saved' : 'Save report'}
-            className={`p-1.5 rounded-lg transition-colors ${run.saved ? 'text-brand-600 hover:bg-brand-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
-          >
-            {run.saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
-          </button>
-
-          {/* Excel download */}
-          <button
-            onClick={downloadExcel}
-            disabled={!!downloading}
-            aria-label={`Export ${run.flowsheetName} as Excel`}
-            title="Export as Excel"
-            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40"
-          >
-            {downloading === 'excel' ? <Loader2 className="w-4 h-4 animate-spin" /> : <TableIcon className="w-4 h-4" />}
-          </button>
-
-          {/* Open report link */}
-          <Link
-            to={`/projects/${run.projectId}/flowsheets/${run.flowsheetId}/simulate/${run.id}/report`}
-            aria-label={`Open full report for ${run.flowsheetName}`}
-            className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-            title="View full report"
-          >
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
 // ── RunActions ───────────────────────────────────────────────────────────────
-// Extracted from RunRow for use inside VirtualTable column renderers.
+// Used inside VirtualTable column renderers.
 
 function RunActions({ run, onSave, onUnsave }) {
   const [downloading, setDownloading] = useState(false);
@@ -232,20 +130,7 @@ function RunActions({ run, onSave, onUnsave }) {
     e.stopPropagation();
     setDownloading(true);
     try {
-      const token = localStorage.getItem('accessToken');
-      const resp  = await fetch(`/api/v1/reports/${run.id}/excel`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error('Download failed');
-      const blob = await resp.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      const cd   = resp.headers.get('Content-Disposition') || '';
-      const m    = cd.match(/filename="([^"]+)"/);
-      a.download = m ? m[1] : 'watersim_report.xlsx';
-      a.href = url;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadFile(`/reports/${run.id}/excel`, 'watersim_report.xlsx');
     } catch (e) {
       console.error('Excel download failed', e);
     } finally { setDownloading(false); }
@@ -427,7 +312,7 @@ export default function ReportsPage() {
   // ── Cursor-based infinite-scroll pagination ─────────────────────────────
   const {
     runs, total, loading, loadingMore, error: runsError,
-    hasMore, loadMore, refresh, sentinelRef,
+    hasMore, loadMore, refresh, patchRun, sentinelRef,
   } = usePaginatedReports({
     projectId:  filters.projectId,
     mode:       filters.mode,
@@ -473,10 +358,7 @@ export default function ReportsPage() {
     showToast('Report saved');
     announce('Report saved');
     // Update in-place
-    setRuns(rs => rs.map(r => r.id === run.id
-      ? { ...r, saved: true, savedLabel: meta.label, savedNotes: meta.notes }
-      : r
-    ));
+    patchRun(run.id, { saved: true, savedLabel: meta.label, savedNotes: meta.notes });
     await loadSaved();
   };
 
@@ -485,10 +367,7 @@ export default function ReportsPage() {
       await api.delete(`/reports/saved/${run.id}`);
       showToast('Removed from saved');
       announce('Report removed from saved');
-      setRuns(rs => rs.map(r => r.id === run.id
-        ? { ...r, saved: false, savedLabel: null, savedNotes: null }
-        : r
-      ));
+      patchRun(run.id, { saved: false, savedLabel: null, savedNotes: null });
       setSavedRuns(rs => rs.filter(r => r.id !== run.id));
     } catch { showToast('Remove failed', false); }
   };
@@ -512,20 +391,10 @@ export default function ReportsPage() {
     const allRuns = [...runs, ...savedRuns];
     const labels  = runIds.map(id => allRuns.find(r => r.id === id)?.flowsheetName || '');
     try {
-      const token = localStorage.getItem('accessToken');
-      const resp  = await fetch('/api/v1/reports/compare/excel', {
+      await downloadFile('/reports/compare/excel', 'watersim_comparison.xlsx', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ runIds, labels }),
+        data: { runIds, labels },
       });
-      if (!resp.ok) throw new Error('Export failed');
-      const blob = await resp.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = 'watersim_comparison.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
       showToast('Comparison Excel exported');
     } catch { showToast('Export failed', false); }
   };

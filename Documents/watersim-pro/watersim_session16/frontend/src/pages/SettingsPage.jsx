@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import api from '../utils/api';
+import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import AppLayout from '../components/layout/AppLayout';
 
@@ -268,7 +268,9 @@ export default function SettingsPage() {
   const canEdit   = ['admin', 'engineer'].includes(user?.role);
   const canDelete = user?.role === 'admin';
 
-  const [activeTab, setActiveTab] = useState('permits');
+  // Per-project settings route (/projects/:projectId/settings) is for cost
+  // coefficients — open that tab directly; the org-level route opens permits.
+  const [activeTab, setActiveTab] = useState(projectId ? 'costs' : 'permits');
 
   const [templates, setTemplates]   = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -475,7 +477,6 @@ export default function SettingsPage() {
             Your current role: <strong style={{ color: '#1D4ED8' }}>{user?.role}</strong>
           </p>
         </section>
-      </div>
 
         </> )}  {/* end permits tab */}
 
@@ -496,6 +497,7 @@ export default function SettingsPage() {
           onUpdateLimit={updateLimit}
         />
       )}
+      </div>
     </AppLayout>
   );
 }

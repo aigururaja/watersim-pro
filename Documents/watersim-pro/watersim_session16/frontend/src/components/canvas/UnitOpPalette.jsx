@@ -47,7 +47,6 @@ const PALETTE = [
       { type: 'coagulant_dosing', label: 'Coagulant (Alum/FeCl₃)' },
       { type: 'polymer_dosing',   label: 'Polymer Dosing' },
       { type: 'ph_adjustment',    label: 'pH Adjustment' },
-      { type: 'chlorination',     label: 'Chlorination / Disinfection' },
     ]
   },
   {
@@ -69,19 +68,33 @@ const PALETTE = [
   },
 ];
 
-function PaletteItem({ type, label }) {
+function PaletteItem({ type, label, onAdd }) {
   const onDragStart = (e) => {
     e.dataTransfer.setData('application/unitop-type', type);
     e.dataTransfer.setData('application/unitop-label', label);
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  const handleAdd = () => onAdd?.(type, label);
+
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleAdd();
+    }
+  };
+
   return (
     <div
       draggable
+      role="button"
+      tabIndex={0}
+      aria-label={`Add ${label} to canvas`}
       onDragStart={onDragStart}
+      onClick={handleAdd}
+      onKeyDown={onKeyDown}
       style={styles.item}
-      title={`Drag to add: ${label}`}
+      title={`Click or press Enter to add · drag to place: ${label}`}
     >
       <span style={styles.itemText}>{label}</span>
       <span style={styles.dragHint}>⠿</span>
@@ -89,7 +102,7 @@ function PaletteItem({ type, label }) {
   );
 }
 
-export default function UnitOpPalette() {
+export default function UnitOpPalette({ onAddNode }) {
   // On mobile, palette collapses to a toggle button
   const [open, setOpen] = useState(false);
 
@@ -138,12 +151,12 @@ export default function UnitOpPalette() {
             <div key={group.category} style={styles.group}>
               <div style={styles.groupTitle}>{group.category}</div>
               {group.items.map(item => (
-                <PaletteItem key={item.type} {...item} />
+                <PaletteItem key={item.type} {...item} onAdd={onAddNode} />
               ))}
             </div>
           ))}
         </div>
-        <div style={styles.hint}>Drag items onto the canvas</div>
+        <div style={styles.hint}>Drag onto the canvas, or press Enter to add at centre</div>
       </aside>
     </>
   );

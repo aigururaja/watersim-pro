@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api from '../services/api';
 import AppLayout from '../components/layout/AppLayout';
 import { SkeletonFlowsheetCard } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
@@ -359,7 +359,7 @@ function FlowsheetCard({ fs, onOpen, onSnapshot, onDelete, deleting }) {
           {hover && (
             <>
               <button title="Save snapshot" style={S.iconBtn} onClick={e => { e.stopPropagation(); onSnapshot(); }}>
-                \u{1F4F8}
+                {'\u{1F4F8}'}
               </button>
               <button title="Delete flowsheet" style={{ ...S.iconBtn, color: '#DC2626' }}
                 onClick={e => { e.stopPropagation(); onDelete(); }} disabled={deleting}>
@@ -372,12 +372,12 @@ function FlowsheetCard({ fs, onOpen, onSnapshot, onDelete, deleting }) {
       {fs.description && <p style={S.cardDesc}>{fs.description}</p>}
       <div style={S.cardMeta}>
         <span>v{fs.version}</span>
-        <span>\u00b7</span>
+        <span>·</span>
         <span>{fs.created_by_name || 'Unknown'}</span>
-        <span>\u00b7</span>
+        <span>·</span>
         <span>{new Date(fs.updated_at).toLocaleDateString()}</span>
       </div>
-      {hover && <div style={{ marginTop: 10 }}><span style={S.openHint}>Open \u2192</span></div>}
+      {hover && <div style={{ marginTop: 10 }}><span style={S.openHint}>Open →</span></div>}
     </div>
   );
 }
@@ -396,9 +396,9 @@ function SnapshotCard({ snap, onRestore, onDelete, restoring, deleting }) {
       {snap.description && <p style={S.cardDesc}>{snap.description}</p>}
       <div style={S.cardMeta}>
         <span>v{snap.version}</span>
-        <span>\u00b7</span>
+        <span>·</span>
         <span>{snap.created_by_name || 'Unknown'}</span>
-        <span>\u00b7</span>
+        <span>·</span>
         <span>{new Date(snap.created_at).toLocaleDateString()}</span>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
@@ -414,9 +414,6 @@ function SnapshotCard({ snap, onRestore, onDelete, restoring, deleting }) {
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
-
-// Responsive helper: clamp padding based on viewport
-const isMobile = () => typeof window !== 'undefined' && window.innerWidth < 640;
 
 const S = {
   page:       { padding: 'clamp(16px, 4vw, 40px)', maxWidth: 1100, margin: '0 auto' },
