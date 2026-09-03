@@ -87,6 +87,26 @@ async function getClient() {
 }
 
 /**
+ * Run a function inside a transaction.
+ * Automatically commits on success, rolls back on error.
+ * The callback receives a dedicated client: `withTransaction(async (client) => { ... })`.
+ */
+async function withTransaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Test connectivity — used by /health endpoint.
  * Returns { now, db } from the server.
  */
@@ -100,4 +120,4 @@ async function testConnection() {
   }
 }
 
-module.exports = { query, getClient, testConnection, pool };
+module.exports = { query, getClient, withTransaction, testConnection, pool };

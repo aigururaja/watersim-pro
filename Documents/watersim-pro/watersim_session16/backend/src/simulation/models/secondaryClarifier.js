@@ -9,8 +9,10 @@
  * Parameters:
  *   SOR_m3_m2_d    surface overflow rate (m³/m²/d)       default 16
  *   depth_m        side water depth (m)                   default 4.0
- *   RAS_ratio      RAS flow / influent flow               default 0.5
- *   RAS_TSS        RAS TSS concentration (mg/L)           default 8000
+ *   RAS_ratio      RAS flow / plant influent flow         default 0.5
+ *   RAS_TSS        target RAS thickening (mg/L)           default 8000
+ *                  (informational — actual RAS TSS is mass-balance derived;
+ *                   a warning is emitted when it falls below this target)
  *   TSS_effluent   effluent TSS target (mg/L)             default 12
  *   thickening     thickening factor (MLSS → RAS)         auto from RAS_ratio
  */
@@ -36,48 +38,40 @@ function solve(inputs, params = {}) {
 
   const area_m2   = inf.Q / p.SOR_m3_m2_d;
   const volume_m3 = area_m2 * p.depth_m;
-  const HRT_h     = volume_m3 / inf.Q * 24;
+  const HRT_h     = inf.Q > 0 ? volume_m3 / inf.Q * 24 : 0;
 
   // Solids flux
-  const MLSS     = inf.TSS;
-  const RAS_Q    = inf.Q * p.RAS_ratio;
-  const eff_Q    = inf.Q - RAS_Q;
+  const MLSS = inf.TSS;
+  // RAS draw: the clarifier inflow already contains the recycle it feeds
+  // (inf.Q = Q_plant·(1+R) at convergence), so drawing RAS_Q = inf.Q·R/(1+R)
+  // returns exactly Q_plant·R and the converged recycle ratio relative to the
+  // plant influent equals the user's R. (RAS_Q = inf.Q·R would double it.)
+  const R     = p.RAS_ratio;
+  const RAS_Q = inf.Q * R / (1 + R);
+  const eff_Q = inf.Q - RAS_Q;
 
   // Mass balance: all solids settled and split between RAS and effluent carry-over
   const solids_in_kgd  = inf.Q * MLSS / 1000;
-  const eff_TSS        = p.TSS_effluent;
+  const eff_TSS        = Math.min(p.TSS_effluent, MLSS);
   const solids_eff     = eff_Q * eff_TSS / 1000;
-  const solids_RAS     = solids_in_kgd - solids_eff;
-  const RAS_TSS        = solids_RAS * 1000 / RAS_Q;  // mg/L
+  const solids_RAS     = Math.max(0, solids_in_kgd - solids_eff);
+  const RAS_TSS        = RAS_Q > 0 ? solids_RAS * 1000 / RAS_Q : 0;  // mg/L — mass-balance derived
 
   // State point check — simplified
-  const SLR = solids_in_kgd / area_m2;   // kg TSS / m²/d
+  const SLR = area_m2 > 0 ? solids_in_kgd / area_m2 : 0;   // kg TSS / m²/d
 
+  // Soluble constituents (BOD, COD, N species, P, pH) leave in both streams at
+  // the mixed-liquor concentration — conserved by construction. TSS is the
+  // separated component and comes from the solids mass balance above.
   const effluent = inf.clone({
     Q:   eff_Q,
     TSS: eff_TSS,
-    BOD: inf.BOD * (eff_Q / inf.Q) * 0.95,
-    COD: inf.COD * (eff_Q / inf.Q) * 0.97,
-    TN:  inf.TN,
-    NH4: inf.NH4,
-    NO3: inf.NO3,
-    NO2: inf.NO2,
-    TP:  inf.TP  * 0.90,
-    DO:  inf.DO  * 0.85,
-    pH:  inf.pH,
-    temp:inf.temp,
   });
 
   const RAS = inf.clone({
     Q:   RAS_Q,
-    TSS: Math.max(p.RAS_TSS, RAS_TSS),
-    BOD: inf.BOD * 0.1,
-    COD: inf.COD * 0.1,
-    NO3: inf.NO3,  // RAS carries nitrified NO3 back to anoxic zone
-    NO2: inf.NO2,
+    TSS: RAS_TSS,
     DO:  0.5,
-    pH:  inf.pH,
-    temp:inf.temp,
   });
 
   // Warning flags
@@ -85,6 +79,11 @@ function solve(inputs, params = {}) {
   if (SLR > 6.0)  warnings.push(`High solids loading rate (${SLR.toFixed(1)} kg/m²/d)`);
   if (p.SOR_m3_m2_d > 24) warnings.push('SOR exceeds typical design limit (24 m³/m²/d)');
   if (RAS_TSS > 12000) warnings.push('RAS TSS very high — risk of poor settleability');
+  if (RAS_Q > 0 && RAS_TSS < p.RAS_TSS) {
+    warnings.push(
+      `RAS TSS from mass balance (${RAS_TSS.toFixed(0)} mg/L) is below the target thickening of ${p.RAS_TSS} mg/L — ` +
+      `check MLSS, RAS ratio, or clarifier loading`);
+  }
 
   return {
     effluent,
@@ -96,6 +95,7 @@ function solve(inputs, params = {}) {
       SOR_m3_m2_d:   p.SOR_m3_m2_d,
       SLR_kg_m2_d:   +SLR.toFixed(2),
       RAS_ratio:     p.RAS_ratio,
+      RAS_Q_m3_d:    +RAS_Q.toFixed(1),
       RAS_TSS_mg_L:  +RAS_TSS.toFixed(0),
       eff_TSS_mg_L:  eff_TSS,
       warnings,

@@ -2,6 +2,7 @@ const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const { query } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -40,8 +41,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// POST /api/v1/projects
-router.post('/', [
+// POST /api/v1/projects (engineer+)
+router.post('/', requireRole('engineer'), [
   body('name').trim().isLength({ min: 1, max: 200 }).withMessage('Name required (max 200 chars)'),
   body('description').optional().trim(),
   body('projectType').isIn(['wastewater', 'water_purification', 'combined'])
@@ -56,6 +57,7 @@ router.post('/', [
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [orgId(req), userId(req), name, description || null, projectType, tags || []]
     );
+    auditLog(req, 'project.create', 'project', result.rows[0].id, { name });
     logger.info('Project created', { projectId: result.rows[0].id, userId: userId(req) });
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -82,8 +84,8 @@ router.get('/:id', [param('id').isUUID()], async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PATCH /api/v1/projects/:id
-router.patch('/:id', [
+// PATCH /api/v1/projects/:id (engineer+)
+router.patch('/:id', requireRole('engineer'), [
   param('id').isUUID(),
   body('name').optional().trim().isLength({ min: 1, max: 200 }),
   body('description').optional().trim(),
@@ -110,6 +112,7 @@ router.patch('/:id', [
       vals
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Project not found' });
+    auditLog(req, 'project.update', 'project', req.params.id, { fields: Object.keys(req.body) });
     res.json(result.rows[0]);
   } catch (err) { next(err); }
 });
@@ -165,6 +168,7 @@ router.put('/:id/unit-costs', requireRole('engineer'), [
     );
     if (!r.rows[0]) return res.status(404).json({ error: 'Project not found' });
     const overrides = r.rows[0].settings?.unitCosts || {};
+    auditLog(req, 'project.update', 'project', req.params.id, { unitCosts: sanitized });
     logger.info('Unit costs updated', { projectId: req.params.id, userId: userId(req) });
     res.json({
       defaults:  DEFAULT_UNIT_COSTS,
@@ -185,6 +189,7 @@ router.delete('/:id/unit-costs', requireRole('engineer'), [param('id').isUUID()]
       `UPDATE projects SET settings = settings - 'unitCosts' WHERE id = $1 AND organisation_id = $2`,
       [req.params.id, orgId(req)]
     );
+    auditLog(req, 'project.update', 'project', req.params.id, { unitCostsReset: true });
     logger.info('Unit costs reset', { projectId: req.params.id, userId: userId(req) });
     res.json({ defaults: DEFAULT_UNIT_COSTS, overrides: {}, effective: DEFAULT_UNIT_COSTS });
   } catch (err) { next(err); }
@@ -199,6 +204,7 @@ router.delete('/:id', requireRole('engineer'), [param('id').isUUID()], async (re
       [req.params.id, orgId(req)]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Project not found' });
+    auditLog(req, 'project.delete', 'project', req.params.id, {});
     logger.info('Project deleted', { projectId: req.params.id, userId: userId(req) });
     res.json({ message: 'Project deleted' });
   } catch (err) { next(err); }

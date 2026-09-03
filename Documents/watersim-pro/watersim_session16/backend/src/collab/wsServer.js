@@ -4,13 +4,17 @@
  * Uses the `ws` package (no socket.io dependency).
  *
  * Rooms are keyed by flowsheetId.
- * Auth: JWT validated on upgrade handshake.
+ * Auth: JWT validated on upgrade handshake, then flowsheet→project→org
+ * ownership verified against the DB before the upgrade completes.
  */
 
 const { WebSocketServer } = require('ws');
 const { parse: parseUrl } = require('url');
 const jwtUtils = require('../utils/jwt');
 const logger   = require('../utils/logger');
+const { pool } = require('../db/pool');
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ── Colour palette for presence avatars ─────────────────────────────────────
 const PRESENCE_COLORS = [
@@ -80,11 +84,51 @@ function cleanThrottles(ws) {
   }
 }
 
+// ── Message allowlist + shape validation ─────────────────────────────────────
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isFiniteNum   = (v) => typeof v === 'number' && Number.isFinite(v);
+
+// type → payload validator. Anything not listed here is dropped.
+const MESSAGE_VALIDATORS = {
+  'node:move':     (p) => isPlainObject(p) && typeof p.id === 'string'
+                          && isPlainObject(p.position)
+                          && isFiniteNum(p.position.x) && isFiniteNum(p.position.y),
+  'node:add':      (p) => isPlainObject(p) && typeof p.id === 'string',
+  'node:delete':   (p) => isPlainObject(p) && typeof p.id === 'string',
+  'edge:add':      (p) => isPlainObject(p) && typeof p.id === 'string',
+  'edge:delete':   (p) => isPlainObject(p) && typeof p.id === 'string',
+  'params:update': (p) => isPlainObject(p) && typeof p.nodeId === 'string'
+                          && isPlainObject(p.params),
+  'sim:running':   (p) => isPlainObject(p),
+  'sim:result':    (p) => isPlainObject(p),
+  'cursor:move':   (p) => isPlainObject(p) && isFiniteNum(p.x) && isFiniteNum(p.y),
+};
+
+// ── Per-connection rate limiting (token bucket) ─────────────────────────────
+const RATE_PER_SEC = 50;   // sustained messages/sec
+const BURST        = 100;  // bucket capacity
+
+function makeBucket() {
+  return { tokens: BURST, last: Date.now() };
+}
+
+function takeToken(bucket) {
+  const now = Date.now();
+  bucket.tokens = Math.min(BURST, bucket.tokens + ((now - bucket.last) / 1000) * RATE_PER_SEC);
+  bucket.last = now;
+  if (bucket.tokens < 1) return false;
+  bucket.tokens -= 1;
+  return true;
+}
+
+// ── Heartbeat ────────────────────────────────────────────────────────────────
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
 // ── Main setup function ──────────────────────────────────────────────────────
 function attachWsServer(httpServer) {
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
 
-  // -- Upgrade: validate JWT from ?token= query param -----------------------
+  // -- Upgrade: validate JWT from ?token= query param ------------------------
   httpServer.on('upgrade', (req, socket, head) => {
     const { pathname, query } = parseUrl(req.url, true);
 
@@ -112,19 +156,58 @@ function attachWsServer(httpServer) {
 
     // Extract flowsheetId from /ws/flowsheets/:flowsheetId
     const match = pathname.match(/^\/ws\/flowsheets\/([^/]+)$/);
-    if (!match) {
+    if (!match || !UUID_RE.test(match[1])) {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();
       return;
     }
-
     const flowsheetId = match[1];
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req, { user, flowsheetId });
+
+    // Tenancy check: the flowsheet must belong to a project in the user's org.
+    pool.query(
+      `SELECT f.id
+       FROM flowsheets f
+       JOIN projects p ON p.id = f.project_id
+       WHERE f.id = $1 AND p.organisation_id = $2 AND p.status != 'deleted'`,
+      [flowsheetId, user.org]
+    ).then((r) => {
+      if (socket.destroyed) return;
+      if (!r.rows.length) {
+        logger.warn('WS upgrade rejected: flowsheet not in user org', {
+          userId: user.sub || user.id, flowsheetId,
+        });
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req, { user, flowsheetId });
+      });
+    }).catch((err) => {
+      logger.error('WS upgrade org check failed', { err: err.message });
+      if (!socket.destroyed) {
+        socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+        socket.destroy();
+      }
     });
   });
 
-  // -- Connection handler ---------------------------------------------------
+  // -- Heartbeat: ping every 30s, drop sockets that miss a pong --------------
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) {
+        // terminate() emits 'close', which removes the socket from its room
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      try { ws.ping(); } catch { /* socket already gone */ }
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref();
+  wss.on('close', () => clearInterval(heartbeat));
+
+  // -- Connection handler ----------------------------------------------------
   wss.on('connection', (ws, _req, { user, flowsheetId }) => {
     const room     = getRoom(flowsheetId);
     const initials = (user.name || user.email || 'U')
@@ -140,6 +223,11 @@ function attachWsServer(httpServer) {
       color:       nextColor(),
       initials,
     };
+
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+
+    const bucket = makeBucket();
 
     room.set(ws, peer);
     logger.info('WS connected', { userId: peer.userId, flowsheetId, online: room.size });
@@ -160,11 +248,33 @@ function attachWsServer(httpServer) {
 
     // -- Message handler ----------------------------------------------------
     ws.on('message', (raw) => {
+      // Rate limit before doing any work; close abusive connections.
+      if (!takeToken(bucket)) {
+        logger.warn('WS rate limit exceeded — closing connection', {
+          userId: peer.userId, flowsheetId,
+        });
+        ws.close(1008, 'Rate limit exceeded');
+        return;
+      }
+
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
+      if (!isPlainObject(msg)) return;
 
       const { type, payload } = msg;
-      if (!type) return;
+
+      // Allowlist + shape check — never re-broadcast unvalidated input.
+      const validate = typeof type === 'string' ? MESSAGE_VALIDATORS[type] : null;
+      if (!validate) {
+        logger.warn('WS dropped message with unknown type', {
+          userId: peer.userId, flowsheetId, type: String(type).slice(0, 50),
+        });
+        return;
+      }
+      if (!validate(payload)) {
+        logger.warn('WS dropped malformed message', { userId: peer.userId, flowsheetId, type });
+        return;
+      }
 
       switch (type) {
         // Canvas mutations — broadcast to room (exclude sender)
@@ -197,7 +307,7 @@ function attachWsServer(httpServer) {
         case 'cursor:move':
           throttledBroadcast(room, ws, {
             type,
-            payload: { ...payload, userId: peer.userId, color: peer.color, displayName: peer.displayName },
+            payload: { x: payload.x, y: payload.y, userId: peer.userId, color: peer.color, displayName: peer.displayName },
           }, 50);
           break;
 

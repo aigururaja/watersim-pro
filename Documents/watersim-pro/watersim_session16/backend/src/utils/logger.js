@@ -14,6 +14,9 @@ const logger = createLogger({
   transports: [new transports.Console()],
   exceptionHandlers: [new transports.Console()],
   rejectionHandlers: [new transports.Console()],
+  // Process lifecycle on uncaughtException/unhandledRejection is owned by
+  // server.js (drain + exit). Winston only logs — it must not exit itself.
+  exitOnError: false,
 });
 
 module.exports = logger;

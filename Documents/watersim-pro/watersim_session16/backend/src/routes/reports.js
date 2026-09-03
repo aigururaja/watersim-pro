@@ -17,11 +17,14 @@ const express   = require('express');
 const { param, validationResult } = require('express-validator');
 const { query } = require('../db/pool');
 const logger    = require('../utils/logger');
+const { authenticate } = require('../middleware/auth');
 const { generatePdf } = require('../reports/pdfGenerator');
+const { buildReportData } = require('../reports/reportData');
 
 const router = express.Router({ mergeParams: true });
-// Authentication is applied in server.js before these routes are reached,
-// or on the parent simulate router — no need to re-apply here.
+// Authenticate explicitly — idempotent if the parent router already did, and
+// this router no longer silently depends on mount order in server.js.
+router.use(authenticate);
 
 function vErr(req, res) {
   const e = validationResult(req);
@@ -58,37 +61,6 @@ async function loadRun(runId, flowsheetId, projectId, myOrgId, res) {
     return null;
   }
   return r.rows[0];
-}
-
-/** Build the structured report data object from a DB row. */
-function buildReportData(row) {
-  const results = row.results || {};
-  const config  = row.run_config || {};
-
-  return {
-    run_id:          row.id,
-    project_name:    row.project_name,
-    flowsheet_name:  row.flowsheet_name,
-    org_name:        row.org_name,
-    created_by:      row.created_by_name,
-    mode:            row.mode,
-    started_at:      row.started_at,
-    completed_at:    row.completed_at,
-    config:          config,
-    warnings:        results.warnings || [],
-    results: {
-      summary:          results.summary          || {},
-      streamResults:    results.streamResults    || {},
-      unitResults:      results.unitResults      || {},
-      costBreakdown:    results.costBreakdown    || null,
-      permitLimitsUsed: results.permitLimitsUsed || null,
-      // Dynamic mode fields
-      mode:             results.mode,
-      stepCount:        results.stepCount,
-      profileUsed:      results.profileUsed,
-      steps:            results.steps            || [],
-    },
-  };
 }
 
 // ── GET /:runId/report — structured JSON report ────────────────────────────

@@ -1,4 +1,4 @@
-const { query } = require('../db');
+const { query } = require('../db/pool');
 const crypto = require('crypto');
 
 const TokenModel = {

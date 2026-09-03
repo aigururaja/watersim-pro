@@ -1,4 +1,4 @@
-const { query, withTransaction } = require('../db');
+const { query, withTransaction } = require('../db/pool');
 
 const UserModel = {
   /**

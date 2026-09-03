@@ -3,12 +3,24 @@ const { validationResult } = require('express-validator');
 const UserModel = require('../models/user.model');
 const OrgModel = require('../models/organisation.model');
 const TokenModel = require('../models/token.model');
-const { withTransaction } = require('../db');
+const { query, withTransaction } = require('../db/pool');
 const jwtUtils = require('../utils/jwt');
-const { AppError } = require('../middleware/errorHandler');
+const { AppError } = require('../middleware/auth');
+const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
 
 const BCRYPT_ROUNDS = 12;
+
+/** Single email normalization rule used everywhere email is read or written. */
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+// Dummy hash used to equalize timing on the org/email-miss path of login,
+// so "unknown org/email" and "wrong password" take similar time.
+let DUMMY_HASH = null;
+async function getDummyHash() {
+  if (!DUMMY_HASH) DUMMY_HASH = await bcrypt.hash('watersim-timing-equalizer', BCRYPT_ROUNDS);
+  return DUMMY_HASH;
+}
 
 /**
  * POST /api/auth/register
@@ -40,7 +52,7 @@ const register = async (req, res, next) => {
         `INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role)
          VALUES ($1, $2, $3, $4, $5, 'admin')
          RETURNING id, email, first_name, last_name, role, created_at`,
-        [org.id, email.toLowerCase(), passwordHash, firstName, lastName]
+        [org.id, normalizeEmail(email), passwordHash, firstName, lastName]
       );
       const user = userResult.rows[0];
       return { org, user };
@@ -73,16 +85,29 @@ const login = async (req, res, next) => {
       return res.status(422).json({ success: false, errors: errors.array() });
     }
 
-    const { email, password, orgSlug } = req.body;
+    const { password, orgSlug } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     const org = await OrgModel.findBySlug(orgSlug);
-    if (!org || !org.is_active) throw new AppError('Invalid credentials', 401);
+    const user = (org && org.is_active) ? await UserModel.findByEmail(email, org.id) : null;
 
-    const user = await UserModel.findByEmail(email, org.id);
-    if (!user || !user.is_active) throw new AppError('Invalid credentials', 401);
+    if (!user || !user.is_active) {
+      // Timing oracle mitigation: burn a bcrypt.compare on the miss path so
+      // "unknown org/email" takes roughly as long as "wrong password".
+      await bcrypt.compare(password, await getDummyHash());
+      auditLog(req, 'auth.login_failed', 'user', null,
+        { email, orgSlug, reason: 'unknown_account' },
+        { orgId: org && org.is_active ? org.id : null });
+      throw new AppError('Invalid credentials', 401);
+    }
 
     const passwordValid = await bcrypt.compare(password, user.password_hash);
-    if (!passwordValid) throw new AppError('Invalid credentials', 401);
+    if (!passwordValid) {
+      auditLog(req, 'auth.login_failed', 'user', user.id,
+        { email, orgSlug, reason: 'bad_password' },
+        { orgId: org.id, userId: user.id });
+      throw new AppError('Invalid credentials', 401);
+    }
 
     // Issue tokens
     const accessToken = jwtUtils.signAccess({
@@ -101,13 +126,16 @@ const login = async (req, res, next) => {
 
     await UserModel.updateLastLogin(user.id);
 
+    auditLog(req, 'auth.login', 'user', user.id, { email },
+      { orgId: user.organisation_id, userId: user.id });
+
     // Refresh token in httpOnly cookie
     res.cookie('refreshToken', rawRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       expires: expiresAt,
-      path: '/api/auth',
+      path: '/api/v1/auth',
     });
 
     res.json({
@@ -169,7 +197,7 @@ const refresh = async (req, res, next) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       expires: expiresAt,
-      path: '/api/auth',
+      path: '/api/v1/auth',
     });
 
     res.json({
@@ -201,7 +229,7 @@ const logout = async (req, res, next) => {
     const rawToken = req.cookies?.refreshToken;
     if (rawToken) await TokenModel.revoke(rawToken);
 
-    res.clearCookie('refreshToken', { path: '/api/auth' });
+    res.clearCookie('refreshToken', { path: '/api/v1/auth' });
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (err) {
     next(err);
@@ -215,7 +243,7 @@ const logout = async (req, res, next) => {
 const logoutAll = async (req, res, next) => {
   try {
     await TokenModel.revokeAll(req.user.sub);
-    res.clearCookie('refreshToken', { path: '/api/auth' });
+    res.clearCookie('refreshToken', { path: '/api/v1/auth' });
     res.json({ success: true, message: 'All sessions revoked' });
   } catch (err) {
     next(err);
@@ -249,4 +277,48 @@ const me = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, refresh, logout, logoutAll, me };
+/**
+ * POST /api/auth/change-password  (authenticated)
+ * Verifies the current password, enforces the register strength rules
+ * (validated at the route level), updates the hash, and revokes all
+ * refresh tokens so every session must log in again.
+ */
+const changePassword = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ success: false, errors: errors.array() });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    const result = await query(
+      'SELECT id, password_hash, is_active FROM users WHERE id = $1',
+      [req.user.sub]
+    );
+    const user = result.rows[0];
+    if (!user || !user.is_active) throw new AppError('User not found', 404);
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) throw new AppError('Current password is incorrect', 401);
+
+    const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [newHash, req.user.sub]
+    );
+
+    // Revoke every refresh token — all sessions must re-authenticate.
+    await TokenModel.revokeAll(req.user.sub);
+    res.clearCookie('refreshToken', { path: '/api/v1/auth' });
+
+    auditLog(req, 'auth.change_password', 'user', req.user.sub, {});
+    logger.info('Password changed', { userId: req.user.sub });
+
+    res.json({ success: true, message: 'Password changed. Please log in again.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { register, login, refresh, logout, logoutAll, me, changePassword };

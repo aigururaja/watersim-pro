@@ -16,8 +16,9 @@
 
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
-const { query } = require('../db/pool');
+const { query, withTransaction } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { auditLog } = require('../utils/audit');
 
 const router = express.Router();
 router.use(authenticate);
@@ -63,41 +64,44 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── POST / — create template ───────────────────────────────────────────────
+// ── POST / — create template (engineer+) ───────────────────────────────────
 
-router.post('/', [
+router.post('/', requireRole('engineer'), [
   body('name').isString().trim().notEmpty().withMessage('name is required'),
   body('description').optional().isString(),
   body('permit_limits').optional().isObject().withMessage('permit_limits must be an object'),
   body('is_active').optional().isBoolean(),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
-  const role = req.user.role;
-  if (!['admin', 'engineer'].includes(role)) {
-    return res.status(403).json({ error: 'Forbidden — admin or engineer required' });
-  }
 
   const { name, description, permit_limits, is_active } = req.body;
   const limits = sanitizeLimits(permit_limits || {});
 
   try {
-    // If setting active, deactivate all other templates for this org first
-    if (is_active) {
-      await query(
-        `UPDATE permit_templates SET is_active = FALSE WHERE organisation_id = $1`,
-        [orgId(req)]
+    // Deactivate-then-insert must be atomic — otherwise a crash or a
+    // concurrent request can leave the org with zero or two active templates.
+    // The partial unique index (migration 006) backstops the invariant.
+    const result = await withTransaction(async (client) => {
+      if (is_active) {
+        await client.query(
+          `UPDATE permit_templates SET is_active = FALSE WHERE organisation_id = $1`,
+          [orgId(req)]
+        );
+      }
+      return client.query(
+        `INSERT INTO permit_templates
+           (organisation_id, created_by, name, description, is_active, permit_limits)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [orgId(req), userId(req), name, description || null, is_active ?? false, JSON.stringify(limits)]
       );
-    }
-
-    const result = await query(
-      `INSERT INTO permit_templates
-         (organisation_id, created_by, name, description, is_active, permit_limits)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [orgId(req), userId(req), name, description || null, is_active ?? false, JSON.stringify(limits)]
-    );
+    });
+    auditLog(req, 'permit_template.create', 'permit_template', result.rows[0].id, { name, is_active: is_active ?? false });
     res.status(201).json(result.rows[0]);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Another template was activated concurrently — please retry' });
+    next(err);
+  }
 });
 
 // ── GET /:id — single template ─────────────────────────────────────────────
@@ -117,19 +121,15 @@ router.get('/:id', [param('id').isUUID()], async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── PATCH /:id — update template ──────────────────────────────────────────
+// ── PATCH /:id — update template (engineer+) ──────────────────────────────
 
-router.patch('/:id', [
+router.patch('/:id', requireRole('engineer'), [
   param('id').isUUID(),
   body('name').optional().isString().trim().notEmpty(),
   body('description').optional().isString(),
   body('permit_limits').optional().isObject(),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
-  const role = req.user.role;
-  if (!['admin', 'engineer'].includes(role)) {
-    return res.status(403).json({ error: 'Forbidden — admin or engineer required' });
-  }
 
   try {
     const existing = await query(
@@ -152,54 +152,61 @@ router.patch('/:id', [
        RETURNING *`,
       [newName, newDescription, JSON.stringify(newLimits), req.params.id, orgId(req)]
     );
+    auditLog(req, 'permit_template.update', 'permit_template', req.params.id, { fields: Object.keys(req.body) });
     res.json(result.rows[0]);
   } catch (err) { next(err); }
 });
 
-// ── DELETE /:id — delete template ─────────────────────────────────────────
+// ── DELETE /:id — delete template (admin only) ────────────────────────────
 
-router.delete('/:id', [param('id').isUUID()], async (req, res, next) => {
+router.delete('/:id', requireRole('admin'), [param('id').isUUID()], async (req, res, next) => {
   if (vErr(req, res)) return;
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Forbidden — admin only' });
-  }
   try {
     const result = await query(
       `DELETE FROM permit_templates WHERE id=$1 AND organisation_id=$2 RETURNING id`,
       [req.params.id, orgId(req)]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Template not found' });
+    auditLog(req, 'permit_template.delete', 'permit_template', req.params.id, {});
     res.json({ deleted: true, id: req.params.id });
   } catch (err) { next(err); }
 });
 
-// ── POST /:id/activate — set as the active org template ───────────────────
+// ── POST /:id/activate — set as the active org template (engineer+) ───────
 
-router.post('/:id/activate', [param('id').isUUID()], async (req, res, next) => {
-  if (vErr(req, res)) return;
-  const role = req.user.role;
-  if (!['admin', 'engineer'].includes(role)) {
-    return res.status(403).json({ error: 'Forbidden — admin or engineer required' });
-  }
+router.post('/:id/activate', requireRole('engineer'), [param('id').isUUID()], async (req, res, next) => {
   try {
-    // Verify template belongs to org
-    const check = await query(
-      `SELECT id FROM permit_templates WHERE id=$1 AND organisation_id=$2`,
-      [req.params.id, orgId(req)]
-    );
-    if (!check.rows[0]) return res.status(404).json({ error: 'Template not found' });
+    if (vErr(req, res)) return;
 
-    // Deactivate all, then activate the selected one
-    await query(
-      `UPDATE permit_templates SET is_active=FALSE WHERE organisation_id=$1`,
-      [orgId(req)]
-    );
-    const result = await query(
-      `UPDATE permit_templates SET is_active=TRUE WHERE id=$1 RETURNING *`,
-      [req.params.id]
-    );
+    // Deactivate-all + activate-one must be atomic: the old two-statement
+    // toggle could leave the org with zero active templates if the process
+    // died between statements, or two active under concurrency. The partial
+    // unique index from migration 006 (one active row per organisation)
+    // backstops the invariant at the database level.
+    const result = await withTransaction(async (client) => {
+      const check = await client.query(
+        `SELECT id FROM permit_templates WHERE id=$1 AND organisation_id=$2 FOR UPDATE`,
+        [req.params.id, orgId(req)]
+      );
+      if (!check.rows[0]) return null;
+
+      await client.query(
+        `UPDATE permit_templates SET is_active=FALSE WHERE organisation_id=$1 AND is_active=TRUE`,
+        [orgId(req)]
+      );
+      return client.query(
+        `UPDATE permit_templates SET is_active=TRUE WHERE id=$1 AND organisation_id=$2 RETURNING *`,
+        [req.params.id, orgId(req)]
+      );
+    });
+
+    if (!result || !result.rows[0]) return res.status(404).json({ error: 'Template not found' });
+    auditLog(req, 'permit_template.activate', 'permit_template', req.params.id, {});
     res.json(result.rows[0]);
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Another template was activated concurrently — please retry' });
+    next(err);
+  }
 });
 
 module.exports = router;

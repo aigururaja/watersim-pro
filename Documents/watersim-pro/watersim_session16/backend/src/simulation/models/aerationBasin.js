@@ -154,9 +154,11 @@ function solveUCT({ inf, RAS, p, temp, mu_BOD, mu_NH4, mu_denit, MLVSS, X_PAO })
   const aer_vol    = total_vol * (1 - p.anaerobic_fraction - p.uct_anoxic_fraction);
   const MLR_NO3_ok = (Qmlr * aer.NO3_e / 1000) <= (anox_feed.Q * inf.BOD / p.bOD_NO3_ratio / 1000);
   const WAS_Q      = aer.P_x_kgd * 1000 / p.MLSS_mg_L;
+  // Water balance: effluent = influent + actual RAS inflow − WAS wasted here.
+  const eff_Q      = Math.max(0, Qin + (RAS ? RAS.Q : 0) - WAS_Q);
 
   const effluent = new Stream({
-    Q: Qin, TSS: p.MLSS_mg_L, BOD: aer.BOD_e, COD: aer.BOD_e * 1.7,
+    Q: eff_Q, TSS: p.MLSS_mg_L, BOD: aer.BOD_e, COD: aer.BOD_e * 1.7,
     TN: Math.max(0, aer.TN_e), NH4: Math.max(0, aer.NH4_e), NO3: aer.NO3_e, NO2: 0,
     TP: Math.max(0, aer.TP_e), DO: p.DO_set_mg_L, pH: inf.pH - 0.15, temp,
   });
@@ -259,9 +261,11 @@ function solveJHB({ inf, RAS, p, temp, mu_BOD, mu_NH4, mu_denit, MLVSS, X_PAO })
   const aer_vol       = total_vol - preanox_vol - anaer_vol - main_anox_vol;
   const WAS_Q         = aer.P_x_kgd * 1000 / p.MLSS_mg_L;
   const HRT_h         = total_vol / Qin * 24;
+  // Water balance: effluent = influent + actual RAS inflow − WAS wasted here.
+  const eff_Q         = Math.max(0, Qin + (RAS ? RAS.Q : 0) - WAS_Q);
 
   const effluent = new Stream({
-    Q: Qin, TSS: p.MLSS_mg_L, BOD: aer.BOD_e, COD: aer.BOD_e * 1.7,
+    Q: eff_Q, TSS: p.MLSS_mg_L, BOD: aer.BOD_e, COD: aer.BOD_e * 1.7,
     TN: Math.max(0, aer.TN_e), NH4: Math.max(0, aer.NH4_e), NO3: aer.NO3_e, NO2: 0,
     TP: Math.max(0, aer.TP_e), DO: p.DO_set_mg_L, pH: inf.pH - 0.15, temp,
   });
@@ -372,8 +376,12 @@ function solve(inputs, params = {}) {
   }
 
   const WAS_Q = aer.P_x_kgd * 1000 / p.MLSS_mg_L;
+  // Water balance: WAS is wasted from the basin, so the mixed-liquor effluent
+  // flow excludes it — unrouted WAS is then an explicit boundary loss, not
+  // invented water on top of the feed.
+  const eff_Q = Math.max(0, basin_feed.Q - WAS_Q);
   const effluent = new Stream({
-    Q: basin_feed.Q, TSS: p.MLSS_mg_L, BOD: aer.BOD_e, COD: aer.BOD_e * 1.7,
+    Q: eff_Q, TSS: p.MLSS_mg_L, BOD: aer.BOD_e, COD: aer.BOD_e * 1.7,
     TN: Math.max(0, aer.TN_e), NH4: Math.max(0, aer.NH4_e), NO3: aer.NO3_e, NO2: 0,
     TP: Math.max(0, aer.TP_e), DO: p.DO_set_mg_L, pH: basin_feed.pH - 0.1, temp,
   });

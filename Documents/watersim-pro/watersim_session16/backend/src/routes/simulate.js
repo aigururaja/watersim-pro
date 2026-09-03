@@ -24,14 +24,48 @@
 const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const { query } = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireRole } = require('../middleware/auth');
 const logger = require('../utils/logger');
-const { runSteadyState } = require('../simulation/solver');
-const { runDynamic, DEFAULT_DIURNAL_PROFILE } = require('../simulation/dynamicSolver');
+const { runSimulation } = require('../simulation/runner');
+const { DEFAULT_DIURNAL_PROFILE } = require('../simulation/dynamicSolver');
 const { estimateCosts, DEFAULT_UNIT_COSTS } = require('../simulation/costEstimator');
+const { simulationDuration } = require('../metrics');
 
 const router = express.Router({ mergeParams: true }); // inherits :projectId + :flowsheetId
 router.use(authenticate);
+
+// Input bounds — reject absurdly large flowsheets before running anything.
+const MAX_NODES = 200;
+const MAX_EDGES = 400;
+
+/** Returns an error string when the canvas exceeds size bounds, else null. */
+function canvasTooLarge(canvasData) {
+  const nodeCount = Array.isArray(canvasData?.nodes) ? canvasData.nodes.length : 0;
+  const edgeCount = Array.isArray(canvasData?.edges) ? canvasData.edges.length : 0;
+  if (nodeCount > MAX_NODES || edgeCount > MAX_EDGES) {
+    return `Flowsheet too large to simulate (${nodeCount} nodes / ${edgeCount} edges; limits are ${MAX_NODES} nodes / ${MAX_EDGES} edges)`;
+  }
+  return null;
+}
+
+/** Build the top-level quality object from a solver result. */
+function buildQuality(results, mode) {
+  if (mode === 'dynamic') {
+    const steps = Array.isArray(results?.steps) ? results.steps : [];
+    return {
+      converged:   steps.every(s => s.converged !== false),
+      degraded:    steps.some(s => s.degraded === true),
+      iterations:  null,
+      maxResidual: null,
+    };
+  }
+  return {
+    converged:   results?.converged   ?? null,
+    degraded:    results?.degraded    ?? false,
+    iterations:  results?.iterations  ?? null,
+    maxResidual: results?.maxResidual ?? null,
+  };
+}
 
 function vErr(req, res) {
   const e = validationResult(req);
@@ -68,9 +102,9 @@ async function loadPermitTemplate(orgId) {
   }
 }
 
-// ── POST — run a simulation ────────────────────────────────────────────────
+// ── POST — run a simulation (operator+) ────────────────────────────────────
 
-router.post('/', [
+router.post('/', requireRole('operator'), [
   body('mode')
     .optional()
     .isIn(['steady_state', 'dynamic'])
@@ -113,6 +147,11 @@ router.post('/', [
     const unitCosts = { ...projectUnitCosts, ...reqUnitCosts };
 
     const canvasData   = flowsheet.canvas_data || { nodes: [], edges: [] };
+
+    // Reject oversized flowsheets before creating a run or spawning a worker.
+    const sizeError = canvasTooLarge(canvasData);
+    if (sizeError) return res.status(422).json({ error: sizeError });
+
     const permitLimits = await loadPermitTemplate(orgId(req));
 
     // Create run record with 'running' status
@@ -127,31 +166,44 @@ router.post('/', [
 
     logger.info('Simulation started', { runId, flowsheetId, mode });
 
-    // ── Execute solver ────────────────────────────────────────────────────
+    // ── Execute solver (worker thread — keeps the event loop free) ────────
     let results, warnings;
+    const endSimTimer = simulationDuration.startTimer({ mode });
     try {
-      if (mode === 'dynamic') {
-        const out = runDynamic(canvasData, { nodeParams, timeSeriesConfig, permitLimits });
-        results  = out;
-        warnings = out.warnings || [];
-      } else {
-        const out = runSteadyState(canvasData, { nodeParams, permitLimits });
-        results  = out;
-        warnings = out.warnings || [];
-      }
-    } catch (solverErr) {
+      results  = await runSimulation({
+        mode,
+        canvasData,
+        config: { nodeParams, timeSeriesConfig, permitLimits },
+      });
+      warnings = results.warnings || [];
+      endSimTimer({ status: 'completed' });
+    } catch (simErr) {
+      endSimTimer({ status: simErr.timedOut ? 'timeout' : 'failed' });
       // Mark run as failed
       await query(
         `UPDATE simulation_runs SET status='failed', error_message=$1, completed_at=NOW() WHERE id=$2`,
-        [solverErr.message, runId]
-      );
-      logger.error('Solver error', { runId, err: solverErr.message });
+        [simErr.message, runId]
+      ).catch(() => {});
+      if (simErr.timedOut) {
+        logger.error('Simulation timed out', { runId, err: simErr.message });
+        return res.status(504).json({
+          error:   'Simulation timed out',
+          details: simErr.message,
+          run_id:  runId,
+        });
+      }
+      logger.error('Solver error', { runId, err: simErr.message });
       return res.status(422).json({
         error:   'Simulation solver failed',
-        details: solverErr.message,
+        details: simErr.message,
         run_id:  runId,
       });
     }
+
+    // ── Quality flags (converged / degraded) — persisted and returned ─────
+    const quality = buildQuality(results, mode);
+    results.converged = quality.converged;
+    results.degraded  = quality.degraded;
 
     // ── Cost estimation (steady-state only — attached to results) ─────────
     let costBreakdown = null;
@@ -178,11 +230,15 @@ router.post('/', [
       warnings: warnings.length,
     });
 
+    // A run that did not converge (or was degraded by non-finite sweeps) is
+    // still 'completed' — but the response carries the flags prominently in
+    // top-level `quality` alongside the warnings.
     if (mode === 'dynamic') {
       return res.status(201).json({
         run_id:   runId,
         status:   'completed',
         mode,
+        quality,
         results: {
           mode:        results.mode,
           stepCount:   results.stepCount,
@@ -196,6 +252,7 @@ router.post('/', [
         run_id:   runId,
         status:   'completed',
         mode,
+        quality,
         results:  {
           streamResults: results.streamResults,
           unitResults:   results.unitResults,
@@ -219,9 +276,9 @@ router.post('/', [
   }
 });
 
-// ── POST /batch — run multiple scenarios for flowsheet comparison ─────────
+// ── POST /batch — run multiple scenarios for flowsheet comparison (operator+) ─
 
-router.post('/batch', [
+router.post('/batch', requireRole('operator'), [
   body('scenarios')
     .isArray({ min: 1, max: 10 })
     .withMessage('scenarios must be an array of 1–10 items'),
@@ -243,30 +300,42 @@ router.post('/batch', [
 
     const canvasData = flowsheet.canvas_data || { nodes: [], edges: [] };
 
-    const scenarioResults = scenarios.map((scenario) => {
+    const sizeError = canvasTooLarge(canvasData);
+    if (sizeError) return res.status(422).json({ error: sizeError });
+
+    const scenarioResults = [];
+    for (const scenario of scenarios) {
       const np = scenario.nodeParams || {};
+      const endSimTimer = simulationDuration.startTimer({ mode: 'steady_state' });
       try {
-        const out = runSteadyState(canvasData, { nodeParams: np });
-        return {
+        const out = await runSimulation({
+          mode:       'steady_state',
+          canvasData,
+          config:     { nodeParams: np },
+        });
+        endSimTimer({ status: 'completed' });
+        scenarioResults.push({
           name:     scenario.name,
           status:   'completed',
+          quality:  buildQuality(out, 'steady_state'),
           results: {
             streamResults: out.streamResults,
             unitResults:   out.unitResults,
             summary:       out.summary,
           },
           warnings: out.warnings || [],
-        };
+        });
       } catch (err) {
-        return {
+        endSimTimer({ status: err.timedOut ? 'timeout' : 'failed' });
+        scenarioResults.push({
           name:     scenario.name,
           status:   'failed',
           error:    err.message,
           results:  null,
           warnings: [],
-        };
+        });
       }
-    });
+    }
 
     // Persist as a batch run record
     const batchRun = await query(

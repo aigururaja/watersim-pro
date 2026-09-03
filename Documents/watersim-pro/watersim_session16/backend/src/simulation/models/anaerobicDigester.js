@@ -272,10 +272,11 @@ function solve(inputs, params = {}) {
       NH4_out_mg_L:             +NH4_out.toFixed(1),
       // Nitrogen recycle note
       centrate_NH4_concern:     NH4_out > 500 && p.dewatering,
-      // Biogas
-      specific_biogas_m3_per_kgVS: Q_in > 0
-        ? +(biogas_m3_d / ((VSS_in / 1000) * Q_in * VS_destruction)).toFixed(3)
-        : 0,
+      // Biogas (guard: zero VS destroyed → no specific yield, not Infinity)
+      specific_biogas_m3_per_kgVS: (() => {
+        const VS_destroyed_kg_d = (VSS_in / 1000) * Q_in * VS_destruction;
+        return VS_destroyed_kg_d > 0 ? +(biogas_m3_d / VS_destroyed_kg_d).toFixed(3) : 0;
+      })(),
       // Stability
       stable,
       warnings,

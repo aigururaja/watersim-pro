@@ -55,24 +55,42 @@ const uniqueEmail = (base) => {
 };
 
 /**
- * Register a new isolated org+admin user.
- * Optionally pass a role ('admin' | 'engineer' | 'operator') — only admin can be
- * registered directly; other roles are seeded via DB in real envs. For tests
- * that don't need a real DB, we default to admin.
+ * Register a new isolated org and return a user of the requested role.
+ * 'admin' is the org creator (via /register). Any other role is invited into
+ * the fresh org through the admin members API, so the returned user really
+ * holds that role (previously the role parameter was silently ignored and
+ * every "engineer"/"operator" test user was actually an admin).
  */
-async function createTestUser(email, password, _role = 'admin') {
+async function createTestUser(email, password, role = 'admin') {
   const ue = uniqueEmail(email);
   const slug = `org-${Date.now()}-${_uid}`;
+  const adminEmail = role === 'admin' ? ue : uniqueEmail(`owner.${email}`);
+
   const regRes = await request(app).post('/api/v1/auth/register').send({
     orgName: `TestOrg ${slug}`,
     orgSlug: slug,
-    email: ue,
+    email: adminEmail,
     password,
     firstName: 'Test',
     lastName: 'User',
   });
   if (![200, 201].includes(regRes.status))
     throw new Error(`createTestUser failed (${regRes.status}): ${JSON.stringify(regRes.body)}`);
+  if (role === 'admin') return { email: ue, password, orgSlug: slug };
+
+  // Invite the non-admin role into the new org
+  const loginRes = await request(app).post('/api/v1/auth/login')
+    .send({ email: adminEmail, password, orgSlug: slug });
+  if (loginRes.status !== 200)
+    throw new Error(`createTestUser admin login failed: ${JSON.stringify(loginRes.body)}`);
+  const adminToken = loginRes.body.data.accessToken;
+
+  const invRes = await request(app).post('/api/v1/admin/members')
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ email: ue, firstName: 'Test', lastName: role, role, password });
+  if (invRes.status !== 201)
+    throw new Error(`createTestUser invite (${role}) failed (${invRes.status}): ${JSON.stringify(invRes.body)}`);
+
   return { email: ue, password, orgSlug: slug };
 }
 
@@ -95,8 +113,8 @@ async function loginAs({ email, password, orgSlug }) {
   return agent;
 }
 
-async function makeProject(agent, name) {
-  const res = await agent.post('/api/v1/projects').send({ name });
+async function makeProject(agent, name, projectType = 'wastewater') {
+  const res = await agent.post('/api/v1/projects').send({ name, projectType });
   if (![200, 201].includes(res.status))
     throw new Error(`makeProject failed (${res.status}): ${JSON.stringify(res.body)}`);
   return res.body.data || res.body;

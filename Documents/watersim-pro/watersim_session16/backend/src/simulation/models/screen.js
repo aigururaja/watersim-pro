@@ -37,29 +37,45 @@ function solve(inputs, params = {}) {
   const BOD_r   = removal.BOD;
   const COD_r   = removal.COD;
 
-  // Screened solids (kg/d) — for reporting; flow contribution negligible
+  // Screened mass rates (kg/d) — the primary reporting quantity
   const screenings_kgd = inf.Q * inf.TSS * TSS_r / 1000;  // m³/d × mg/L ÷ 1000 = kg/d
+  const BOD_removed_kgd = inf.Q * inf.BOD * BOD_r / 1000;
+  const COD_removed_kgd = inf.Q * inf.COD * COD_r / 1000;
 
+  // Screenings side stream: dewatered screenings at ~20% dry solids
+  // (200,000 mg/L ≈ 200 kg/m³), so Q = mass / 200. Physically plausible small flow.
+  const SCREENINGS_TSS_MG_L = 200000;
+  const screenings_Q = screenings_kgd > 0 ? screenings_kgd * 1000 / SCREENINGS_TSS_MG_L : 0;
+  const eff_Q = Math.max(0, inf.Q - screenings_Q);
+
+  // Flow-corrected effluent so removed mass = screenings mass exactly
   const effluent = inf.clone({
-    TSS: inf.TSS * (1 - TSS_r),
-    BOD: inf.BOD * (1 - BOD_r),
-    COD: inf.COD * (1 - COD_r),
+    Q:   eff_Q,
+    TSS: eff_Q > 0 ? inf.TSS * (1 - TSS_r) * inf.Q / eff_Q : 0,
+    BOD: eff_Q > 0 ? inf.BOD * (1 - BOD_r) * inf.Q / eff_Q : 0,
+    COD: eff_Q > 0 ? inf.COD * (1 - COD_r) * inf.Q / eff_Q : 0,
   });
 
-  // Screenings stream (mass removed, modelled as zero-flow waste)
   const screenings = new Stream({
-    Q:   0,
-    TSS: inf.TSS * TSS_r * inf.Q / 1e-6 || 0, // conceptual — not a liquid stream
+    Q:    screenings_Q,
+    TSS:  screenings_Q > 0 ? SCREENINGS_TSS_MG_L : 0,
+    BOD:  screenings_Q > 0 ? BOD_removed_kgd * 1000 / screenings_Q : 0,
+    COD:  screenings_Q > 0 ? COD_removed_kgd * 1000 / screenings_Q : 0,
+    pH:   inf.pH,
+    temp: inf.temp,
   });
 
   return {
     effluent,
     screenings,
     metrics: {
-      screenType:        p.screenType,
-      TSS_removal_pct:   (TSS_r * 100).toFixed(1),
-      screenings_kg_d:   +screenings_kgd.toFixed(1),
-      headloss_m:        p.headloss_m,
+      screenType:         p.screenType,
+      TSS_removal_pct:    (TSS_r * 100).toFixed(1),
+      screenings_kg_d:    +screenings_kgd.toFixed(1),
+      BOD_removed_kg_d:   +BOD_removed_kgd.toFixed(1),
+      COD_removed_kg_d:   +COD_removed_kgd.toFixed(1),
+      screenings_Q_m3_d:  +screenings_Q.toFixed(3),
+      headloss_m:         p.headloss_m,
     },
   };
 }

@@ -2,6 +2,7 @@ const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const { query } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
 
 const router = express.Router({ mergeParams: true }); // inherits :projectId
@@ -28,8 +29,10 @@ async function checkProject(projectId, organisationId, res) {
 
 // GET /api/v1/projects/:projectId/flowsheets
 router.get('/', async (req, res, next) => {
-  if (!await checkProject(req.params.projectId, orgId(req), res)) return;
   try {
+    // The await must stay inside try — in Express 4 a rejection outside
+    // try/catch never reaches next(err) and the request hangs forever.
+    if (!await checkProject(req.params.projectId, orgId(req), res)) return;
     const result = await query(
       `SELECT f.id, f.name, f.description, f.version, f.is_snapshot, f.snapshot_tag,
               f.created_at, f.updated_at,
@@ -44,20 +47,22 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/projects/:projectId/flowsheets
-router.post('/', [
+// POST /api/v1/projects/:projectId/flowsheets (engineer+)
+router.post('/', requireRole('engineer'), [
   body('name').trim().isLength({ min: 1, max: 200 }).withMessage('Name is required'),
   body('description').optional().trim(),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
-  if (!await checkProject(req.params.projectId, orgId(req), res)) return;
   try {
+    // checkProject await inside try — see note on GET / above.
+    if (!await checkProject(req.params.projectId, orgId(req), res)) return;
     const result = await query(
       `INSERT INTO flowsheets (project_id, created_by, name, description, canvas_data)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [req.params.projectId, userId(req), req.body.name, req.body.description || null,
        JSON.stringify({ nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } })]
     );
+    auditLog(req, 'flowsheet.create', 'flowsheet', result.rows[0].id, { name: req.body.name, projectId: req.params.projectId });
     logger.info('Flowsheet created', { flowsheetId: result.rows[0].id, userId: userId(req) });
     res.status(201).json(result.rows[0]);
   } catch (err) { next(err); }
@@ -80,12 +85,18 @@ router.get('/:id', [param('id').isUUID()], async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PATCH /api/v1/projects/:projectId/flowsheets/:id
-router.patch('/:id', [
+// PATCH /api/v1/projects/:projectId/flowsheets/:id (engineer+)
+//
+// Optional optimistic concurrency: when the body carries `expectedVersion`,
+// the update only applies if the stored version matches; a mismatch returns
+// 409 with the current version. Without it, behaviour is unchanged
+// (last-write-wins, backward compatible).
+router.patch('/:id', requireRole('engineer'), [
   param('id').isUUID(),
   body('name').optional().trim().isLength({ min: 1, max: 200 }),
   body('description').optional().trim(),
   body('canvasData').optional().isObject(),
+  body('expectedVersion').optional().isInt({ min: 0 }).toInt(),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
   const fields = []; const vals = []; let i = 1;
@@ -96,6 +107,8 @@ router.patch('/:id', [
   // Auto-bump version when canvas is saved
   if (req.body.canvasData !== undefined) { fields.push(`version = version + 1`); }
   vals.push(req.params.id, req.params.projectId);
+  const expectedVersion = req.body.expectedVersion;
+  const versionClause = expectedVersion !== undefined ? ` AND f.version = $${i + 3}` : '';
   try {
     // Verify org ownership via join
     const result = await query(
@@ -103,11 +116,30 @@ router.patch('/:id', [
        FROM projects p
        WHERE f.id = $${i} AND f.project_id = $${i + 1}
          AND f.project_id = p.id AND p.organisation_id = $${i + 2}
-         AND f.is_snapshot = false
+         AND f.is_snapshot = false${versionClause}
        RETURNING f.*`,
-      [...vals, orgId(req)]
+      expectedVersion !== undefined ? [...vals, orgId(req), expectedVersion] : [...vals, orgId(req)]
     );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Flowsheet not found or is a read-only snapshot' });
+    if (!result.rows[0]) {
+      if (expectedVersion !== undefined) {
+        // Distinguish "gone" from "stale": re-read without the version guard.
+        const current = await query(
+          `SELECT f.version FROM flowsheets f
+           JOIN projects p ON p.id = f.project_id
+           WHERE f.id = $1 AND f.project_id = $2 AND p.organisation_id = $3 AND f.is_snapshot = false`,
+          [req.params.id, req.params.projectId, orgId(req)]
+        );
+        if (current.rows[0]) {
+          return res.status(409).json({
+            error:          'Version conflict — the flowsheet was modified by someone else',
+            currentVersion: current.rows[0].version,
+            expectedVersion,
+          });
+        }
+      }
+      return res.status(404).json({ error: 'Flowsheet not found or is a read-only snapshot' });
+    }
+    auditLog(req, 'flowsheet.update', 'flowsheet', req.params.id, { fields: Object.keys(req.body) });
     res.json(result.rows[0]);
   } catch (err) { next(err); }
 });
@@ -125,12 +157,13 @@ router.delete('/:id', requireRole('engineer'), [param('id').isUUID()], async (re
       [req.params.id, req.params.projectId, orgId(req)]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Flowsheet not found or is a read-only snapshot' });
+    auditLog(req, 'flowsheet.delete', 'flowsheet', req.params.id, { projectId: req.params.projectId });
     res.json({ message: 'Flowsheet deleted' });
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/projects/:projectId/flowsheets/:id/snapshot
-router.post('/:id/snapshot', [
+// POST /api/v1/projects/:projectId/flowsheets/:id/snapshot (engineer+)
+router.post('/:id/snapshot', requireRole('engineer'), [
   param('id').isUUID(),
   body('tag').trim().isLength({ min: 1, max: 100 }).withMessage('Snapshot tag is required'),
 ], async (req, res, next) => {
@@ -150,6 +183,7 @@ router.post('/:id/snapshot', [
       [f.project_id, userId(req), `${f.name} [${req.body.tag}]`,
        f.description, f.version, req.body.tag, f.canvas_data]
     );
+    auditLog(req, 'flowsheet.snapshot', 'flowsheet', result.rows[0].id, { sourceFlowsheetId: req.params.id, tag: req.body.tag });
     logger.info('Snapshot created', { flowsheetId: req.params.id, tag: req.body.tag });
     res.status(201).json(result.rows[0]);
   } catch (err) {

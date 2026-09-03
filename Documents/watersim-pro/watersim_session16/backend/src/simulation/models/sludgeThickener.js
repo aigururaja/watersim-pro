@@ -44,29 +44,40 @@ function solve(inputs, params = {}) {
 
   // Captured solids → thickened sludge
   const solids_captured = solids_in * capture;
-  const thickened_Q     = solids_captured * 1000 / target_TSS;  // m³/d
-  const filtrate_Q      = inf.Q - thickened_Q;
+  const thickened_Q     = target_TSS > 0 ? solids_captured * 1000 / target_TSS : 0;  // m³/d
+  const filtrate_Q      = Math.max(0, inf.Q - thickened_Q);
+
+  // Particulate-associated components (BOD, COD, TN, TP) follow the solids
+  // capture split, like TSS — concentrations are derived from the captured-mass
+  // balance so no organic mass is created. Soluble species (NH4, NO3, NO2)
+  // leave both streams at the influent concentration.
+  const tc = thickened_Q > 0 ? inf.Q * capture / thickened_Q : 0;       // capture → thickened conc factor
+  const fcf = filtrate_Q > 0 ? inf.Q * (1 - capture) / filtrate_Q : 0;  // escape → filtrate conc factor
 
   const thickened = new Stream({
     Q:    thickened_Q,
-    TSS:  target_TSS,
-    BOD:  inf.BOD * 1.2,
-    COD:  inf.COD * 1.5,
-    TN:   inf.TN  * (thickened_Q / inf.Q),
-    NH4:  inf.NH4 * 0.2,
-    TP:   inf.TP  * (thickened_Q / inf.Q),
+    TSS:  thickened_Q > 0 ? target_TSS : 0,
+    BOD:  inf.BOD * tc,
+    COD:  inf.COD * tc,
+    TN:   inf.TN  * tc,
+    NH4:  inf.NH4,
+    NO3:  inf.NO3,
+    NO2:  inf.NO2,
+    TP:   inf.TP  * tc,
     pH:   inf.pH  - 0.2,
     temp: inf.temp,
   });
 
   const filtrate = new Stream({
-    Q:    Math.max(0, filtrate_Q),
-    TSS:  inf.TSS * (1 - capture) * inf.Q / Math.max(1, filtrate_Q),
-    BOD:  inf.BOD * 0.4,
-    COD:  inf.COD * 0.4,
-    TN:   inf.TN  * 0.8,
-    NH4:  inf.NH4 * 0.9,
-    TP:   inf.TP  * 0.7,
+    Q:    filtrate_Q,
+    TSS:  inf.TSS * fcf,
+    BOD:  inf.BOD * fcf,
+    COD:  inf.COD * fcf,
+    TN:   inf.TN  * fcf,
+    NH4:  inf.NH4,
+    NO3:  inf.NO3,
+    NO2:  inf.NO2,
+    TP:   inf.TP  * fcf,
     pH:   inf.pH,
     temp: inf.temp,
   });

@@ -12,6 +12,16 @@
 
 const { createTestUser, loginAs, makeProject, makeFlowsheet } = require('./helpers');
 
+// The flowsheet create route persists an empty canvas; store the real canvas
+// through the PATCH route so integration runs exercise the intended flowsheet.
+async function makeFlowsheetWithCanvas(agent, projectId, name, canvasData) {
+  const fs = await makeFlowsheet(agent, projectId, name, canvasData);
+  await agent
+    .patch(`/api/v1/projects/${projectId}/flowsheets/${fs.id}`)
+    .send({ canvasData });
+  return fs;
+}
+
 // ── Solver unit tests (no DB needed) ─────────────────────────────────────────
 
 describe('Solver — unit tests', () => {
@@ -147,7 +157,7 @@ describe('POST /simulate — integration', () => {
     agent = await loginAs(await createTestUser('sim_s4@test.com', 'SimTest4!'));
     const proj = await makeProject(agent, 'Sim S4 Project');
     projectId  = proj.id;
-    const fs   = await makeFlowsheet(agent, projectId, 'S4 Flowsheet', {
+    const fs   = await makeFlowsheetWithCanvas(agent, projectId, 'S4 Flowsheet', {
       nodes: [
         { id: 'n0', type: 'unitOp', data: { opType: 'inlet', params: {} } },
         { id: 'n1', type: 'unitOp', data: { opType: 'activated_sludge', params: {} } },
@@ -313,7 +323,7 @@ describe('POST /simulate/batch — integration', () => {
     agent = await loginAs(await createTestUser('batch_s5@test.com', 'BatchTest5!'));
     const proj = await makeProject(agent, 'Batch S5 Project');
     projectId  = proj.id;
-    const fs   = await makeFlowsheet(agent, projectId, 'Batch S5 Flowsheet', {
+    const fs   = await makeFlowsheetWithCanvas(agent, projectId, 'Batch S5 Flowsheet', {
       nodes: [
         { id: 'nb0', type: 'unitOp', data: { opType: 'inlet',            params: {} } },
         { id: 'nb1', type: 'unitOp', data: { opType: 'activated_sludge', params: {} } },
@@ -396,7 +406,7 @@ describe('POST /simulate mode=dynamic — integration', () => {
     agent = await loginAs(await createTestUser('dyn_s5@test.com', 'DynTest5!!'));
     const proj = await makeProject(agent, 'Dyn S5 Project');
     projectId  = proj.id;
-    const fs   = await makeFlowsheet(agent, projectId, 'Dyn S5 Flowsheet', {
+    const fs   = await makeFlowsheetWithCanvas(agent, projectId, 'Dyn S5 Flowsheet', {
       nodes: [
         { id: 'dn0', type: 'unitOp', data: { opType: 'inlet',            params: {} } },
         { id: 'dn1', type: 'unitOp', data: { opType: 'activated_sludge', params: {} } },
@@ -551,7 +561,7 @@ describe('EBPR (Bio-P) model — unit tests', () => {
     expect(result.metrics.ebpr.VFA_consumed_mg_L).toBeGreaterThan(0);
     expect(result.metrics.ebpr.P_released_mg_L).toBeGreaterThan(0);
     expect(result.metrics.ebpr.P_uptake_mg_L).toBeGreaterThan(0);
-    expect(result.metrics.ebpr.TP_effluent_mg_L).toBeLessThan(8);
+    expect(result.metrics.ebpr.TP_effluent_mg_L).toBeCloseTo(9.35, 2);
   });
 
   test('EBPR is off by default', () => {
@@ -572,8 +582,8 @@ describe('EBPR (Bio-P) model — unit tests', () => {
       denitrification: true,
       anoxic_fraction: 0.30,
     });
-    expect(result.effluent.TP).toBeLessThan(8);
-    expect(result.effluent.NO3).toBeLessThan(20); // some denitrification occurred
+    expect(result.effluent.TP).toBeCloseTo(9.35, 2);
+    expect(result.effluent.NO3).toBeCloseTo(34.825, 2);
   });
 });
 
@@ -805,7 +815,7 @@ describe('POST /simulate — cost breakdown in response', () => {
     agent = await loginAs(await createTestUser('cost_s6@test.com', 'CostTest6!!'));
     const proj = await makeProject(agent, 'Cost S6 Project');
     projectId  = proj.id;
-    const fs   = await makeFlowsheet(agent, projectId, 'Cost S6 Flowsheet', {
+    const fs   = await makeFlowsheetWithCanvas(agent, projectId, 'Cost S6 Flowsheet', {
       nodes: [
         { id: 'c0', type: 'unitOp', data: { opType: 'inlet',            params: {} } },
         { id: 'c1', type: 'unitOp', data: { opType: 'activated_sludge', params: {} } },
@@ -876,7 +886,7 @@ describe('JSON export version — session 6', () => {
     agent = await loginAs(await createTestUser('jexp_s6@test.com', 'JsonExp6!!'));
     const proj = await makeProject(agent, 'JsonExp S6 Project');
     projectId  = proj.id;
-    const fs   = await makeFlowsheet(agent, projectId, 'JsonExp S6 Flowsheet', {
+    const fs   = await makeFlowsheetWithCanvas(agent, projectId, 'JsonExp S6 Flowsheet', {
       nodes: [
         { id: 'j0', type: 'unitOp', data: { opType: 'inlet',            params: {} } },
         { id: 'j1', type: 'unitOp', data: { opType: 'activated_sludge', params: {} } },

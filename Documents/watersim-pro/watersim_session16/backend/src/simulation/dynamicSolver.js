@@ -74,7 +74,7 @@ function buildProfile(userProfile) {
   let last = { Q_scale: 1, BOD_scale: 1, TN_scale: 1, TP_scale: 1, TSS_scale: 1 };
   for (let h = 0; h < 24; h++) {
     if (byHour[h]) last = byHour[h];
-    profile.push({ hour: h, ...last, hour: h });  // ensure hour field is correct index
+    profile.push({ ...last, hour: h });  // ensure hour field is the correct index
   }
   return profile;
 }
@@ -123,18 +123,28 @@ function runDynamic(canvasData, config = {}) {
   const tsc              = config.timeSeriesConfig || {};
   const hoursToSimulate  = Math.min(Math.max(tsc.hoursToSimulate ?? 24, 1), 48);
   const profile          = buildProfile(tsc.profile);
+  // Forward run-level config the route passes through (previously dropped):
+  const permitLimits     = config.permitLimits ?? tsc.permitLimits ?? null;
+  const unitCosts        = config.unitCosts ?? null;
 
   // Grab inlet defaults to use as base values
   const { DEFAULTS: inletDefaults } = require('./models/inlet');
 
   const steps   = [];
   const allWarn = [];
+  let prevStreamResults = null; // warm-start each hour's recycles from the last converged hour
 
   for (let h = 0; h < hoursToSimulate; h++) {
     const stepEntry    = profile[h % 24];
     const scaledParams = scaleInletParams(canvasData, nodeParams, stepEntry, inletDefaults);
 
-    const result = runSteadyState(canvasData, { nodeParams: scaledParams });
+    const result = runSteadyState(canvasData, {
+      nodeParams:            scaledParams,
+      permitLimits,
+      unitCosts,
+      initialRecycleStreams: prevStreamResults,
+    });
+    prevStreamResults = result.streamResults;
 
     steps.push({
       hour:          h,
@@ -143,6 +153,8 @@ function runDynamic(canvasData, config = {}) {
       unitResults:   result.unitResults,
       summary:       result.summary,
       warnings:      result.warnings,
+      converged:     result.converged,
+      degraded:      result.degraded,
     });
 
     if (result.warnings?.length) {

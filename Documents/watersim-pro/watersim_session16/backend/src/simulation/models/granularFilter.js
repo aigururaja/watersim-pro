@@ -153,18 +153,25 @@ function solve(inputs, params = {}) {
   // Backwash flow: ~5% of total throughput, high TSS
   const backwash_Q     = Q_m3_d * 0.05;
   const filtrate_Q     = Q_m3_d - backwash_Q;
-  const backwash_TSS   = (inf.TSS * Q_m3_d - filtrate_TSS * filtrate_Q) / backwash_Q;
+
+  const filtrate_COD   = inf.COD * (1 - effective_TSS_removal * 0.3);
+  const filtrate_TP    = inf.TP * (1 - effective_TSS_removal * 0.2); // slight particulate-P removal
+
+  // Backwash concentrations derived from the captured-mass balance (like TSS):
+  // whatever the filtrate does not carry ends up in the backwash — no mass created.
+  const bw = (in_mg_L, filt_mg_L) =>
+    backwash_Q > 0 ? Math.max(0, (in_mg_L * Q_m3_d - filt_mg_L * filtrate_Q) / backwash_Q) : 0;
 
   const filtrate = new Stream({
     Q:    filtrate_Q,
     TSS:  Math.max(0, filtrate_TSS),
     BOD:  Math.max(0, filtrate_BOD),
-    COD:  inf.COD * (1 - effective_TSS_removal * 0.3),
+    COD:  filtrate_COD,
     TN:   inf.TN,
     NH4:  inf.NH4,
     NO3:  inf.NO3,
     NO2:  inf.NO2,
-    TP:   inf.TP * (1 - effective_TSS_removal * 0.2), // slight particulate-P removal
+    TP:   filtrate_TP,
     DO:   inf.DO,
     pH:   inf.pH,
     temp: inf.temp,
@@ -172,14 +179,14 @@ function solve(inputs, params = {}) {
 
   const backwash = new Stream({
     Q:    backwash_Q,
-    TSS:  Math.max(0, backwash_TSS),
-    BOD:  inf.BOD * 3.0, // concentrated waste
-    COD:  inf.COD * 2.5,
+    TSS:  bw(inf.TSS, Math.max(0, filtrate_TSS)),
+    BOD:  bw(inf.BOD, Math.max(0, filtrate_BOD)),
+    COD:  bw(inf.COD, filtrate_COD),
     TN:   inf.TN,
-    NH4:  inf.NH4 * 1.5,
+    NH4:  inf.NH4,
     NO3:  inf.NO3,
     NO2:  inf.NO2,
-    TP:   inf.TP * 2.0,
+    TP:   bw(inf.TP, filtrate_TP),
     DO:   0.5,
     pH:   inf.pH,
     temp: inf.temp,

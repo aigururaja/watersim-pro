@@ -2,7 +2,9 @@ require('dotenv').config();
 
 const config = {
   env: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT, 10) || 3001,
+  // Single source of truth for the listen port (server.js reads this).
+  // Default 4000 matches docker-compose / k8s; local dev overrides via backend/.env (PORT=3001).
+  port: parseInt(process.env.PORT, 10) || 4000,
 
   db: {
     url: process.env.DATABASE_URL,

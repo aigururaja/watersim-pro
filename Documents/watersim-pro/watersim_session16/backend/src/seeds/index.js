@@ -13,19 +13,19 @@ async function seed() {
 
   // ── Organisation ────────────────────────────────────────────────────────
   const { rows: [org] } = await query(`
-    INSERT INTO organisations (name, slug, plan)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, plan = EXCLUDED.plan
+    INSERT INTO organisations (name, slug)
+    VALUES ($1, $2)
+    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
     RETURNING id, name, slug
-  `, ['WaterSim Demo Org', 'demo-org', 'professional']);
+  `, ['WaterSim Demo Org', 'demo-org']);
   console.log(`   ✔  Organisation  : ${org.name}  (${org.id})`);
 
   // ── Admin user ───────────────────────────────────────────────────────────
   const adminHash = await bcrypt.hash('Admin1234!', ROUNDS);
   const { rows: [admin] } = await query(`
-    INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role, is_verified)
+    INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role, email_verified)
     VALUES ($1,$2,$3,$4,$5,'admin',true)
-    ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, is_verified = true
+    ON CONFLICT (email, organisation_id) DO UPDATE SET password_hash = EXCLUDED.password_hash, email_verified = true
     RETURNING id, email
   `, [org.id, 'admin@watersim.dev', adminHash, 'Ada', 'Admin']);
   console.log(`   ✔  Admin         : ${admin.email}  /  Admin1234!`);
@@ -33,9 +33,9 @@ async function seed() {
   // ── Engineer user ────────────────────────────────────────────────────────
   const engHash = await bcrypt.hash('Engineer1!', ROUNDS);
   const { rows: [engineer] } = await query(`
-    INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role, is_verified)
+    INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role, email_verified)
     VALUES ($1,$2,$3,$4,$5,'engineer',true)
-    ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
+    ON CONFLICT (email, organisation_id) DO UPDATE SET password_hash = EXCLUDED.password_hash
     RETURNING id, email
   `, [org.id, 'engineer@watersim.dev', engHash, 'Eddie', 'Engineer']);
   console.log(`   ✔  Engineer      : ${engineer.email}  /  Engineer1!`);
@@ -43,9 +43,9 @@ async function seed() {
   // ── Operator user ────────────────────────────────────────────────────────
   const opHash = await bcrypt.hash('Operator1!', ROUNDS);
   await query(`
-    INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role, is_verified)
+    INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role, email_verified)
     VALUES ($1,$2,$3,$4,$5,'operator',true)
-    ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
+    ON CONFLICT (email, organisation_id) DO UPDATE SET password_hash = EXCLUDED.password_hash
   `, [org.id, 'operator@watersim.dev', opHash, 'Olivia', 'Operator']);
   console.log(`   ✔  Operator      : operator@watersim.dev  /  Operator1!`);
 

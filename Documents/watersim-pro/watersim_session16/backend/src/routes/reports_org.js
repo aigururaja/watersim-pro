@@ -18,6 +18,7 @@ const { body, param, query: qv, validationResult } = require('express-validator'
 const { query } = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { generateExcel } = require('../reports/excelGenerator');
+const { buildReportData } = require('../reports/reportData');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -89,11 +90,15 @@ function formatRun(row) {
 // ── GET /reports — org run history (cursor-based pagination) ─────────────────
 //
 // Cursor pagination: instead of OFFSET (which degrades on large tables),
-// we use `completed_at` as a stable keyset cursor.
+// we use a composite keyset cursor on (completed_at, id). A single-column
+// completed_at cursor dropped rows when several runs shared the same
+// completed_at (batch inserts) — the id tiebreaker makes ordering total.
 //
 // Query params:
 //   limit      – rows per page (default 40, max 100)
-//   cursor     – ISO timestamp; return rows with completed_at < cursor
+//   cursor     – opaque string (base64 JSON {completedAt, id}); the client
+//                passes back nextCursor verbatim. Legacy plain-ISO cursors
+//                are still accepted for compatibility.
 //   projectId  – UUID filter
 //   mode       – 'steady_state' | 'dynamic'
 //   compliance – 'pass' | 'fail' | 'unknown'
@@ -102,10 +107,37 @@ function formatRun(row) {
 //   { total, runs, nextCursor }
 //   nextCursor is null when no more rows exist.
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function encodeCursor(row) {
+  const completedAt = row.completed_at instanceof Date
+    ? row.completed_at.toISOString()
+    : String(row.completed_at);
+  return Buffer.from(JSON.stringify({ completedAt, id: row.id }), 'utf8').toString('base64');
+}
+
+/** Decode an opaque cursor → { completedAt, id } | { completedAt } | null. */
+function decodeCursor(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  // Preferred: base64-encoded JSON { completedAt, id }
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
+    if (parsed && typeof parsed.completedAt === 'string' && !Number.isNaN(Date.parse(parsed.completedAt))
+        && typeof parsed.id === 'string' && UUID_RE.test(parsed.id)) {
+      return { completedAt: new Date(parsed.completedAt).toISOString(), id: parsed.id };
+    }
+  } catch { /* not base64 JSON — try legacy format */ }
+  // Legacy: plain ISO timestamp (pre-composite clients)
+  if (!Number.isNaN(Date.parse(raw))) {
+    return { completedAt: new Date(raw).toISOString() };
+  }
+  return null;
+}
+
 router.get('/',
   [
     qv('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
-    qv('cursor').optional().isISO8601(),
+    qv('cursor').optional().isString().isLength({ max: 500 }),
     qv('projectId').optional().isUUID(),
     qv('mode').optional().isIn(['steady_state', 'dynamic']),
     qv('compliance').optional().isIn(['pass', 'fail', 'unknown']),
@@ -133,27 +165,34 @@ router.get('/',
         sql += ` AND (sr.results->'summary'->>'compliant')::boolean = false`;
       }
 
-      // Keyset cursor: completed_at < cursor keeps pagination stable when
-      // new runs are inserted at the top.
+      // Count uses the same parameterised filters (never string interpolation);
+      // it is built BEFORE the cursor is applied so total stays accurate.
+      const countSql    = `SELECT COUNT(*) FROM (${sql}) _c`;
+      const countParams = [...params];
+
+      // Composite keyset cursor: (completed_at, id) row comparison matches
+      // the ORDER BY below exactly, so tied completed_at values can never
+      // drop or duplicate rows across pages.
       if (req.query.cursor) {
-        sql += ` AND sr.completed_at < $${pi++}`;
-        params.push(new Date(req.query.cursor).toISOString());
+        const cur = decodeCursor(req.query.cursor);
+        if (!cur) return res.status(422).json({ error: 'Invalid cursor' });
+        if (cur.id) {
+          sql += ` AND (sr.completed_at, sr.id) < ($${pi}::timestamptz, $${pi + 1}::uuid)`;
+          params.push(cur.completedAt, cur.id);
+          pi += 2;
+        } else {
+          // Legacy single-column cursor
+          sql += ` AND sr.completed_at < $${pi++}::timestamptz`;
+          params.push(cur.completedAt);
+        }
       }
 
-      // Run count + page in parallel; count ignores cursor so total stays accurate.
-      const countSql = `SELECT COUNT(*) FROM (${RUN_SELECT}${
-        req.query.projectId ? ` AND p.id = '${req.query.projectId}'` : ''
-      }${req.query.mode ? ` AND sr.mode = '${req.query.mode}'` : ''
-      }${req.query.compliance === 'pass' ? ` AND (sr.results->'summary'->>'compliant')::boolean = true` : ''
-      }${req.query.compliance === 'fail' ? ` AND (sr.results->'summary'->>'compliant')::boolean = false` : ''
-      }) _c`;
-
       // Fetch limit+1 rows so we know if there are more
-      const fetchSql = `${sql} ORDER BY sr.completed_at DESC LIMIT $${pi}`;
+      const fetchSql = `${sql} ORDER BY sr.completed_at DESC, sr.id DESC LIMIT $${pi}`;
       const fetchParams = [...params, limit + 1];
 
       const [countResult, runsResult] = await Promise.all([
-        query(countSql, [req.user.sub, orgId(req)]),
+        query(countSql, countParams),
         query(fetchSql, fetchParams),
       ]);
 
@@ -165,7 +204,7 @@ router.get('/',
       res.json({
         total:       parseInt(countResult.rows[0].count),
         runs:        pageRows.map(formatRun),
-        nextCursor:  hasMore && lastRow ? lastRow.completed_at : null,
+        nextCursor:  hasMore && lastRow ? encodeCursor(lastRow) : null,
       });
     } catch (err) { next(err); }
   }
@@ -229,8 +268,8 @@ router.delete('/saved/:runId',
     if (vErr(req, res)) return;
     try {
       await query(
-        `DELETE FROM saved_reports WHERE run_id = $1 AND saved_by = $2`,
-        [req.params.runId, req.user.sub]
+        `DELETE FROM saved_reports WHERE run_id = $1 AND saved_by = $2 AND organisation_id = $3`,
+        [req.params.runId, req.user.sub, orgId(req)]
       );
       res.json({ success: true });
     } catch (err) { next(err); }
@@ -286,7 +325,10 @@ router.get('/:runId/excel',
 // ── POST /reports/compare/excel — multi-run comparison Excel export ────────────
 
 router.post('/compare/excel',
-  [body('runIds').isArray({ min: 2, max: 6 })],
+  [
+    body('runIds').isArray({ min: 2, max: 6 }),
+    body('runIds.*').isUUID(),
+  ],
   async (req, res, next) => {
     if (vErr(req, res)) return;
     const { runIds, labels = [] } = req.body;
@@ -345,35 +387,5 @@ router.post('/compare/excel',
     }
   }
 );
-
-// ── Shared helper ─────────────────────────────────────────────────────────────
-
-function buildReportData(row) {
-  const results = row.results || {};
-  const config  = row.run_config || {};
-  return {
-    run_id:         row.id,
-    project_name:   row.project_name,
-    flowsheet_name: row.flowsheet_name,
-    org_name:       row.org_name,
-    created_by:     row.created_by_name,
-    mode:           row.mode,
-    started_at:     row.started_at,
-    completed_at:   row.completed_at,
-    config,
-    warnings:       results.warnings || [],
-    results: {
-      summary:          results.summary          || {},
-      streamResults:    results.streamResults    || {},
-      unitResults:      results.unitResults      || {},
-      costBreakdown:    results.costBreakdown    || null,
-      permitLimitsUsed: results.permitLimitsUsed || null,
-      mode:             results.mode,
-      stepCount:        results.stepCount,
-      profileUsed:      results.profileUsed,
-      steps:            results.steps            || [],
-    },
-  };
-}
 
 module.exports = router;
