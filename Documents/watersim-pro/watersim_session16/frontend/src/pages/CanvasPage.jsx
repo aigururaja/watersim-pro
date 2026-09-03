@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactFlow, {
   addEdge, Background, Controls, MiniMap,
-  useNodesState, useEdgesState,
+  useNodesState, useEdgesState, useStore,
   Panel, EdgeLabelRenderer, BaseEdge, getStraightPath,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { ArrowLeft, Undo2, Redo2, Zap, Play, MoreHorizontal, Camera, Settings2, Trash2, PanelRight } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar,
@@ -19,6 +20,8 @@ import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
 import LiveChartsDock from '../components/canvas/LiveChartsDock';
+import { useAuth } from '../context/AuthContext';
+import { OnboardingTrigger } from '../components/OnboardingWizard';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCanvasPerf } from '../hooks/useCanvasPerf';
 import { useUndoRedo } from '../hooks/useUndoRedo';
@@ -26,6 +29,7 @@ import { useUndoRedo } from '../hooks/useUndoRedo';
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 
 const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, targetX, targetY, data, style = {}, markerEnd }) {
+  const zoom = useStore(s => s.transform[2]);
   const [edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY });
   const stream     = data?.streamResult;
   const isRecycle  = data?.isRecycle || (data?.streamType && data.streamType !== 'stream');
@@ -33,10 +37,11 @@ const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, target
   // Live-mode change indicator: Q delta vs the previous simulation
   const delta      = typeof data?.streamDelta === 'number' ? data.streamDelta : null;
 
+  const fmtQ = (q) => Number(q).toLocaleString('en-US', { maximumFractionDigits: 0 });
   const label = stream
     ? isRecycle
-      ? `RAS: ${stream.Q} m³/d`
-      : `Q: ${stream.Q} m³/d`
+      ? `RAS: ${fmtQ(stream.Q)} m³/d`
+      : `Q: ${fmtQ(stream.Q)} m³/d`
     : null;
 
   const edgeColor = isRecycle ? '#F97316' : (stream ? '#0ea5e9' : '#2E75B6');
@@ -50,7 +55,7 @@ const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, target
         strokeDasharray: edgeDash,
         ...style,
       }} />
-      {label && (
+      {label && zoom >= 0.55 && (
         <EdgeLabelRenderer>
           <div
             style={{
@@ -58,14 +63,14 @@ const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, target
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               background: isRecycle ? '#FFF7ED' : '#f0f9ff',
               border: `1px solid ${isRecycle ? '#FED7AA' : '#7dd3fc'}`,
-              borderRadius: 4,
-              padding: '1px 7px',
-              fontSize: 10,
+              borderRadius: 3,
+              padding: '0 6px',
+              lineHeight: '15px',
+              fontSize: 9.5,
               fontWeight: 600,
               color: isRecycle ? '#9A3412' : '#0369a1',
               pointerEvents: 'none',
               whiteSpace: 'nowrap',
-              zIndex: 10,
             }}
             className="nodrag nopan"
           >
@@ -343,6 +348,8 @@ export default function CanvasPage() {
             data: { ...e.data, streamResult: payload.results?.streamResults?.[e.id] || null },
           })));
           setShowSummary(true);
+          setShowDynamic(false);
+          setShowScenarios(false);
         }
         break;
       default:
@@ -353,6 +360,9 @@ export default function CanvasPage() {
   // ── Collaboration hook ────────────────────────────────────────────────────
   const { sendEvent, presence, self: collabSelf, remoteCursors, simBanner } =
     useCollaboration(flowsheetId, { onRemoteEvent: handleRemoteEvent });
+
+  // Current user (onboarding trigger in the canvas toolbar)
+  const { user } = useAuth();
 
   // Throttled cursor broadcast ref
   const cursorThrottleRef = useRef(null);
@@ -366,6 +376,18 @@ export default function CanvasPage() {
   const [snapName, setSnapName]           = useState('');
   const [snapping, setSnapping]           = useState(false);
   const [snapToast, setSnapToast]         = useState(null);
+
+  // Toolbar overflow menu (⋯)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    // Capture phase: ReactFlow's d3-zoom/d3-drag stopImmediatePropagation would
+    // swallow bubble-phase events for clicks on the canvas surface.
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [menuOpen]);
 
   const [simulating, setSimulating] = useState(false);
   const [simResults, setSimResults] = useState(null);
@@ -768,9 +790,11 @@ export default function CanvasPage() {
   }, [onEdgesChange, recordAfterChange]);
 
   // ── Node click → param editor ──────────────────────────────────────────────
+  // Keep the tab flags untouched: the Node view overlays whichever tab was
+  // active (all panels are !selectedNode-guarded), so closing the node panel
+  // returns to the previous tab instead of collapsing the aside.
   const onNodeClick = useCallback((_evt, node) => {
     setSelectedNode(node);
-    setShowSummary(false);
   }, []);
 
   // ── Update param ───────────────────────────────────────────────────────────
@@ -846,112 +870,100 @@ export default function CanvasPage() {
   const showRight     = selectedNode || showSummary || showDynamic || showScenarios;
 
   return (
-    <AppLayout>
+    <AppLayout immersive defaultCollapsed>
       <div style={S.shell}>
 
         {/* Toolbar */}
         <div style={S.toolbar}>
-          <button style={S.backBtn} onClick={() => navigate(`/projects/${projectId}`)}>← Back</button>
+          <button className="tb-ghost" style={{ ...S.btn, ...S.iconBtn }} title="Back to project" aria-label="Back" onClick={() => navigate(`/projects/${projectId}`)}><ArrowLeft size={16} /></button>
           <span style={S.title}>{flowsheet?.name || 'Loading…'}</span>
+          {liveMode && (
+            <span style={{
+              fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+              color: liveStatus === 'error' ? '#DC2626' : '#0369A1',
+              padding: '2px 8px', borderRadius: 10, background: '#F0F9FF',
+            }} aria-live="polite">
+              {(liveStatus === 'running' || liveStatus === 'pending')
+                ? '⚡ updating…'
+                : liveStatus === 'error'
+                  ? '⚡ error'
+                  : liveUpdatedAt
+                    ? `⚡ ${liveUpdatedAt.toLocaleTimeString()}`
+                    : '⚡ live'}
+            </span>
+          )}
           <div style={S.tbRight}>
             {/* ── Collaboration presence ─────────────────────────── */}
             <PresenceAvatars presence={presence} self={collabSelf} />
             {simBanner && <SimBanner simBanner={simBanner} />}
-            {!saved && <span style={S.unsaved}>● Unsaved</span>}
-            {liveMode && (
-              <span style={{
-                fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-                color: liveStatus === 'error' ? '#DC2626' : '#0369A1',
-              }} aria-live="polite">
-                {(liveStatus === 'running' || liveStatus === 'pending')
-                  ? '⚡ updating…'
-                  : liveStatus === 'error'
-                    ? '⚡ error'
-                    : liveUpdatedAt
-                      ? `⚡ ${liveUpdatedAt.toLocaleTimeString()}`
-                      : '⚡ live'}
-              </span>
-            )}
-            {hasAnyResults && (
-              <button style={{ ...S.btn, background: '#F3F4F6', color: '#374151' }} onClick={clearResults}>
-                Clear Results
-              </button>
-            )}
-            {simResults && (
-              <button style={{ ...S.btn, background: '#0891B2', color: '#fff' }} onClick={() => { setShowSummary(true); setShowDynamic(false); setShowScenarios(false); setSelectedNode(null); }}>
-                📊 Summary
-              </button>
-            )}
+            {/* Desktop only — below md the AppLayout header is visible and carries its own trigger */}
+            <span className="hidden md:inline-flex">
+              <OnboardingTrigger userId={user?.id} userName={user?.firstName} />
+            </span>
+            <button className="tb-ghost" title="Undo (Ctrl/Cmd+Z)" style={{ ...S.btn, ...S.iconBtn, opacity: canUndo ? 1 : 0.35 }} onClick={doUndo} disabled={!canUndo}><Undo2 size={16} /></button>
+            <button className="tb-ghost" title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)" style={{ ...S.btn, ...S.iconBtn, opacity: canRedo ? 1 : 0.35 }} onClick={doRedo} disabled={!canRedo}><Redo2 size={16} /></button>
+            <span style={S.divider} />
             <button
-              style={{ ...S.btn, background: '#7C3AED', color: '#fff', opacity: dynamicRunning ? 0.7 : 1 }}
-              onClick={() => { setShowDynamic(true); setShowSummary(false); setShowScenarios(false); setSelectedNode(null); }}
-              disabled={nodes.length === 0}
-            >
-              📈 Dynamic
-            </button>
-            <button
-              style={{ ...S.btn, background: '#B45309', color: '#fff', opacity: scenariosRunning ? 0.7 : 1 }}
-              onClick={() => { setShowScenarios(true); setShowDynamic(false); setShowSummary(false); setSelectedNode(null); }}
-              disabled={nodes.length === 0}
-            >
-              ⚖ Compare
-            </button>
-            <button
-              title="Edit cost coefficients for this project"
-              style={{ ...S.btn, background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', fontSize: 14 }}
-              onClick={() => navigate(`/projects/${projectId}/settings`)}
-            >⚙</button>
-            <button
-              title="Undo (Ctrl/Cmd+Z)"
-              style={{ ...S.btn, background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', opacity: canUndo ? 1 : 0.45 }}
-              onClick={doUndo}
-              disabled={!canUndo}
-            >
-              ↩ Undo
-            </button>
-            <button
-              title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
-              style={{ ...S.btn, background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', opacity: canRedo ? 1 : 0.45 }}
-              onClick={doRedo}
-              disabled={!canRedo}
-            >
-              ↪ Redo
-            </button>
-            <button
-              style={{ ...S.btn, background: '#1F4E79', color: '#fff', opacity: saving || saveConflict ? 0.7 : 1 }}
-              onClick={save}
-              disabled={saving || !!saveConflict}
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              title="Save a named snapshot of the current canvas"
-              style={{ ...S.btn, background: '#0D9488', color: '#fff' }}
-              onClick={() => { setSnapName(`${flowsheet?.name || 'Flowsheet'} — ${new Date().toLocaleDateString()}`); setShowSnapModal(true); }}
-              disabled={nodes.length === 0}
-            >
-              📸
-            </button>
-            <button
-              title="Live mode: re-simulates automatically as you change parameters or the flowsheet. Previews are not saved to the run history."
-              style={{
-                ...S.btn,
-                background: liveMode ? '#0EA5E9' : '#F3F4F6',
-                color: liveMode ? '#fff' : '#374151',
-                border: liveMode ? 'none' : '1px solid #D1D5DB',
-              }}
+              className="tb-ghost"
+              style={{ ...S.btn, ...(liveMode ? { background: '#E9F2FA', color: '#1F4E79', border: '1px solid #B6D3EC' } : null) }}
               onClick={() => setLiveMode(v => !v)}
               disabled={nodes.length === 0}
               aria-pressed={liveMode}
+              title="Live mode: re-simulates automatically as you change parameters or the flowsheet. Previews are not saved to the run history."
             >
-              ⚡ Live
+              <Zap size={14} />Live
             </button>
             <button
-              style={{ ...S.btn, background: '#16A34A', color: '#fff', opacity: simulating ? 0.7 : 1 }}
-              onClick={simulate}
-              disabled={simulating || nodes.length === 0}
+              className="tb-secondary"
+              style={{ ...S.btn, ...S.btnSecondary, ...(!saved ? { border: '1px solid #F59E0B' } : null), opacity: saving || saveConflict ? 0.7 : 1 }}
+              onClick={save}
+              disabled={saving || !!saveConflict}
+              title={!saved ? 'Unsaved changes' : undefined}
             >
-              {simulating ? '⏳ Running…' : '▶ Simulate'}
+              {!saved && <span aria-hidden="true" style={{ color: '#F59E0B' }}>●</span>}
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            {!showRight && (
+              <button
+                className="tb-ghost"
+                style={{ ...S.btn, ...S.iconBtn }}
+                title="Open results panel"
+                onClick={() => { if (simResults) { setShowSummary(true); setShowDynamic(false); } else { setShowDynamic(true); setShowSummary(false); } setShowScenarios(false); setSelectedNode(null); }}
+              >
+                <PanelRight size={16} />
+              </button>
+            )}
+            <div ref={menuRef} style={{ position: 'relative', flexShrink: 0 }}>
+              <button className="tb-ghost" style={{ ...S.btn, ...S.iconBtn }} aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More actions" onClick={() => setMenuOpen(v => !v)}><MoreHorizontal size={16} /></button>
+              {menuOpen && (
+                <div role="menu" style={S.menu}>
+                  <button
+                    role="menuitem"
+                    style={{ ...S.menuItem, opacity: nodes.length === 0 ? 0.45 : 1 }}
+                    disabled={nodes.length === 0}
+                    title="Save a named snapshot of the current canvas"
+                    onClick={() => { setSnapName(`${flowsheet?.name || 'Flowsheet'} — ${new Date().toLocaleDateString()}`); setShowSnapModal(true); setMenuOpen(false); }}
+                  >
+                    <Camera size={14} />Snapshot…
+                  </button>
+                  <button
+                    role="menuitem"
+                    style={S.menuItem}
+                    title="Edit cost coefficients for this project"
+                    onClick={() => { navigate(`/projects/${projectId}/settings`); setMenuOpen(false); }}
+                  >
+                    <Settings2 size={14} />Cost settings…
+                  </button>
+                  {hasAnyResults && (
+                    <button role="menuitem" style={{ ...S.menuItem, color: '#DC2626' }} onClick={() => { clearResults(); setMenuOpen(false); }}>
+                      <Trash2 size={14} />Clear results
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <button className="tb-primary" style={{ ...S.btn, ...S.btnPrimary, opacity: simulating ? 0.7 : 1 }} onClick={simulate} disabled={simulating || nodes.length === 0}>
+              <Play size={14} />{simulating ? 'Running…' : 'Simulate'}
             </button>
           </div>
         </div>
@@ -1007,12 +1019,14 @@ export default function CanvasPage() {
               <Background variant="dots" gap={20} size={1} color="#D1D5DB" />
               <PerfOverlay />
               <Controls />
-              <MiniMap nodeColor={() => '#2E75B6'} maskColor="rgba(240,246,255,0.6)" />
-              <Panel position="top-right">
-                <div style={S.hint}>
-                  Drag unit ops · Connect nodes · Click to configure · ▶ Simulate
-                </div>
-              </Panel>
+              <MiniMap nodeColor={() => '#2E75B6'} maskColor="rgba(240,246,255,0.6)" style={{ width: 140, height: 92 }} pannable zoomable className="ws-minimap" />
+              {nodes.length === 0 && (
+                <Panel position="top-right">
+                  <div style={S.hint}>
+                    Drag unit ops · Connect nodes · Click to configure · ▶ Simulate
+                  </div>
+                </Panel>
+              )}
             </ReactFlow>
           </div>
 
@@ -1029,6 +1043,16 @@ export default function CanvasPage() {
           {/* Right panel */}
           {showRight && (
             <aside style={S.rightPanel}>
+              <div style={S.tabBar} role="tablist">
+                {selectedNode && <button style={S.tab(true)} role="tab" aria-selected="true">Node</button>}
+                <button style={S.tab(!selectedNode && showSummary)} role="tab" aria-selected={!selectedNode && showSummary}
+                  onClick={() => { setShowSummary(true); setShowDynamic(false); setShowScenarios(false); setSelectedNode(null); }}>Summary</button>
+                <button style={S.tab(!selectedNode && showDynamic)} role="tab" aria-selected={!selectedNode && showDynamic}
+                  onClick={() => { setShowDynamic(true); setShowSummary(false); setShowScenarios(false); setSelectedNode(null); }}>Dynamic</button>
+                <button style={S.tab(!selectedNode && showScenarios)} role="tab" aria-selected={!selectedNode && showScenarios}
+                  onClick={() => { setShowScenarios(true); setShowDynamic(false); setShowSummary(false); setSelectedNode(null); }}>Compare</button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               {selectedNode && (
                 <ParamPanel
                   node={selectedNode}
@@ -1049,6 +1073,9 @@ export default function CanvasPage() {
                   onClose={() => setShowSummary(false)}
                 />
               )}
+              {!selectedNode && showSummary && !summary && (
+                <div style={{ padding: '24px 16px', fontSize: 13, color: '#6B7280' }}>Run a simulation to see results.</div>
+              )}
               {showDynamic && !selectedNode && (
                 <DynamicPanel
                   nodes={nodes}
@@ -1067,6 +1094,7 @@ export default function CanvasPage() {
                   onClose={() => setShowScenarios(false)}
                 />
               )}
+              </div>
             </aside>
           )}
         </div>
@@ -2107,18 +2135,26 @@ function StreamTable({ stream }) {
 
 const S = {
   shell:       { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' },
-  toolbar:     { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#fff', borderBottom: '1px solid #E5E7EB', flexShrink: 0, overflowX: 'auto' },
-  backBtn:     { background: 'none', border: 'none', cursor: 'pointer', color: '#2E75B6', fontWeight: 600, fontSize: 14, flexShrink: 0, minHeight: 36, padding: '4px 8px' },
-  title:       { fontSize: 14, fontWeight: 700, color: '#111', flex: 1, minWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  tbRight:     { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 },
-  unsaved:     { fontSize: 11, color: '#F59E0B', fontWeight: 500, whiteSpace: 'nowrap' },
-  btn:         { border: 'none', borderRadius: 6, padding: '5px 10px', fontWeight: 600, cursor: 'pointer', fontSize: 12, flexShrink: 0, minHeight: 34 },
+  toolbar:     { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, minHeight: 48, padding: '4px 12px', background: '#fff', borderBottom: '1px solid #E5E7EB', flexShrink: 0, minWidth: 0 },
+  title:       { fontSize: 13, fontWeight: 600, color: '#111827', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  tbRight:     { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, minWidth: 0 },
+  // Rest + hover backgrounds live in index.css (.tb-ghost/.tb-secondary/.tb-primary)
+  // — an inline background would beat the class :hover rules in the cascade.
+  btn:         { border: 'none', color: '#374151', borderRadius: 8, height: 32, padding: '0 10px', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' },   // ghost base
+  btnSecondary:{ border: '1px solid #D1D5DB' },
+  btnPrimary:  { color: '#fff', padding: '0 14px' },              // green Simulate — THE one fill (bg via .tb-primary)
+  iconBtn:     { width: 32, padding: 0, justifyContent: 'center' },
+  divider:     { width: 1, height: 20, background: '#E5E7EB', margin: '0 4px', flexShrink: 0 },
+  menu:        { position: 'absolute', top: 44, right: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, minWidth: 200, zIndex: 500 },
+  menuItem:    { display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 6, fontSize: 13, fontWeight: 500, color: '#374151', background: 'transparent', border: 'none', cursor: 'pointer' },
   body:        { display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 },
   canvasWrap:  { flex: 1, position: 'relative', minWidth: 0 },
   hint:        { background: 'rgba(255,255,255,0.92)', border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 10px', fontSize: 11, color: '#6B7280' },
   errBanner:   { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', background: '#FEF2F2', borderBottom: '1px solid #FECACA', color: '#991B1B', fontSize: 13 },
   dismissBtn:  { background: 'none', border: 'none', cursor: 'pointer', color: '#991B1B', marginLeft: 'auto', fontSize: 16 },
-  rightPanel:  { width: 300, maxWidth: '85vw', background: '#fff', borderLeft: '1px solid #E5E7EB', overflowY: 'auto', flexShrink: 0 },
+  rightPanel:  { width: 320, maxWidth: '85vw', background: '#fff', borderLeft: '1px solid #E5E7EB', flexShrink: 0, display: 'flex', flexDirection: 'column' },   // overflowY moved to inner wrapper
+  tabBar:      { display: 'flex', borderBottom: '1px solid #E5E7EB', padding: '0 8px', flexShrink: 0 },
+  tab:         (active) => ({ background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 10px 8px', fontSize: 12, fontWeight: 600, color: active ? '#1F4E79' : '#6B7280', borderBottom: active ? '2px solid #2E75B6' : '2px solid transparent' }),
   panelHdr:    { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #E5E7EB' },
   closeBtn:    { background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 16, minWidth: 32, minHeight: 32 },
   panelSection:{ padding: '10px 14px', borderBottom: '1px solid #F3F4F6' },

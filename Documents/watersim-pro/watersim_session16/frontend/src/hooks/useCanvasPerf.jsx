@@ -56,7 +56,7 @@ export function useCanvasPerf(nodes = [], edges = []) {
       <div style={{
         position: 'absolute',
         bottom: 8,
-        left: 8,
+        left: 56,
         background: 'rgba(15,23,42,0.82)',
         color: '#e2e8f0',
         fontFamily: 'monospace',

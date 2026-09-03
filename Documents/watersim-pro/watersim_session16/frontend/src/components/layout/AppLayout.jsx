@@ -108,11 +108,14 @@ function SidebarContent({
   );
 }
 
-export default function AppLayout({ children }) {
+export default function AppLayout({ children, immersive = false, defaultCollapsed = false }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { const v = localStorage.getItem('ws.navCollapsed'); if (v != null) return v === '1'; } catch {}
+    return defaultCollapsed;
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Build nav items — show Admin link for admin and engineer roles
@@ -140,7 +143,7 @@ export default function AppLayout({ children }) {
     pathname: location.pathname,
     onCloseDrawer: () => setDrawerOpen(false),
     onLogout: handleLogout,
-    onToggleCollapse: () => setCollapsed(c => !c),
+    onToggleCollapse: () => setCollapsed(c => { const n = !c; try { localStorage.setItem('ws.navCollapsed', n ? '1' : '0'); } catch {} return n; }),
   };
 
   return (
@@ -167,7 +170,7 @@ export default function AppLayout({ children }) {
       {/* Main area */}
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         {/* Top bar */}
-        <header className="h-14 md:h-16 bg-white border-b border-gray-200 flex items-center gap-3 px-4 md:px-6 flex-shrink-0">
+        <header className={`${immersive ? 'md:hidden ' : ''}h-14 md:h-16 bg-white border-b border-gray-200 flex items-center gap-3 px-4 md:px-6 flex-shrink-0`}>
           {/* Mobile hamburger */}
           <button
             className="md:hidden p-2 -ml-1 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"

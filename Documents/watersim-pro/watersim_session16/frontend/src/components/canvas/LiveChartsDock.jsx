@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, Cell, ReferenceLine,
@@ -12,7 +12,8 @@ import {
  * user tweaks the flowsheet, plus current effluent vs permit limits.
  *
  * Charts are fixed-size (no ResponsiveContainer) inside a horizontal
- * scroller: cheaper (no resize observers) and stable in tests.
+ * scroller; one ResizeObserver on the dock root computes the widths, with a
+ * fixed-size fallback when unmeasured (jsdom/tests, or very narrow docks).
  */
 
 const METRICS = [
@@ -64,13 +65,13 @@ const S = {
   }),
   smallBtn: {
     fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 6,
-    background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', cursor: 'pointer',
+    background: 'transparent', color: '#374151', border: 'none', cursor: 'pointer',
   },
   body: { display: 'flex', gap: 18, padding: '8px 14px 10px', overflowX: 'auto', alignItems: 'stretch' },
   section: { flexShrink: 0 },
   secTitle: { fontSize: 11, fontWeight: 700, color: '#6B7280', marginBottom: 2 },
   costCol: {
-    flexShrink: 0, minWidth: 180, display: 'flex', flexDirection: 'column',
+    flexShrink: 0, width: 190, display: 'flex', flexDirection: 'column',
     justifyContent: 'center', gap: 8, paddingLeft: 6, borderLeft: '1px solid #F3F4F6',
   },
   costLabel: { fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.04em' },
@@ -82,6 +83,22 @@ const LiveChartsDock = React.memo(function LiveChartsDock({
 }) {
   const last = history[history.length - 1] || null;
   const prev = history[history.length - 2] || null;
+
+  // Responsive chart widths from a single observer. The component mounts
+  // rendering null (empty history) and the root div appears/disappears with
+  // data — so a callback ref, not an effect, owns the observer lifecycle: it
+  // attaches whenever the div actually mounts and disconnects when it goes.
+  // w stays 0 in jsdom (no ResizeObserver) — tests hit the fixed fallbacks.
+  const roRef = useRef(null);
+  const [w, setW] = useState(0);
+  const rootRef = useCallback((node) => {
+    if (roRef.current) { roRef.current.disconnect(); roRef.current = null; }
+    if (node && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(entries => setW(Math.round(entries[0].contentRect.width)));
+      ro.observe(node);
+      roRef.current = ro;
+    }
+  }, []);
 
   const permitData = useMemo(() => {
     if (!last) return [];
@@ -97,10 +114,15 @@ const LiveChartsDock = React.memo(function LiveChartsDock({
 
   if (!history.length) return null;
 
+  const avail = w - 28 - 36 - 190;                       // body padding + two 18px gaps + cost column
+  const fit   = w > 0 && avail >= 560;
+  const lineW = fit ? Math.min(720, Math.max(340, Math.round(avail * 0.6))) : 430;
+  const barW  = fit ? Math.min(420, Math.max(220, avail - lineW)) : 300;
+
   return (
-    <div style={S.dock} data-testid="live-charts-dock">
+    <div ref={rootRef} style={S.dock} data-testid="live-charts-dock">
       <div style={S.header}>
-        <span>📈 Live Charts</span>
+        <span>Live Charts</span>
         <span style={{ color: '#9CA3AF', fontWeight: 500 }}>
           run #{last.idx} · {last.time}
         </span>
@@ -123,7 +145,7 @@ const LiveChartsDock = React.memo(function LiveChartsDock({
           {/* ── Effluent quality trend across runs ─────────────────────── */}
           <div style={S.section}>
             <div style={S.secTitle}>Effluent quality per run (mg/L)</div>
-            <LineChart width={430} height={168} data={history} margin={{ top: 6, right: 12, left: -14, bottom: 0 }}>
+            <LineChart width={lineW} height={150} data={history} margin={{ top: 6, right: 12, left: -14, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis dataKey="idx" tick={{ fontSize: 10 }} tickFormatter={v => `#${v}`} />
               <YAxis tick={{ fontSize: 10 }} />
@@ -145,7 +167,7 @@ const LiveChartsDock = React.memo(function LiveChartsDock({
           {/* ── Current effluent vs permit limits ──────────────────────── */}
           <div style={S.section}>
             <div style={S.secTitle}>Latest run vs permit limits (mg/L)</div>
-            <BarChart width={300} height={168} data={permitData} margin={{ top: 6, right: 8, left: -14, bottom: 0 }}>
+            <BarChart width={barW} height={150} data={permitData} margin={{ top: 6, right: 8, left: -14, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis dataKey="param" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />

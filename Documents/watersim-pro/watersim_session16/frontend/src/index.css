@@ -106,3 +106,17 @@ a[href="#main-content"]:focus {
   outline: 2px solid white;
   outline-offset: 2px;
 }
+
+/* ── Canvas toolbar button grammar ──
+   Rest backgrounds live HERE (not inline) so the :hover rules can win the
+   cascade — an inline style background would always beat a class :hover. */
+.tb-ghost                          { background: transparent; }
+.tb-ghost:hover:not(:disabled)     { background: #F3F4F6; }
+.tb-secondary                      { background: #fff; }
+.tb-secondary:hover:not(:disabled) { background: #F9FAFB; }
+.tb-primary                        { background: #16A34A; }
+.tb-primary:hover:not(:disabled)   { background: #15803D; }
+.tb-primary:disabled               { background: #16A34A; }
+/* ── MiniMap rest/hover fade ── */
+.ws-minimap       { opacity: .5; transition: opacity .15s; }
+.ws-minimap:hover { opacity: 1; }

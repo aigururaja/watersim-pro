@@ -105,6 +105,20 @@ function PaletteItem({ type, label, onAdd }) {
 export default function UnitOpPalette({ onAddNode }) {
   // On mobile, palette collapses to a toggle button
   const [open, setOpen] = useState(false);
+  // Desktop rail collapse — persisted so the choice survives visits
+  const [rail, setRail] = useState(() => {
+    try { return localStorage.getItem('ws.paletteRail') === '1'; } catch { /* ignore */ }
+    return false;
+  });
+  const setRailPersist = (v) => {
+    setRail(v);
+    try { localStorage.setItem('ws.paletteRail', v ? '1' : '0'); } catch { /* ignore */ }
+  };
+  // Type-to-filter across the 23 items
+  const [q, setQ] = useState('');
+  const groups = PALETTE
+    .map(g => ({ ...g, items: g.items.filter(i => i.label.toLowerCase().includes(q.toLowerCase())) }))
+    .filter(g => g.items.length);
 
   return (
     <>
@@ -112,7 +126,7 @@ export default function UnitOpPalette({ onAddNode }) {
       {!open && (
         <button
           className="md:hidden absolute left-2 top-2 z-20 bg-white border border-gray-200 shadow rounded-lg px-2.5 py-1.5 text-xs font-bold text-brand-700 flex items-center gap-1.5"
-          onClick={() => setOpen(true)}
+          onClick={() => { setOpen(true); setRailPersist(false); }}
           style={{ position: 'absolute' }}
         >
           ⊞ Palette
@@ -137,39 +151,64 @@ export default function UnitOpPalette({ onAddNode }) {
           fixed md:relative top-0 left-0 h-full z-40
           md:translate-x-0 md:flex md:z-auto
           ${open ? 'translate-x-0 flex' : '-translate-x-full hidden md:flex'}
+          ${rail ? 'md:w-10' : 'md:w-[176px]'} w-64 max-w-[85vw]
         `}
       >
-        <div style={styles.header} className="flex items-center justify-between">
-          <span>Unit Operations</span>
+        {rail ? (
           <button
-            className="md:hidden text-brand-200 hover:text-white p-1 rounded"
-            onClick={() => setOpen(false)}
-          >✕</button>
-        </div>
-        <div style={styles.scrollArea}>
-          {PALETTE.map(group => (
-            <div key={group.category} style={styles.group}>
-              <div style={styles.groupTitle}>{group.category}</div>
-              {group.items.map(item => (
-                <PaletteItem key={item.type} {...item} onAdd={onAddNode} />
+            className="hidden md:flex"
+            title="Show unit operations"
+            onClick={() => setRailPersist(false)}
+            style={{ margin: '8px auto', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: 13 }}
+          >»</button>
+        ) : (
+          <>
+            <div style={styles.header} className="flex items-center justify-between">
+              <span>Unit Operations</span>
+              <button
+                className="hidden md:block"
+                title="Collapse palette"
+                onClick={() => setRailPersist(true)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 13 }}
+              >«</button>
+              <button
+                className="md:hidden text-brand-200 hover:text-white p-1 rounded"
+                onClick={() => setOpen(false)}
+              >✕</button>
+            </div>
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Filter units…"
+              aria-label="Filter unit operations"
+              style={{ margin: '8px 12px 0', padding: '6px 8px', fontSize: 12, border: '1px solid #E5E7EB', borderRadius: 6, width: 'calc(100% - 24px)', boxSizing: 'border-box' }}
+            />
+            <div style={styles.scrollArea}>
+              {groups.map(group => (
+                <div key={group.category} style={styles.group}>
+                  <div style={styles.groupTitle}>{group.category}</div>
+                  {group.items.map(item => (
+                    <PaletteItem key={item.type} {...item} onAdd={onAddNode} />
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
-        </div>
-        <div style={styles.hint}>Drag onto the canvas, or press Enter to add at centre</div>
+            <div style={styles.hint}>Drag onto the canvas, or press Enter to add at centre</div>
+          </>
+        )}
       </aside>
     </>
   );
 }
 
 const styles = {
-  panel:     { width: 200, background: '#fff', borderRight: '1px solid #E5E7EB', flexDirection: 'column', flexShrink: 0 },
-  header:    { padding: '12px 14px', fontWeight: 700, fontSize: 13, color: '#1F4E79', borderBottom: '1px solid #E5E7EB', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  panel:     { background: '#fff', borderRight: '1px solid #E5E7EB', flexDirection: 'column', flexShrink: 0 },
+  header:    { padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#1F4E79', borderBottom: '1px solid #E5E7EB', textTransform: 'uppercase', letterSpacing: '0.05em' },
   scrollArea:{ flex: 1, overflowY: 'auto', padding: '8px 0' },
   group:     { marginBottom: 8 },
-  groupTitle:{ padding: '6px 14px', fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em' },
-  item:      { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', cursor: 'grab', fontSize: 13, color: '#374151', userSelect: 'none' },
+  groupTitle:{ padding: '6px 12px', fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em' },
+  item:      { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', cursor: 'grab', fontSize: 12, color: '#374151', userSelect: 'none' },
   itemText:  { flex: 1 },
   dragHint:  { color: '#CBD5E1', fontSize: 14 },
-  hint:      { padding: '10px 14px', fontSize: 11, color: '#9CA3AF', borderTop: '1px solid #E5E7EB', fontStyle: 'italic' },
+  hint:      { padding: '10px 12px', fontSize: 10, color: '#9CA3AF', borderTop: '1px solid #E5E7EB', fontStyle: 'italic' },
 };
