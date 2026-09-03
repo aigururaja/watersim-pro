@@ -53,6 +53,21 @@ function sendTo(ws, message) {
   if (ws.readyState === 1) ws.send(JSON.stringify(message));
 }
 
+/**
+ * Server-originated broadcast to every client in a flowsheet room (used by the
+ * PLC poller for 'plc:update'). Bypasses the client-message allowlist by
+ * design — that allowlist only guards messages RECEIVED from clients, and
+ * 'plc:update' is deliberately absent from it so clients can never forge live
+ * PLC values (unknown types are dropped in the message handler).
+ * Returns the number of clients in the room (0 when the room is empty).
+ */
+function broadcastToRoom(flowsheetId, message) {
+  const room = rooms.get(flowsheetId);
+  if (!room || room.size === 0) return 0;
+  broadcast(room, message);
+  return room.size;
+}
+
 // ── Per-connection throttle map (for cursor + node:move) ────────────────────
 // throttles: Map<ws, Map<eventType, { timer, pending }>>
 const throttles = new Map();
@@ -341,4 +356,4 @@ function attachWsServer(httpServer) {
   return wss;
 }
 
-module.exports = { attachWsServer };
+module.exports = { attachWsServer, broadcastToRoom };

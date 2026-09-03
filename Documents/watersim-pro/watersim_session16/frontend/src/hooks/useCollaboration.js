@@ -28,6 +28,7 @@ export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
   const [self, setSelf]                   = useState(null);
   const [remoteCursors, setRemoteCursors] = useState({});    // { [userId]: { x, y, color, displayName } }
   const [simBanner, setSimBanner]         = useState(null);  // { displayName } or null
+  const [connected, setConnected]         = useState(false); // WS currently open?
 
   // Keep callback ref fresh
   useEffect(() => { onRemoteEventRef.current = onRemoteEvent; }, [onRemoteEvent]);
@@ -43,6 +44,7 @@ export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
 
     ws.onopen = () => {
       delayRef.current = RECONNECT_BASE_MS; // reset back-off on successful connect
+      setConnected(true);
     };
 
     ws.onmessage = (evt) => {
@@ -91,6 +93,7 @@ export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
         case 'edge:add':
         case 'edge:delete':
         case 'params:update':
+        case 'plc:update':
           if (onRemoteEventRef.current) onRemoteEventRef.current({ type, payload, from });
           break;
 
@@ -101,6 +104,7 @@ export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
 
     ws.onclose = () => {
       wsRef.current = null;
+      setConnected(false);
       // Remove stale cursors for peers that might have left
       setRemoteCursors({});
       // Schedule reconnect
@@ -142,5 +146,6 @@ export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
     self,       // this user's peer info
     remoteCursors,
     simBanner,
+    connected,  // WS link currently open (used for PLC polling fallback)
   };
 }

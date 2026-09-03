@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import AppLayout from '../components/layout/AppLayout';
+import PLCConnectionsTab from '../components/plc/PLCConnectionsTab';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -396,7 +397,11 @@ export default function SettingsPage() {
 
         {/* Tab bar */}
         <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #E5E7EB', marginBottom: 24 }}>
-          {[{ key: 'permits', label: '📋 Permit Templates' }, { key: 'costs', label: '💰 Cost Coefficients' }].map(tab => (
+          {[
+            { key: 'permits', label: '📋 Permit Templates' },
+            { key: 'costs', label: '💰 Cost Coefficients' },
+            { key: 'plc', label: '🔌 PLC Connections' },
+          ].map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
               padding: '10px 22px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
               fontWeight: activeTab === tab.key ? 700 : 500,
@@ -483,6 +488,12 @@ export default function SettingsPage() {
         {activeTab === 'costs' && (
           <section style={S.section}>
             <UnitCostsTab projectId={projectId} canEdit={canEdit} showToast={showToast} />
+          </section>
+        )}
+
+        {activeTab === 'plc' && (
+          <section style={S.section}>
+            <PLCConnectionsTab canEdit={canEdit} showToast={showToast} />
           </section>
         )}
 

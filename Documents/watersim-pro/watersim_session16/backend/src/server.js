@@ -19,7 +19,10 @@ const reportRoutes       = require('./routes/reports');
 const permitRoutes       = require('./routes/permitTemplates');
 const adminRoutes        = require('./routes/admin');
 const reportsOrgRoutes   = require('./routes/reports_org');
+const plcRoutes          = require('./routes/plc');
+const plcBindingRoutes   = require('./routes/plcBindings');
 const { attachWsServer } = require('./collab/wsServer');
+const { startPoller, stopPoller } = require('./plc/poller');
 
 // ── Startup env validation ───────────────────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
@@ -126,9 +129,12 @@ app.use(`${API}/projects`,                                       projectRoutes);
 app.use(`${API}/projects/:projectId/flowsheets`,                 flowsheetRoutes);
 app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId/simulate`, simulateRoutes);
 app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId/simulate`, reportRoutes);
+// PLC bindings live under the same base as simulate (plc-bindings, plc-values)
+app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId`,    plcBindingRoutes);
 app.use(`${API}/permit-templates`,                               permitRoutes);
 app.use(`${API}/admin`,                                          adminRoutes);
 app.use(`${API}/reports`,                                        reportsOrgRoutes);
+app.use(`${API}/plc`,                                            plcRoutes);
 
 // ── Metrics (unauthenticated, outside the /api rate limiter) ─────────────────
 // NOTE: /metrics must be network-restricted in production (cluster-internal
@@ -222,6 +228,11 @@ async function start() {
 
   const wss = attachWsServer(server);
 
+  // ── PLC poller ─────────────────────────────────────────────────────────────
+  // Reads bound PLC tags and pushes live values into flowsheet WS rooms.
+  // No-op under NODE_ENV=test (poller guards this itself).
+  startPoller();
+
   // ── Stale-run reaper ───────────────────────────────────────────────────────
   // Runs inserted as 'running' orphan forever if the process dies mid-run.
   // Every 5 minutes, mark anything stuck in 'running' for >15 min as failed.
@@ -250,6 +261,9 @@ async function start() {
     logger.info(`${signal} received — shutting down gracefully`);
 
     clearInterval(reaper);
+
+    // Stop the PLC poller (clears its interval, disconnects cached clients).
+    stopPoller().catch((err) => logger.warn('Error stopping PLC poller', { error: err.message }));
 
     // Close WebSocket clients with a going-away close frame, then the wss.
     try {

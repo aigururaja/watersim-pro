@@ -6,7 +6,7 @@ import ReactFlow, {
   Panel, EdgeLabelRenderer, BaseEdge, getStraightPath,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { ArrowLeft, Undo2, Redo2, Zap, Play, MoreHorizontal, Camera, Settings2, Trash2, PanelRight } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, Zap, Play, MoreHorizontal, Camera, Settings2, Trash2, PanelRight, Link2 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar,
@@ -25,6 +25,11 @@ import { OnboardingTrigger } from '../components/OnboardingWizard';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCanvasPerf } from '../hooks/useCanvasPerf';
 import { useUndoRedo } from '../hooks/useUndoRedo';
+import PLCBindDialog from '../components/plc/PLCBindDialog';
+import PLCLiveChip from '../components/plc/PLCLiveChip';
+import {
+  bindingKey, bindingsToMap, liveFromBindings, mergePlcValues, worstQuality,
+} from '../components/plc/plcState';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 
@@ -284,6 +289,10 @@ export default function CanvasPage() {
   // must NOT create local history entries (each client keeps its own history).
   const applyingRemoteRef = useRef(false);
 
+  // PLC live-update handler — assigned further down (after the PLC state is
+  // declared); a ref so the stable applyRemoteEvent closure can reach it.
+  const handlePlcUpdateRef = useRef(null);
+
   // Record the post-change canvas state one tick later, after React has
   // committed the setNodes/setEdges from the local action (so the refs above
   // hold the updated arrays). Rapid bursts coalesce inside the hook.
@@ -339,6 +348,11 @@ export default function CanvasPage() {
             : n
         ));
         break;
+      case 'plc:update':
+        // Live PLC tag values — merge into the live-value map and (in live
+        // mode) apply readable bindings into node params (digital-twin loop).
+        handlePlcUpdateRef.current?.(payload);
+        break;
       case 'sim:result':
         if (payload?.results) {
           setSimResults(payload);
@@ -358,7 +372,7 @@ export default function CanvasPage() {
   };
 
   // ── Collaboration hook ────────────────────────────────────────────────────
-  const { sendEvent, presence, self: collabSelf, remoteCursors, simBanner } =
+  const { sendEvent, presence, self: collabSelf, remoteCursors, simBanner, connected: wsConnected } =
     useCollaboration(flowsheetId, { onRemoteEvent: handleRemoteEvent });
 
   // Current user (onboarding trigger in the canvas toolbar)
@@ -462,13 +476,19 @@ export default function CanvasPage() {
   }, [projectId, flowsheetId, nodes, edges, flowsheet?.version, saveConflict]);
 
   // ── Debounced auto-save (3 s after last unsaved change) ────────────────────
+  // `save`'s identity changes with nodes/edges (its deps), and PLC applies call
+  // setNodes ~every 2 s in live mode — depending on `save` here would clear and
+  // restart the 3 s timer on every apply, so real unsaved edits could never
+  // auto-save. Keep the latest save in a ref and depend only on saved/conflict.
+  const saveRef = useRef(save);
+  saveRef.current = save;
   const autoSaveTimerRef = useRef(null);
   useEffect(() => {
     if (saved || saveConflict) return; // a conflict pauses auto-save until reload
     clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => { save(); }, 3000);
+    autoSaveTimerRef.current = setTimeout(() => { saveRef.current(); }, 3000);
     return () => clearTimeout(autoSaveTimerRef.current);
-  }, [saved, saveConflict, save]);
+  }, [saved, saveConflict]);
 
   // ── Conflict resolution: explicit reload (discards unsaved local changes) ──
   const reloadFlowsheet = useCallback(async () => {
@@ -670,6 +690,133 @@ export default function CanvasPage() {
     const t = setTimeout(runLivePreview, 800);
     return () => clearTimeout(t);
   }, [liveMode, liveSignature, runLivePreview]);
+
+  // ── PLC bindings + live values (digital-twin loop) ─────────────────────────
+  // plcBindings: `${nodeId}:${paramKey}` -> binding row (GET plc-bindings)
+  // plcLive:     `${nodeId}:${paramKey}` -> { bindingId, value, quality, ts }
+  const [plcBindings, setPlcBindings]     = useState({});
+  const [plcLive, setPlcLive]             = useState({});
+  const [plcApply, setPlcApply]           = useState(true);  // toolbar toggle: write PLC values into params
+  const [plcBindDialog, setPlcBindDialog] = useState(null);  // { nodeId, nodeLabel, paramKey, paramLabel } | null
+
+  const plcBindingsRef = useRef(plcBindings);
+  plcBindingsRef.current = plcBindings;
+  const plcApplyRef = useRef(plcApply);
+  plcApplyRef.current = plcApply;
+  const liveModeRef = useRef(liveMode);
+  liveModeRef.current = liveMode;
+  const flowsheetIdRef = useRef(flowsheetId);
+  flowsheetIdRef.current = flowsheetId;
+  // Per-param timestamp of the last value APPLIED into node params (throttle:
+  // at most one apply per 2 s per param — live chips still update every tick).
+  const plcLastAppliedRef = useRef({});
+
+  const loadPlcBindings = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/projects/${projectId}/flowsheets/${flowsheetId}/plc-bindings`);
+      const rows = Array.isArray(data) ? data : [];
+      setPlcBindings(bindingsToMap(rows));
+      // Seed chips from the persisted last_value/quality so bound params show
+      // data (or '— no data yet') before the first live update arrives.
+      setPlcLive(prev => ({ ...liveFromBindings(rows), ...prev }));
+    } catch {
+      // PLC endpoints may not exist yet (backend under construction) — treat
+      // as "no bindings" and keep the canvas fully functional.
+    }
+  }, [projectId, flowsheetId]);
+
+  useEffect(() => {
+    setPlcBindings({});
+    setPlcLive({});
+    plcLastAppliedRef.current = {};
+    loadPlcBindings();
+  }, [loadPlcBindings]);
+
+  // Apply incoming PLC values into node params: only in live mode, only when
+  // the toolbar PLC toggle is ON, only for enabled bindings whose direction
+  // includes read, only good-quality finite numbers, throttled to one apply
+  // per 2 s per param. Guarded by applyingRemoteRef so undo history is
+  // untouched, and never marks the flowsheet dirty (PLC data is not an edit).
+  const applyPlcToParams = (values) => {
+    if (!plcApplyRef.current || !liveModeRef.current) return;
+    const now = Date.now();
+    const byNode = {};
+    for (const v of Array.isArray(values) ? values : []) {
+      if (!v || v.nodeId == null || v.paramKey == null) continue;
+      const key = bindingKey(v.nodeId, v.paramKey);
+      const b = plcBindingsRef.current[key];
+      if (!b || b.enabled === false) continue;
+      const dir = b.direction || 'read';
+      if (dir !== 'read' && dir !== 'read_write') continue;
+      if (v.quality && v.quality !== 'good') continue;
+      // Guard against non-finite reads serialized to JSON null: Number(null)
+      // is 0, so a bare isFinite check would silently apply 0 into params.
+      if (v.value == null) continue;
+      const num = Number(v.value);
+      if (!Number.isFinite(num)) continue;
+      if (now - (plcLastAppliedRef.current[key] || 0) < 2000) continue;
+      plcLastAppliedRef.current[key] = now;
+      (byNode[v.nodeId] = byNode[v.nodeId] || {})[v.paramKey] = num;
+    }
+    if (Object.keys(byNode).length === 0) return;
+    applyingRemoteRef.current = true;
+    try {
+      setNodes(ns => ns.map(n => byNode[n.id]
+        ? { ...n, data: { ...n.data, params: { ...n.data.params, ...byNode[n.id] } } }
+        : n));
+      setSelectedNode(sn => sn && byNode[sn.id]
+        ? { ...sn, data: { ...sn.data, params: { ...sn.data.params, ...byNode[sn.id] } } }
+        : sn);
+    } finally {
+      applyingRemoteRef.current = false;
+    }
+    // The param change shifts liveSignature → the existing live-preview loop
+    // re-simulates from the real PLC data. Nothing is broadcast (every client
+    // receives the same plc:update) and `saved` stays untouched.
+  };
+
+  // WS 'plc:update' entry point (reached via handleRemoteEvent's switch).
+  handlePlcUpdateRef.current = (payload) => {
+    const values = payload?.values;
+    if (!Array.isArray(values) || values.length === 0) return;
+    if (payload.flowsheetId != null &&
+        String(payload.flowsheetId) !== String(flowsheetIdRef.current)) return;
+    setPlcLive(prev => mergePlcValues(prev, values));
+    applyPlcToParams(values);
+  };
+
+  // Fallback when the collab WS is down: poll plc-values every 5 s while the
+  // canvas is mounted and bindings exist.
+  const plcTagCount = Object.keys(plcBindings).length;
+  useEffect(() => {
+    if (plcTagCount === 0 || wsConnected) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { data } = await api.get(`/projects/${projectId}/flowsheets/${flowsheetId}/plc-values`);
+        if (cancelled || !Array.isArray(data)) return;
+        setPlcLive(prev => mergePlcValues(prev, data));
+        applyPlcToParams(data);
+      } catch {
+        // endpoint unavailable — keep trying quietly
+      }
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => { cancelled = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plcTagCount, wsConnected, projectId, flowsheetId]);
+
+  const openPlcBind = useCallback((nodeId, nodeLabel, def) => {
+    setPlcBindDialog({ nodeId, nodeLabel, paramKey: def.key, paramLabel: def.label });
+  }, []);
+
+  // Toolbar chip dot: worst quality across bound tags (green=all good, amber
+  // otherwise — including tags with no data yet).
+  const plcWorst = useMemo(
+    () => (plcTagCount ? worstQuality(plcLive, Object.keys(plcBindings)) : null),
+    [plcTagCount, plcLive, plcBindings]
+  );
 
   // ── Dynamic simulation ─────────────────────────────────────────────────────
   const runDynamic = async (timeSeriesConfig) => {
@@ -913,6 +1060,23 @@ export default function CanvasPage() {
             >
               <Zap size={14} />Live
             </button>
+            {plcTagCount > 0 && (
+              <button
+                className="tb-ghost"
+                style={{ ...S.btn, ...(plcApply ? null : { opacity: 0.55 }) }}
+                onClick={() => setPlcApply(v => !v)}
+                aria-pressed={plcApply}
+                title={plcApply
+                  ? `PLC live data: ${plcTagCount} bound tag${plcTagCount !== 1 ? 's' : ''}. While Live mode is on, incoming values are applied to node parameters (digital twin). Click to pause applying — chips keep updating.`
+                  : 'PLC apply paused — incoming values still update the live chips but are NOT written into node parameters. Click to resume.'}
+              >
+                <span aria-hidden="true" style={{
+                  width: 8, height: 8, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
+                  background: plcWorst === 'good' ? '#16A34A' : '#D97706',
+                }} />
+                PLC · {plcTagCount} tag{plcTagCount !== 1 ? 's' : ''}
+              </button>
+            )}
             <button
               className="tb-secondary"
               style={{ ...S.btn, ...S.btnSecondary, ...(!saved ? { border: '1px solid #F59E0B' } : null), opacity: saving || saveConflict ? 0.7 : 1 }}
@@ -1059,6 +1223,9 @@ export default function CanvasPage() {
                   unitResult={simResults?.results?.unitResults?.[selectedNode.id]}
                   onUpdateParam={updateParam}
                   onClose={() => setSelectedNode(null)}
+                  plcBindings={plcBindings}
+                  plcLive={plcLive}
+                  onOpenPlcBind={openPlcBind}
                 />
               )}
               {showSummary && !selectedNode && summary && (
@@ -1146,13 +1313,29 @@ export default function CanvasPage() {
           </div>
         </div>
       )}
+
+      {/* PLC bind dialog */}
+      {plcBindDialog && (
+        <PLCBindDialog
+          projectId={projectId}
+          flowsheetId={flowsheetId}
+          nodeId={plcBindDialog.nodeId}
+          nodeLabel={plcBindDialog.nodeLabel}
+          paramKey={plcBindDialog.paramKey}
+          paramLabel={plcBindDialog.paramLabel}
+          binding={plcBindings[bindingKey(plcBindDialog.nodeId, plcBindDialog.paramKey)] || null}
+          onClose={() => setPlcBindDialog(null)}
+          onSaved={() => { setPlcBindDialog(null); loadPlcBindings(); }}
+          onRemoved={() => { setPlcBindDialog(null); loadPlcBindings(); }}
+        />
+      )}
     </AppLayout>
   );
 }
 
 // ── Param Panel ───────────────────────────────────────────────────────────────
 
-const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onClose }) {
+const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onClose, plcBindings, plcLive, onOpenPlcBind }) {
   const defs = PARAM_DEFS[node.data.opType] || [];
 
   return (
@@ -1168,14 +1351,20 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
       <div style={S.panelSection}>
         <div style={S.secTitle}>Parameters</div>
         {defs.length === 0 && <p style={S.noParams}>No configurable parameters.</p>}
-        {defs.map(def => (
-          <ParamRow
-            key={def.key}
-            def={def}
-            value={node.data.params?.[def.key]}
-            onChange={v => onUpdateParam(node.id, def.key, v)}
-          />
-        ))}
+        {defs.map(def => {
+          const bkey = `${node.id}:${def.key}`;
+          return (
+            <ParamRow
+              key={def.key}
+              def={def}
+              value={node.data.params?.[def.key]}
+              onChange={v => onUpdateParam(node.id, def.key, v)}
+              binding={plcBindings?.[bkey]}
+              live={plcLive?.[bkey]}
+              onBind={onOpenPlcBind ? () => onOpenPlcBind(node.id, node.data.label, def) : undefined}
+            />
+          );
+        })}
       </div>
 
       {unitResult && (
@@ -2073,30 +2262,60 @@ function ScenariosPanel({ nodes, running, results, onRun, onClose }) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function ParamRow({ def, value, onChange }) {
-  if (def.type === 'select') {
-    return (
-      <div style={S.paramRow}>
-        <label style={S.paramLabel}>{def.label}</label>
-        <select style={S.paramInput} value={value ?? def.options[0]} onChange={e => onChange(e.target.value)}>
-          {def.options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      </div>
-    );
-  }
+function ParamRow({ def, value, onChange, binding, live, onBind }) {
+  // PLC bind button (Link2, 14px, ghost) — accent-filled when this node+param
+  // has a binding.
+  const bindBtn = onBind ? (
+    <button
+      type="button"
+      className="tb-ghost"
+      onClick={onBind}
+      title={binding
+        ? `Bound to PLC${binding.connection_name ? ` · ${binding.connection_name}` : ''}${binding.address ? ` @ ${binding.address}` : ''} — click to edit`
+        : 'Bind to a PLC tag…'}
+      aria-label={binding ? `Edit PLC binding for ${def.label}` : `Bind ${def.label} to a PLC tag`}
+      style={{
+        border: 'none', cursor: 'pointer', borderRadius: 4, padding: 2, marginLeft: 4,
+        display: 'inline-flex', alignItems: 'center', flexShrink: 0, lineHeight: 0,
+        background: binding ? '#DBEAFE' : 'transparent',
+        color: binding ? '#1D4ED8' : '#9CA3AF',
+      }}
+    >
+      <Link2 size={14} />
+    </button>
+  ) : null;
+
+  const input = def.type === 'select' ? (
+    <select style={S.paramInput} value={value ?? def.options[0]} onChange={e => onChange(e.target.value)}>
+      {def.options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  ) : (
+    <input
+      style={S.paramInput}
+      type="number"
+      step={def.step || 1}
+      min={def.min}
+      max={def.max}
+      value={value ?? ''}
+      placeholder="default"
+      onChange={e => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+    />
+  );
+
   return (
-    <div style={S.paramRow}>
-      <label style={S.paramLabel}>{def.label}</label>
-      <input
-        style={S.paramInput}
-        type="number"
-        step={def.step || 1}
-        min={def.min}
-        max={def.max}
-        value={value ?? ''}
-        placeholder="default"
-        onChange={e => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-      />
+    <div style={{ marginBottom: 7 }}>
+      <div style={{ ...S.paramRow, marginBottom: 0 }}>
+        <label style={{ ...S.paramLabel, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+          <span style={{ minWidth: 0 }}>{def.label}</span>
+          {bindBtn}
+        </label>
+        {input}
+      </div>
+      {binding && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 3 }}>
+          <PLCLiveChip live={live} />
+        </div>
+      )}
     </div>
   );
 }
