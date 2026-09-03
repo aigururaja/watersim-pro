@@ -30,6 +30,8 @@ const { runSimulation } = require('../simulation/runner');
 const { DEFAULT_DIURNAL_PROFILE } = require('../simulation/dynamicSolver');
 const { estimateCosts, DEFAULT_UNIT_COSTS } = require('../simulation/costEstimator');
 const { simulationDuration } = require('../metrics');
+const { evaluateForRun, evaluateRules, buildMessage } = require('../alarms/evaluator');
+const { buildNodeLabels } = require('../alarms/validTargets');
 
 const router = express.Router({ mergeParams: true }); // inherits :projectId + :flowsheetId
 router.use(authenticate);
@@ -86,6 +88,41 @@ async function loadFlowsheet(projectId, flowsheetId, orgId, res) {
   );
   if (!r.rows[0]) { res.status(404).json({ error: 'Flowsheet not found' }); return null; }
   return r.rows[0];
+}
+
+/**
+ * Preview alarms — the PURE evaluator only.
+ *
+ * A preview is never persisted, so it must never write an alarm_event or
+ * broadcast a transition either: this reads the flowsheet's enabled rules and
+ * reports which of them the previewed results would breach, nothing more.
+ * Never throws — a preview must not fail because of the alarm layer.
+ */
+async function previewAlarmBreaches(flowsheetId, organisationId, ctx, canvasData) {
+  try {
+    const r = await query(
+      `SELECT * FROM alarm_rules
+       WHERE flowsheet_id = $1 AND organisation_id = $2 AND enabled = TRUE`,
+      [flowsheetId, organisationId]
+    );
+    if (!r.rows.length) return [];
+    const nodeLabels = buildNodeLabels(canvasData);
+    return evaluateRules(r.rows, ctx).map(({ rule, value }) => ({
+      ruleId:     rule.id,
+      ruleName:   rule.name,
+      severity:   rule.severity,
+      targetType: rule.target_type,
+      nodeId:     rule.node_id,
+      paramKey:   rule.param_key,
+      value,
+      limitMin:   rule.min_value,
+      limitMax:   rule.max_value,
+      message:    buildMessage(rule, value, nodeLabels),
+    }));
+  } catch (err) {
+    logger.warn('Preview alarm evaluation failed', { flowsheetId, err: err.message });
+    return [];
+  }
 }
 
 /** Load org-level permit template (if any). Returns null if none configured. */
@@ -237,6 +274,7 @@ router.post('/', requireRole('operator'), [
     }
 
     // ── Persist results (previews are never persisted) ─────────────────────
+    let alarms;
     if (!isPreview) {
       await query(
         `UPDATE simulation_runs
@@ -249,6 +287,19 @@ router.post('/', requireRole('operator'), [
         nodes: results.summary?.nodeCount,
         warnings: warnings.length,
       });
+
+      // Alarm evaluation runs against the PERSISTED run (source 'simulation'):
+      // fire-and-forget so the state machine + WS broadcast never sit in the
+      // response path, and never fail the run.
+      evaluateForRun(flowsheetId, orgId(req), results, { nodeParams }, runId)
+        .catch((err) => logger.warn('Alarm evaluation failed for run', { runId, err: err.message }));
+    } else {
+      // Preview: pure evaluation only — nothing written, nothing broadcast.
+      alarms = await previewAlarmBreaches(
+        flowsheetId, orgId(req),
+        { nodeParams, unitResults: results.unitResults, summary: results.summary },
+        canvasData
+      );
     }
 
     // A run that did not converge (or was degraded by non-finite sweeps) is
@@ -268,6 +319,7 @@ router.post('/', requireRole('operator'), [
           steps:       results.steps,
         },
         warnings,
+        alarms,
       });
     } else {
       return res.status(201).json({
@@ -284,6 +336,7 @@ router.post('/', requireRole('operator'), [
           permitLimitsUsed: permitLimits,
         },
         warnings,
+        alarms,
       });
     }
 

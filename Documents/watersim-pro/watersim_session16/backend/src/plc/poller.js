@@ -30,6 +30,7 @@
 const { query } = require('../db/pool');
 const { getDriver, probeAvailability } = require('./registry');
 const { broadcastToRoom } = require('../collab/wsServer');
+const { evaluateParamValue } = require('../alarms/evaluator');
 const logger = require('../utils/logger');
 
 const TICK_MS            = 500;    // scheduler resolution
@@ -230,6 +231,19 @@ async function pollConnection(connectionId, bindings, pushUpdate) {
         [value, binding.id]
       );
       pushUpdate(binding, value, 'good');
+
+      // Live alarm check on the good sample. Fire-and-forget: the evaluator
+      // caches the flowsheet's enabled 'param' rules (~10s) and early-exits
+      // before any write when there are none, so a plant with no alarms pays
+      // nothing per tick and a slow DB never stalls the poll loop.
+      evaluateParamValue({
+        flowsheetId:    binding.flowsheet_id,
+        organisationId: binding.organisation_id,
+        nodeId:         binding.node_id,
+        paramKey:       binding.param_key,
+      }, value).catch((err) => logger.warn('Alarm PLC evaluation failed', {
+        bindingId: binding.id, err: err.message,
+      }));
     } catch (err) {
       lastError = err.message;
       if (err.connectionLost) {

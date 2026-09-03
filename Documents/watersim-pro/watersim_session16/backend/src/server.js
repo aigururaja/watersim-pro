@@ -21,6 +21,8 @@ const adminRoutes        = require('./routes/admin');
 const reportsOrgRoutes   = require('./routes/reports_org');
 const plcRoutes          = require('./routes/plc');
 const plcBindingRoutes   = require('./routes/plcBindings');
+const alarmRoutes        = require('./routes/alarms');
+const alarmsOrgRoutes    = require('./routes/alarms_org');
 const { attachWsServer } = require('./collab/wsServer');
 const { startPoller, stopPoller } = require('./plc/poller');
 
@@ -131,9 +133,12 @@ app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId/simulate`, simulateR
 app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId/simulate`, reportRoutes);
 // PLC bindings live under the same base as simulate (plc-bindings, plc-values)
 app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId`,    plcBindingRoutes);
+// Alarm rules/targets/events share that base too (alarm-targets, alarms, alarm-events)
+app.use(`${API}/projects/:projectId/flowsheets/:flowsheetId`,    alarmRoutes);
 app.use(`${API}/permit-templates`,                               permitRoutes);
 app.use(`${API}/admin`,                                          adminRoutes);
 app.use(`${API}/reports`,                                        reportsOrgRoutes);
+app.use(`${API}/alarms`,                                         alarmsOrgRoutes);
 app.use(`${API}/plc`,                                            plcRoutes);
 
 // ── Metrics (unauthenticated, outside the /api rate limiter) ─────────────────
