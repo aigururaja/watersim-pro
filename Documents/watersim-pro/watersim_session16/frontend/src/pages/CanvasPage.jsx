@@ -30,6 +30,7 @@ import PLCLiveChip from '../components/plc/PLCLiveChip';
 import {
   bindingKey, bindingsToMap, liveFromBindings, mergePlcValues, worstQuality,
 } from '../components/plc/plcState';
+import { NodeControlContext, isControlOn } from '../components/canvas/controlState';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 
@@ -109,6 +110,18 @@ const PARAM_DEFS = {
     { key: 'TP',   label: 'TP (mg/L)',        type: 'number', step: 0.5 },
     { key: 'pH',   label: 'pH',               type: 'number', step: 0.1, min: 4, max: 10 },
     { key: 'temp', label: 'Temperature (°C)', type: 'number', step: 1 },
+  ],
+  // ── Flow-control elements (pump on/off, valve open/close) ─────────────────
+  // On/off params are NUMERIC 1/0 (PLC values arrive as numbers).
+  pump: [
+    { key: 'running',       label: 'Running',            type: 'switch' },
+    { key: 'speed_pct',     label: 'Speed (%)',          type: 'number', step: 5, min: 0, max: 100 },
+    { key: 'capacity_m3_d', label: 'Capacity m³/d (0=∞)', type: 'number', step: 100 },
+    { key: 'head_m',        label: 'Head (m)',           type: 'number', step: 1 },
+  ],
+  valve: [
+    { key: 'open',        label: 'Open',        type: 'switch' },
+    { key: 'opening_pct', label: 'Opening (%)', type: 'number', step: 5, min: 0, max: 100 },
   ],
   screening: [
     { key: 'screenType', label: 'Screen Type', type: 'select', options: ['coarse','fine','micro'] },
@@ -347,6 +360,13 @@ export default function CanvasPage() {
             ? { ...n, data: { ...n.data, params: { ...n.data.params, ...payload.params } } }
             : n
         ));
+        // Keep the open params panel in sync too (mirrors updateParam) — the
+        // same param can render both on the node (pump/valve switch) and in
+        // the panel, and they must never disagree about equipment state.
+        setSelectedNode(sn => sn?.id === payload.nodeId
+          ? { ...sn, data: { ...sn.data, params: { ...sn.data.params, ...payload.params } } }
+          : sn
+        );
         break;
       case 'plc:update':
         // Live PLC tag values — merge into the live-value map and (in live
@@ -960,6 +980,18 @@ export default function CanvasPage() {
     recordAfterChange();
   }, [sendEvent, recordAfterChange]);
 
+  // ── Flow-control toggle (pump/valve switch rendered inside the node) ───────
+  // nodeTypes is a module-scope constant (ReactFlow warns if it is recreated),
+  // so UnitOpNode reaches updateParam through NodeControlContext with ONE
+  // stable callback reading the latest updateParam via a ref (same pattern as
+  // saveRef above). The param write goes through updateParam, so collab
+  // broadcast, undo history, dirty flag, and the live preview all just work.
+  const updateParamRef = useRef(updateParam);
+  updateParamRef.current = updateParam;
+  const onControlToggle = useCallback((nodeId, paramKey, value) => {
+    updateParamRef.current(nodeId, paramKey, value);
+  }, []);
+
   // Broadcast node position after drag ends + record ONE history entry for the
   // whole drag (per-tick position updates were already committed to state).
   const onNodeDragStop = useCallback((_evt, node) => {
@@ -1166,6 +1198,7 @@ export default function CanvasPage() {
           <div ref={canvasWrapRef} style={{ ...S.canvasWrap, flex: 1, minHeight: 0 }} onDrop={onDrop} onDragOver={onDragOver} onMouseMove={onMouseMoveCanvas}>
             {/* Remote collaborator cursors */}
             <RemoteCursors cursors={remoteCursors} />
+            <NodeControlContext.Provider value={onControlToggle}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -1192,6 +1225,7 @@ export default function CanvasPage() {
                 </Panel>
               )}
             </ReactFlow>
+            </NodeControlContext.Provider>
           </div>
 
           {/* Live charts dock — one point per run; updates on every live preview */}
@@ -2285,7 +2319,30 @@ function ParamRow({ def, value, onChange, binding, live, onBind }) {
     </button>
   ) : null;
 
-  const input = def.type === 'select' ? (
+  // 'switch' rows write NUMERIC 1/0 (PLC values arrive as numbers) through the
+  // same param-change path as every other row; undefined defaults to ON.
+  const switchOn = def.type === 'switch' ? isControlOn(value) : null;
+
+  const input = def.type === 'switch' ? (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={switchOn}
+      aria-label={def.label}
+      onClick={() => onChange(switchOn ? 0 : 1)}
+      style={{
+        position: 'relative', width: 36, height: 20, borderRadius: 10, border: 'none',
+        cursor: 'pointer', padding: 2, flexShrink: 0,
+        background: switchOn ? '#16A34A' : '#9CA3AF', transition: 'background 0.15s ease',
+      }}
+    >
+      <span style={{
+        display: 'block', width: 16, height: 16, borderRadius: '50%', background: '#fff',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.25)', transition: 'transform 0.15s ease',
+        transform: switchOn ? 'translateX(16px)' : 'translateX(0)',
+      }} />
+    </button>
+  ) : def.type === 'select' ? (
     <select style={S.paramInput} value={value ?? def.options[0]} onChange={e => onChange(e.target.value)}>
       {def.options.map(o => <option key={o} value={o}>{o}</option>)}
     </select>

@@ -233,6 +233,28 @@ const CAPEX_CORRELATIONS = {
   },
 };
 
+// Hydraulic control elements are priced as equipment, never with the
+// whole-plant flow allowance (a valve on a 10,000 m³/d line is a pipe
+// fitting, not $12M of treatment capacity).
+
+// Installed pump package (pump + motor + VFD + small civils), priced from
+// hydraulic power. ~$40k direct for a 10 kW duty; modular scaling n = 0.7.
+CAPEX_CORRELATIONS.pump = {
+  basis:     'pump power',
+  size_unit: 'kW',
+  size:      (u) => u.metrics?.power_kW || 0,
+  components: (u) => [{ C0: 40000, S: u.metrics?.power_kW || 0, S0: 10, n: 0.70 }],
+};
+
+// Motorized/control valve + actuator + wiring: near-flat with line size —
+// ~$8k direct at a 5,000 m³/d line, heavy economies of scale (n = 0.3).
+CAPEX_CORRELATIONS.valve = {
+  basis:     'line flow',
+  size_unit: 'm³/d',
+  size:      (u, Q) => Q,
+  components: (u, Q) => [{ C0: 8000, S: Q, S0: 5000, n: 0.30 }],
+};
+
 // Boundary pseudo-units carry no capital.
 const NO_CAPEX_TYPES = new Set(['inlet', 'outlet']);
 
@@ -380,15 +402,30 @@ function estimateCosts(simResults, unitCosts = {}) {
   let other_kWh_d = 0;
   // Digester biogas generation → credit
   let biogas_kWh_d = 0;
+  // Modelled pump units report their own energy — counted as pumping energy
+  // INSTEAD of the flat allowance, never on top of it.
+  let pump_kWh_d = 0;
+  let pumpUnitCount = 0;
   for (const unit of Object.values(unitResults)) {
     if (unit.metrics?.O2_demand_kg_d) total_O2_kg_d += unit.metrics.O2_demand_kg_d;
-    if (unit.metrics?.energy_kWh_d)   other_kWh_d   += unit.metrics.energy_kWh_d;
+    if (unit.metrics?.energy_kWh_d) {
+      if (unit.type === 'pump') { pump_kWh_d += unit.metrics.energy_kWh_d; pumpUnitCount++; }
+      else                      { other_kWh_d += unit.metrics.energy_kWh_d; }
+    }
     if (unit.biogas?.energy_kWh_d)    biogas_kWh_d  += unit.biogas.energy_kWh_d;
   }
 
   const aeration_kWh_d  = total_O2_kg_d * uc.aeration_kWh_per_kgO2;
-  const pumping_kWh_d   = Q_m3_d * uc.pumping_kWh_per_m3;
-  assumptions.push(`Pumping energy uses a flat allowance of ${uc.pumping_kWh_per_m3} kWh/m³ treated (no pump units modelled)`);
+  let pumping_kWh_d;
+  if (pumpUnitCount > 0) {
+    pumping_kWh_d = pump_kWh_d;
+    assumptions.push(
+      `Pumping energy from ${pumpUnitCount} modelled pump unit(s) ` +
+      `(${pump_kWh_d.toFixed(1)} kWh/d) — the flat per-m³ allowance is not applied`);
+  } else {
+    pumping_kWh_d = Q_m3_d * uc.pumping_kWh_per_m3;
+    assumptions.push(`Pumping energy uses a flat allowance of ${uc.pumping_kWh_per_m3} kWh/m³ treated (no pump units modelled)`);
+  }
 
   const total_kWh_d     = aeration_kWh_d + pumping_kWh_d + other_kWh_d;
   const total_kWh_yr    = total_kWh_d * 365;

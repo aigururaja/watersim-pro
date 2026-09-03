@@ -40,6 +40,9 @@ const MODELS = {
   granular_filter:  require('./models/granularFilter'),
   // Session 8 — Step 39: ADM1-lite anaerobic digestion
   anaerobic_digest: require('./models/anaerobicDigester'),
+  // Session 17: flow-control elements (pump on/off, valve open/close)
+  pump:             require('./models/pump'),
+  valve:            require('./models/valve'),
 };
 
 const PALETTE_TYPE_MAP = {
@@ -66,7 +69,8 @@ const PALETTE_TYPE_MAP = {
   coagulant_dosing: 'chemical_dosing',
   polymer_dosing: 'chemical_dosing',
   ph_adjustment: 'chemical_dosing',
-  pump: null, blower: null, tank: null,
+  pump: 'pump', valve: 'valve',
+  blower: null, tank: null,
 };
 
 const SOURCE_TYPES = new Set(['inlet']);
@@ -390,6 +394,14 @@ function executePass(ctx) {
         const q = Math.min(rf, Math.max(0, primary.Q - primaryDeduction));
         edgeStreams[e.id] = primary.clone({ Q: q });
         primaryDeduction += q;
+        routed.add(primaryKey || 'effluent');
+      } else if (outgoing.length === 1) {
+        // Single-outlet unit sitting ON a role-marked line (e.g. a pump or
+        // valve inside a RAS return): forward the primary output. This is
+        // mass-conserving — nothing else consumes the primary — and keeps the
+        // stream's role intact for the downstream unit (the aeration basin
+        // still receives it as RAS).
+        edgeStreams[e.id] = primary;
         routed.add(primaryKey || 'effluent');
       } else {
         warnings.push(

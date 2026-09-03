@@ -9,6 +9,13 @@ const PALETTE = [
     ]
   },
   {
+    category: 'Flow Control',
+    items: [
+      { type: 'pump',  label: 'Pump' },
+      { type: 'valve', label: 'Valve' },
+    ]
+  },
+  {
     category: 'Preliminary',
     items: [
       { type: 'screening',   label: 'Screening' },
@@ -61,7 +68,6 @@ const PALETTE = [
   {
     category: 'Utilities',
     items: [
-      { type: 'pump',    label: 'Pump' },
       { type: 'blower',  label: 'Blower' },
       { type: 'tank',    label: 'Storage Tank' },
     ]
@@ -114,7 +120,7 @@ export default function UnitOpPalette({ onAddNode }) {
     setRail(v);
     try { localStorage.setItem('ws.paletteRail', v ? '1' : '0'); } catch { /* ignore */ }
   };
-  // Type-to-filter across the 23 items
+  // Type-to-filter across the 26 items
   const [q, setQ] = useState('');
   const groups = PALETTE
     .map(g => ({ ...g, items: g.items.filter(i => i.label.toLowerCase().includes(q.toLowerCase())) }))
