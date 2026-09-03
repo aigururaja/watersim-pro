@@ -18,6 +18,7 @@ import UnitOpPalette from '../components/canvas/UnitOpPalette';
 import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
+import LiveChartsDock from '../components/canvas/LiveChartsDock';
 import { useCollaboration } from '../hooks/useCollaboration';
 import { useCanvasPerf } from '../hooks/useCanvasPerf';
 import { useUndoRedo } from '../hooks/useUndoRedo';
@@ -532,6 +533,30 @@ export default function CanvasPage() {
     prevStreamsRef.current = streams;
   }, [setEdges]);
 
+  // ── Live charts history — one point per run (manual or live preview) ──────
+  const [liveHistory, setLiveHistory]     = useState([]);
+  const [dockCollapsed, setDockCollapsed] = useState(false);
+  const recordLivePoint = useCallback((data) => {
+    const s = data.results?.summary;
+    if (!s?.effluent) return;
+    const num = (v) => (Number.isFinite(+v) ? +v : null);
+    const eff = s.effluent;
+    const cb  = data.results?.costBreakdown;
+    setLiveHistory(h => {
+      const idx = (h.length ? h[h.length - 1].idx : 0) + 1;
+      return [...h, {
+        idx,
+        time: new Date().toLocaleTimeString(),
+        BOD: num(eff.BOD), TSS: num(eff.TSS), TN: num(eff.TN),
+        NH4: num(eff.NH4), TP: num(eff.TP),
+        Qin: num(s.influent?.Q), Qeff: num(eff.Q),
+        compliant: s.compliant ?? null,
+        costYr: num(cb?.total_USD_yr), lcow: num(cb?.lcow_per_m3 ?? cb?.cost_per_m3_treated_USD),
+        converged: data.quality?.converged !== false,
+      }].slice(-40); // bounded — old points fall off
+    });
+  }, []);
+
   // ── Simulate ───────────────────────────────────────────────────────────────
   const simulate = async () => {
     setSimulating(true);
@@ -544,6 +569,7 @@ export default function CanvasPage() {
       );
       setSimResults(data);
       applyStreamResults(data);
+      recordLivePoint(data);
       setShowSummary(true);
       setShowDynamic(false);
       setShowScenarios(false);
@@ -592,6 +618,7 @@ export default function CanvasPage() {
       );
       setSimResults(data);
       applyStreamResults(data);
+      recordLivePoint(data);
       setSimError(null);
       setLiveUpdatedAt(new Date());
       setLiveStatus('idle');
@@ -605,7 +632,7 @@ export default function CanvasPage() {
         runLivePreview();
       }
     }
-  }, [projectId, flowsheetId, applyStreamResults]);
+  }, [projectId, flowsheetId, applyStreamResults, recordLivePoint]);
 
   // Signature of everything that affects simulation RESULTS — deliberately
   // excludes node positions so dragging doesn't trigger re-simulation.
@@ -959,7 +986,8 @@ export default function CanvasPage() {
         <div style={S.body}>
           <UnitOpPalette onAddNode={addNodeAtCenter} />
 
-          <div ref={canvasWrapRef} style={S.canvasWrap} onDrop={onDrop} onDragOver={onDragOver} onMouseMove={onMouseMoveCanvas}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div ref={canvasWrapRef} style={{ ...S.canvasWrap, flex: 1, minHeight: 0 }} onDrop={onDrop} onDragOver={onDragOver} onMouseMove={onMouseMoveCanvas}>
             {/* Remote collaborator cursors */}
             <RemoteCursors cursors={remoteCursors} />
             <ReactFlow
@@ -986,6 +1014,16 @@ export default function CanvasPage() {
                 </div>
               </Panel>
             </ReactFlow>
+          </div>
+
+          {/* Live charts dock — one point per run; updates on every live preview */}
+          <LiveChartsDock
+            history={liveHistory}
+            permitLimits={simResults?.results?.permitLimitsUsed}
+            collapsed={dockCollapsed}
+            onToggle={() => setDockCollapsed(v => !v)}
+            onClear={() => setLiveHistory([])}
+          />
           </div>
 
           {/* Right panel */}
