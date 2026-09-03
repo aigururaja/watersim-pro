@@ -135,6 +135,162 @@ function CostBar({ label, value, total, color }) {
   );
 }
 
+// ── Plain-language summary ("In plain words") ─────────────────────────────
+
+function PlainJudgmentBadge({ judgment }) {
+  if (judgment === 'good') return (
+    <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold text-xs bg-emerald-50 px-2 py-0.5 rounded-full">
+      <CheckCircle2 size={11} /> good
+    </span>
+  );
+  if (judgment === 'ok') return (
+    <span className="inline-flex items-center gap-1 text-amber-600 font-semibold text-xs bg-amber-50 px-2 py-0.5 rounded-full">
+      ~ OK
+    </span>
+  );
+  if (judgment === 'poor') return (
+    <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-xs bg-red-50 px-2 py-0.5 rounded-full">
+      <XCircle size={11} /> poor
+    </span>
+  );
+  return <span className="text-gray-300 text-xs">—</span>;
+}
+
+function PlainSummaryCard({ plain }) {
+  if (!plain || typeof plain !== 'object') return null;
+  const verdict         = plain.verdict || {};
+  const waterStory      = Array.isArray(plain.waterStory)      ? plain.waterStory      : [];
+  const qualityRows     = Array.isArray(plain.qualityRows)     ? plain.qualityRows     : [];
+  const complianceStory = Array.isArray(plain.complianceStory) ? plain.complianceStory : [];
+  const treatmentSteps  = Array.isArray(plain.treatmentSteps)  ? plain.treatmentSteps  : [];
+  const costLines       = Array.isArray(plain.costStory?.lines) ? plain.costStory.lines : [];
+  const glossary        = Array.isArray(plain.glossary)        ? plain.glossary        : [];
+
+  const bannerClass =
+    verdict.status === 'pass' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+    verdict.status === 'fail' ? 'bg-red-50 text-red-800 border-red-200' :
+                                'bg-gray-50 text-gray-700 border-gray-200';
+  const BannerIcon =
+    verdict.status === 'pass' ? CheckCircle2 :
+    verdict.status === 'fail' ? XCircle : AlertTriangle;
+
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6 print:shadow-none print:border-gray-300">
+      <div className="flex items-center gap-2 px-5 py-3 border-l-4 border-blue-500 bg-blue-50 text-blue-700">
+        <FileText size={16} />
+        <h2 className="font-semibold text-sm tracking-wide">In plain words</h2>
+      </div>
+
+      <div className="px-5 py-4 space-y-4">
+        {/* Verdict banner */}
+        <div className={`rounded-xl border px-4 py-3 ${bannerClass}`}>
+          <p className="flex items-start gap-2 font-semibold text-sm">
+            <BannerIcon size={18} className="flex-shrink-0 mt-0.5" />
+            {verdict.headline || 'No plain-language verdict available.'}
+          </p>
+          {verdict.detail && <p className="text-xs mt-1.5 opacity-80">{verdict.detail}</p>}
+        </div>
+
+        {/* Water story */}
+        {waterStory.length > 0 && (
+          <div className="space-y-1.5">
+            {waterStory.map((item, i) => (
+              <p key={i} className="text-sm text-gray-700">
+                <span className="font-semibold text-gray-900">{item.label}.</span> {item.text}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {/* Quality table */}
+        {qualityRows.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-blue-900 text-white">
+                  {['What we measure', 'Coming in', 'Going out', 'Removed', 'Verdict'].map(h => (
+                    <th key={h} className="py-2 px-3 text-xs font-semibold uppercase tracking-wide text-left">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {qualityRows.map(r => (
+                  <tr key={r.param} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <td className="py-2 px-3">
+                      <p className="text-sm font-medium text-gray-800">{r.friendly}</p>
+                      <p className="text-[10px] text-gray-400 max-w-xs">{r.meaning}</p>
+                    </td>
+                    <td className="py-2 px-3 text-sm text-right font-mono text-blue-700">{fmt(r.in, 1)}</td>
+                    <td className="py-2 px-3 text-sm text-right font-mono text-emerald-700">{fmt(r.out, 1)}</td>
+                    <td className="py-2 px-3 text-sm text-right font-mono text-gray-500">
+                      {r.removalPct != null ? `${Number(r.removalPct).toFixed(1)}%` : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-center"><PlainJudgmentBadge judgment={r.judgment} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Compliance in words */}
+        {complianceStory.length > 0 && (
+          <div className="space-y-1.5">
+            {complianceStory.map((c, i) => (
+              <p key={i} className={`text-sm ${
+                c.severity === 'none' ? 'text-emerald-700' :
+                c.severity === 'low'  ? 'text-amber-700'   : 'text-red-700'}`}>
+                • {c.text}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {/* Treatment steps */}
+        {treatmentSteps.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">The journey, step by step</p>
+            <ol className="space-y-1.5 list-decimal list-inside">
+              {treatmentSteps.map(s => (
+                <li key={s.id} className="text-sm text-gray-700">
+                  <span className="font-semibold text-gray-900">{s.label}</span> — {s.explanation}
+                  {s.keyFact && <span className="italic text-gray-400"> ({s.keyFact})</span>}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {/* Cost lines */}
+        {costLines.length > 0 && (
+          <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+            {costLines.map((line, i) => (
+              <p key={i} className="text-sm text-gray-700">• {line}</p>
+            ))}
+          </div>
+        )}
+
+        {/* Glossary */}
+        {glossary.length > 0 && (
+          <details className="border-t border-gray-100 pt-3">
+            <summary className="text-xs font-semibold text-blue-700 cursor-pointer select-none">
+              Plain-words dictionary ({glossary.length} terms)
+            </summary>
+            <dl className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
+              {glossary.map(g => (
+                <div key={g.term} className="text-xs">
+                  <dt className="inline font-semibold text-gray-800">{g.term}</dt>
+                  <dd className="inline text-gray-500"> — {g.definition}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ── Main ReportPage ────────────────────────────────────────────────────────
 
 export default function ReportPage() {
@@ -265,6 +421,9 @@ export default function ReportPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-6">
+
+        {/* ── Plain-language summary (hidden for old cached responses) ────── */}
+        {data.plain && <PlainSummaryCard plain={data.plain} />}
 
         {/* ── Cover info ──────────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">

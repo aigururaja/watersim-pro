@@ -101,6 +101,202 @@ QUALITY_PARAMS = [
 ]
 
 # ════════════════════════════════════════════════════════════════════════════════
+# PLAIN-LANGUAGE SHEET
+# ════════════════════════════════════════════════════════════════════════════════
+
+def build_plain_sheet(wb, data):
+    """Prepend a 'Plain summary' sheet built from the backend `plain` key.
+
+    Skips cleanly when `plain` is absent (old cached report JSON) or malformed.
+    """
+    plain = data.get("plain")
+    if not isinstance(plain, dict):
+        return
+    try:
+        ws = wb.create_sheet("Plain summary", 0)
+        ws.sheet_view.showGridLines = False
+
+        # Title band
+        ws.merge_cells("A1:E1")
+        c = ws["A1"]
+        c.value = "In plain words — what this simulation means"
+        c.font = mk_font(bold=True, color=WHITE, size=13)
+        c.fill = mk_fill(NAVY)
+        c.alignment = mk_align("center")
+        ws.row_dimensions[1].height = 26
+
+        # Verdict banner
+        verdict = plain.get("verdict") or {}
+        status = verdict.get("status")
+        r = 3
+        ws.merge_cells(f"A{r}:E{r}")
+        vc = ws.cell(r, 1)
+        vc.value = verdict.get("headline") or "No plain-language verdict available."
+        if status == "pass":
+            vc.fill = mk_fill(EME_LT); vc.font = mk_font(bold=True, color=EMERALD, size=11)
+        elif status == "fail":
+            vc.fill = mk_fill(RED_LT); vc.font = mk_font(bold=True, color=RED, size=11)
+        else:
+            vc.fill = mk_fill(GRAY_HDR); vc.font = mk_font(bold=True, size=11)
+        vc.alignment = mk_align("left", wrap=True)
+        ws.row_dimensions[r].height = 30
+        r += 1
+        if verdict.get("detail"):
+            ws.merge_cells(f"A{r}:E{r}")
+            dc = ws.cell(r, 1)
+            dc.value = verdict["detail"]
+            dc.font = mk_font(size=9)
+            dc.alignment = mk_align("left", wrap=True)
+            ws.row_dimensions[r].height = 26
+            r += 1
+        r += 1
+
+        # Water story
+        for item in (plain.get("waterStory") or []):
+            if not isinstance(item, dict):
+                continue
+            ws.merge_cells(f"A{r}:E{r}")
+            wc = ws.cell(r, 1)
+            wc.value = f"{item.get('label', '')}: {item.get('text', '')}"
+            wc.font = mk_font(size=9)
+            wc.alignment = mk_align("left", wrap=True)
+            ws.row_dimensions[r].height = 26
+            r += 1
+        r += 1
+
+        # Quality rows
+        q_rows = [q for q in (plain.get("qualityRows") or []) if isinstance(q, dict)]
+        if q_rows:
+            ws.merge_cells(f"A{r}:E{r}")
+            ws.cell(r, 1).value = "HOW CLEAN IS THE WATER?"
+            ws.cell(r, 1).font = mk_font(bold=True, color=WHITE, size=10)
+            ws.cell(r, 1).fill = mk_fill(BRAND)
+            ws.cell(r, 1).alignment = mk_align("center")
+            r += 1
+            headers = ["What we measure", "Coming in (mg/L)", "Going out (mg/L)", "Removed (%)", "Verdict"]
+            for ci, h in enumerate(headers, 1):
+                ws.cell(r, ci).value = h
+            style_header_row(ws, r, 1, 5, BRAND)
+            r += 1
+            for qi, q in enumerate(q_rows):
+                style_data_row(ws, r, 1, 5, qi % 2 == 1)
+                judgment = q.get("judgment")
+                verdict_txt = {"good": "✓ good", "ok": "~ OK", "poor": "✗ poor"}.get(judgment, "—")
+                vals = [q.get("friendly", q.get("param", "")),
+                        fmt_num(q.get("in"), 1), fmt_num(q.get("out"), 1),
+                        fmt_num(q.get("removalPct"), 1), verdict_txt]
+                for ci, v in enumerate(vals, 1):
+                    cell = ws.cell(r, ci)
+                    cell.value = v
+                    if ci in (2, 3, 4):
+                        cell.alignment = mk_align("right")
+                if judgment == "good":
+                    ws.cell(r, 5).font = mk_font(bold=True, color=EMERALD)
+                elif judgment == "poor":
+                    ws.cell(r, 5).font = mk_font(bold=True, color=RED)
+                elif judgment == "ok":
+                    ws.cell(r, 5).font = mk_font(bold=True, color=AMBER)
+                r += 1
+            r += 1
+
+        # Compliance lines
+        c_story = [c2 for c2 in (plain.get("complianceStory") or []) if isinstance(c2, dict)]
+        if c_story:
+            ws.merge_cells(f"A{r}:E{r}")
+            ws.cell(r, 1).value = "IS THE WATER LEGAL TO RELEASE?"
+            ws.cell(r, 1).font = mk_font(bold=True, color=WHITE, size=10)
+            ws.cell(r, 1).fill = mk_fill(BRAND)
+            ws.cell(r, 1).alignment = mk_align("center")
+            r += 1
+            for c2 in c_story:
+                ws.merge_cells(f"A{r}:E{r}")
+                lc = ws.cell(r, 1)
+                lc.value = f"• {c2.get('text', '')}"
+                sev = c2.get("severity")
+                if sev == "none":
+                    lc.font = mk_font(color=EMERALD, size=9)
+                elif sev in ("high", "medium"):
+                    lc.font = mk_font(color=RED, size=9)
+                else:
+                    lc.font = mk_font(color=AMBER, size=9)
+                lc.alignment = mk_align("left", wrap=True)
+                ws.row_dimensions[r].height = 26
+                r += 1
+            r += 1
+
+        # Treatment steps
+        steps = [s for s in (plain.get("treatmentSteps") or []) if isinstance(s, dict)]
+        if steps:
+            ws.merge_cells(f"A{r}:E{r}")
+            ws.cell(r, 1).value = "THE JOURNEY, STEP BY STEP"
+            ws.cell(r, 1).font = mk_font(bold=True, color=WHITE, size=10)
+            ws.cell(r, 1).fill = mk_fill(BRAND)
+            ws.cell(r, 1).alignment = mk_align("center")
+            r += 1
+            for i, s in enumerate(steps, 1):
+                ws.merge_cells(f"A{r}:E{r}")
+                sc = ws.cell(r, 1)
+                txt = f"{i}. {s.get('label', 'Step')} — {s.get('explanation', '')}"
+                if s.get("keyFact"):
+                    txt += f"  ({s['keyFact']})"
+                sc.value = txt
+                sc.font = mk_font(size=9)
+                sc.alignment = mk_align("left", wrap=True)
+                ws.row_dimensions[r].height = 26
+                r += 1
+            r += 1
+
+        # Cost lines
+        cost_lines = (plain.get("costStory") or {}).get("lines") or []
+        if cost_lines:
+            ws.merge_cells(f"A{r}:E{r}")
+            ws.cell(r, 1).value = "WHAT IT COSTS"
+            ws.cell(r, 1).font = mk_font(bold=True, color=WHITE, size=10)
+            ws.cell(r, 1).fill = mk_fill(BRAND)
+            ws.cell(r, 1).alignment = mk_align("center")
+            r += 1
+            for line in cost_lines:
+                ws.merge_cells(f"A{r}:E{r}")
+                lc = ws.cell(r, 1)
+                lc.value = f"• {line}"
+                lc.font = mk_font(size=9)
+                lc.alignment = mk_align("left", wrap=True)
+                ws.row_dimensions[r].height = 22
+                r += 1
+            r += 1
+
+        # Glossary
+        glossary = [g for g in (plain.get("glossary") or []) if isinstance(g, dict)]
+        if glossary:
+            ws.merge_cells(f"A{r}:E{r}")
+            ws.cell(r, 1).value = "PLAIN-WORDS DICTIONARY"
+            ws.cell(r, 1).font = mk_font(bold=True, color=WHITE, size=10)
+            ws.cell(r, 1).fill = mk_fill(EMERALD)
+            ws.cell(r, 1).alignment = mk_align("center")
+            r += 1
+            for gi, g in enumerate(glossary):
+                style_data_row(ws, r, 1, 5, gi % 2 == 1)
+                ws.cell(r, 1).value = g.get("term", "")
+                ws.cell(r, 1).font = mk_font(bold=True, size=9)
+                ws.merge_cells(f"B{r}:E{r}")
+                gc = ws.cell(r, 2)
+                gc.value = g.get("definition", "")
+                gc.font = mk_font(size=9)
+                gc.alignment = mk_align("left", wrap=True)
+                r += 1
+
+        set_col_widths(ws, {"A": 34, "B": 18, "C": 18, "D": 14, "E": 12})
+    except Exception:
+        # Never let the plain layer break the engineering workbook: drop the
+        # partial sheet if anything went wrong.
+        try:
+            if "Plain summary" in wb.sheetnames:
+                del wb["Plain summary"]
+        except Exception:
+            pass
+
+
+# ════════════════════════════════════════════════════════════════════════════════
 # SINGLE RUN REPORT
 # ════════════════════════════════════════════════════════════════════════════════
 
@@ -348,6 +544,9 @@ def build_single(wb, data):
             ww.cell(2 + i, 1).value = w
             ww.cell(2 + i, 1).font = mk_font(color=AMBER, size=9)
         set_col_widths(ww, {"A": 80})
+
+    # ── Sheet 0: Plain-language summary (inserted first) ─────────────────────
+    build_plain_sheet(wb, data)
 
 
 # ════════════════════════════════════════════════════════════════════════════════

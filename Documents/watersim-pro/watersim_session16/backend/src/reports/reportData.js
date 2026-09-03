@@ -12,11 +12,14 @@
 
 'use strict';
 
+const { buildPlainSummary } = require('./plainLanguage');
+const logger = require('../utils/logger');
+
 function buildReportData(row) {
   const results = row.results || {};
   const config  = row.run_config || {};
 
-  return {
+  const report = {
     run_id:          row.id,
     project_name:    row.project_name,
     flowsheet_name:  row.flowsheet_name,
@@ -40,6 +43,18 @@ function buildReportData(row) {
       steps:            results.steps            || [],
     },
   };
+
+  // Plain-language layer — additive; a failure here must never break the
+  // report endpoint (buildPlainSummary itself never throws, but be safe).
+  try {
+    report.plain = buildPlainSummary(report);
+  } catch (err) {
+    logger.warn('Plain-language summary generation failed — omitting from report', {
+      runId: row.id, error: err.message,
+    });
+  }
+
+  return report;
 }
 
 module.exports = { buildReportData };

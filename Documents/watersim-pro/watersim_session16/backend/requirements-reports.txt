@@ -1,0 +1,23 @@
+# WaterSim Pro — Python dependencies for report generation
+#
+# Used by src/reports/pdf_report.py (PDF, via reportlab + matplotlib charts)
+# and src/reports/excel_report.py (XLSX, via openpyxl), both spawned through
+# src/reports/pySpawn.js with the interpreter named by PYTHON_BIN.
+#
+#   pip install -r backend/requirements-reports.txt
+#
+# Without these the report endpoints return 500 and the PDF/Excel export
+# buttons fail — the report JSON and the in-app report page still work.
+#
+# backend/Dockerfile.prod installs these into the production image, but takes
+# matplotlib+numpy from Alpine packages (apk add py3-numpy py3-matplotlib)
+# because building them from source on musl is slow and fragile; only
+# reportlab and openpyxl are pip-installed there. Keep the pinned versions
+# below in sync with that Dockerfile line.
+
+reportlab==4.2.5
+openpyxl==3.1.5
+
+# Charts in the PDF. Alpine/musl images should prefer the py3-matplotlib
+# system package (see above); this pin is for local dev and glibc images.
+matplotlib>=3.8,<4

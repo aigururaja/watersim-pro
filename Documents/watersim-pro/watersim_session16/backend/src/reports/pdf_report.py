@@ -12,6 +12,7 @@ import json
 import io
 import math
 from datetime import datetime
+from xml.sax.saxutils import escape as xml_escape
 
 # ── ReportLab imports ────────────────────────────────────────────────────────
 from reportlab.lib              import colors
@@ -322,6 +323,148 @@ def build_cover(d, styles, story):
     ]))
     story.append(bt)
     story.append(PageBreak())
+
+def build_plain_section(d, styles, story):
+    """'In plain words' — layman's summary (backend `plain` key).
+
+    Rendered as the first content section, right after the cover. Degrades
+    gracefully: absent/malformed `plain` (old cached JSON) adds nothing.
+    """
+    plain = d.get('plain')
+    if not isinstance(plain, dict):
+        return
+
+    def esc(s):
+        return xml_escape(str(s if s is not None else ''))
+
+    sec = []
+    try:
+        sec.append(Paragraph('In plain words', styles['H1']))
+        sec.append(HRFlowable(width='100%', thickness=0.5, color=MID_GREY))
+        sec.append(Spacer(1, 3*mm))
+
+        # ── Verdict banner ──────────────────────────────────────────────────
+        verdict = plain.get('verdict') or {}
+        status  = verdict.get('status')
+        banner_color = (BRAND_GREEN if status == 'pass'
+                        else BRAND_RED if status == 'fail'
+                        else BRAND_AMBER)
+        headline = verdict.get('headline') or 'No plain-language verdict available.'
+        bt = Table([[Paragraph(esc(headline),
+                    ParagraphStyle('PlainVerdict', fontName='Helvetica-Bold',
+                                   fontSize=10.5, textColor=colors.white, leading=14))]],
+                   colWidths=[16*cm])
+        bt.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (0, 0), banner_color),
+            ('TOPPADDING',    (0, 0), (0, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (0, 0), 8),
+            ('LEFTPADDING',   (0, 0), (0, 0), 10),
+            ('RIGHTPADDING',  (0, 0), (0, 0), 10),
+            ('ROUNDEDCORNERS', [4]),
+        ]))
+        sec.append(bt)
+        if verdict.get('detail'):
+            sec.append(Spacer(1, 2*mm))
+            sec.append(Paragraph(esc(verdict['detail']), styles['Body']))
+        sec.append(Spacer(1, 3*mm))
+
+        # ── The water story ─────────────────────────────────────────────────
+        for item in (plain.get('waterStory') or []):
+            if not isinstance(item, dict):
+                continue
+            sec.append(Paragraph(
+                f"<b>{esc(item.get('label', ''))}.</b> {esc(item.get('text', ''))}",
+                styles['Body']))
+
+        # ── Quality table ───────────────────────────────────────────────────
+        q_rows = [r for r in (plain.get('qualityRows') or []) if isinstance(r, dict)]
+        if q_rows:
+            sec.append(Paragraph('How clean is the water?', styles['H2']))
+            header = [Paragraph(h, styles['TH']) for h in
+                      ['What we measure', 'Coming in', 'Going out', 'Removed', 'Verdict']]
+            rows = [header]
+            for r in q_rows:
+                judgment = r.get('judgment')
+                if judgment == 'good':
+                    j_cell = Paragraph('✓ good', styles['PassBadge'])
+                elif judgment == 'ok':
+                    j_cell = Paragraph('~ OK', styles['WarnBadge'])
+                elif judgment == 'poor':
+                    j_cell = Paragraph('✗ poor', styles['FailBadge'])
+                else:
+                    j_cell = Paragraph('—', styles['Small'])
+                rem = _safe(r.get('removalPct'))
+                rows.append([
+                    Paragraph(
+                        f"{esc(r.get('friendly', r.get('param', '')))}"
+                        f"<br/><font size='6.5' color='#6B7280'>{esc(r.get('meaning', ''))}</font>",
+                        styles['TDLeft']),
+                    Paragraph(_fmt(r.get('in'), 1, esc(r.get('unit', ''))), styles['TD']),
+                    Paragraph(_fmt(r.get('out'), 1, esc(r.get('unit', ''))), styles['TD']),
+                    Paragraph(f'{rem:.0f}%' if rem is not None else '—', styles['TD']),
+                    j_cell,
+                ])
+            t = Table(rows, colWidths=[6.4*cm, 2.5*cm, 2.5*cm, 2.0*cm, 2.6*cm])
+            t.setStyle(_table_style())
+            sec.append(t)
+
+        # ── Compliance in words ─────────────────────────────────────────────
+        c_story = [c for c in (plain.get('complianceStory') or []) if isinstance(c, dict)]
+        if c_story:
+            sec.append(Paragraph('Is the water legal to release?', styles['H2']))
+            for c in c_story:
+                sev = c.get('severity')
+                col = ('#16A34A' if sev == 'none'
+                       else '#DC2626' if sev in ('high', 'medium')
+                       else '#D97706')
+                sec.append(Paragraph(
+                    f"<font color='{col}'>•</font>  {esc(c.get('text', ''))}",
+                    styles['Body']))
+
+        # ── Treatment steps ─────────────────────────────────────────────────
+        steps = [s for s in (plain.get('treatmentSteps') or []) if isinstance(s, dict)]
+        if steps:
+            sec.append(Paragraph('The journey, step by step', styles['H2']))
+            for i, s in enumerate(steps, 1):
+                line = f"{i}.  <b>{esc(s.get('label', 'Step'))}</b> — {esc(s.get('explanation', ''))}"
+                if s.get('keyFact'):
+                    line += f" <i><font color='#6B7280'>({esc(s['keyFact'])})</font></i>"
+                sec.append(Paragraph(line, styles['Body']))
+
+        # ── Cost in everyday terms ──────────────────────────────────────────
+        cost_lines = (plain.get('costStory') or {}).get('lines') or []
+        if cost_lines:
+            sec.append(Paragraph('What it costs', styles['H2']))
+            for line in cost_lines:
+                sec.append(Paragraph(f'•  {esc(line)}', styles['Body']))
+
+        # ── Glossary (two-column) ───────────────────────────────────────────
+        glossary = [g for g in (plain.get('glossary') or []) if isinstance(g, dict)]
+        if glossary:
+            sec.append(Paragraph('Plain-words dictionary', styles['H2']))
+            cells = [Paragraph(
+                f"<b>{esc(g.get('term', ''))}</b> — "
+                f"<font size='7' color='#374151'>{esc(g.get('definition', ''))}</font>",
+                styles['TDLeft']) for g in glossary]
+            if len(cells) % 2:
+                cells.append(Paragraph('', styles['TDLeft']))
+            g_rows = [[cells[i], cells[i + 1]] for i in range(0, len(cells), 2)]
+            gt = Table(g_rows, colWidths=[8*cm, 8*cm])
+            gt.setStyle(TableStyle([
+                ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+                ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, LIGHT_GREY]),
+                ('TOPPADDING',    (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 5),
+                ('RIGHTPADDING',  (0, 0), (-1, -1), 5),
+            ]))
+            sec.append(gt)
+
+        sec.append(PageBreak())
+    except Exception:
+        return  # never let the plain layer break the engineering report
+
+    story.extend(sec)
 
 def build_toc(sections, styles, story):
     story.append(Paragraph('Table of Contents', styles['H1']))
@@ -690,8 +833,9 @@ def build_report(data: dict) -> bytes:
     mode  = data.get('mode', 'steady_state')
     is_dynamic = (mode == 'dynamic')
 
-    # Cover + TOC
+    # Cover + plain-language summary + TOC
     build_cover(data, styles, story)
+    build_plain_section(data, styles, story)
 
     sections = ['Executive Summary',
                 'Influent & Effluent Quality',
