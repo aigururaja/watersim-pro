@@ -337,6 +337,8 @@ export default function CanvasPage() {
         break;
       case 'node:delete':
         setNodes(ns => ns.filter(n => n.id !== payload.id));
+        // Close the params panel if a collaborator deleted the node it shows.
+        setSelectedNode(sn => (sn?.id === payload.id ? null : sn));
         break;
       case 'node:move':
         setNodes(ns => ns.map(n =>
@@ -999,6 +1001,32 @@ export default function CanvasPage() {
     recordAfterChange();
   }, [sendEvent, recordAfterChange]);
 
+  // ── Delete node ────────────────────────────────────────────────────────────
+  // Programmatic delete (the panel's Delete button): removes the node and its
+  // attached edges, broadcasts to collaborators, records one history entry.
+  const deleteNode = useCallback((nodeId) => {
+    const attached = edgesRef.current.filter(e => e.source === nodeId || e.target === nodeId);
+    setNodes(ns => ns.filter(n => n.id !== nodeId));
+    setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId));
+    setSelectedNode(sn => (sn?.id === nodeId ? null : sn));
+    setSaved(false);
+    sendEvent('node:delete', { id: nodeId });
+    for (const e of attached) sendEvent('edge:delete', { id: e.id });
+    recordAfterChange();
+  }, [sendEvent, recordAfterChange, setNodes, setEdges]);
+
+  // Keyboard delete (Delete/Backspace): ReactFlow removes the elements itself
+  // (the change wrappers handle dirty/history) — these hooks add the collab
+  // broadcast and close a params panel left pointing at a deleted node.
+  const onNodesDelete = useCallback((deleted) => {
+    for (const n of deleted) sendEvent('node:delete', { id: n.id });
+    setSelectedNode(sn => (sn && deleted.some(d => d.id === sn.id) ? null : sn));
+  }, [sendEvent]);
+
+  const onEdgesDelete = useCallback((deleted) => {
+    for (const e of deleted) sendEvent('edge:delete', { id: e.id });
+  }, [sendEvent]);
+
   // ── Undo / redo ────────────────────────────────────────────────────────────
   const applySnapshot = useCallback((snap) => {
     if (!snap) return;
@@ -1207,6 +1235,9 @@ export default function CanvasPage() {
               onConnect={onConnect}
               onNodeClick={onNodeClick}
               onNodeDragStop={onNodeDragStop}
+              onNodesDelete={onNodesDelete}
+              onEdgesDelete={onEdgesDelete}
+              deleteKeyCode={['Backspace', 'Delete']}
               onPaneClick={() => setSelectedNode(null)}
               onInit={(instance) => { rfInstanceRef.current = instance; }}
               nodeTypes={nodeTypes}
@@ -1257,6 +1288,7 @@ export default function CanvasPage() {
                   unitResult={simResults?.results?.unitResults?.[selectedNode.id]}
                   onUpdateParam={updateParam}
                   onClose={() => setSelectedNode(null)}
+                  onDeleteNode={deleteNode}
                   plcBindings={plcBindings}
                   plcLive={plcLive}
                   onOpenPlcBind={openPlcBind}
@@ -1369,7 +1401,7 @@ export default function CanvasPage() {
 
 // ── Param Panel ───────────────────────────────────────────────────────────────
 
-const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onClose, plcBindings, plcLive, onOpenPlcBind }) {
+const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onClose, onDeleteNode, plcBindings, plcLive, onOpenPlcBind }) {
   const defs = PARAM_DEFS[node.data.opType] || [];
 
   return (
@@ -1415,6 +1447,28 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
               </div>
             );
           })}
+        </div>
+      )}
+
+      {onDeleteNode && (
+        <div style={S.panelSection}>
+          <button
+            onClick={() => {
+              if (window.confirm(`Delete "${node.data.label}" and its connections?`)) {
+                onDeleteNode(node.id);
+              }
+            }}
+            style={{
+              width: '100%', padding: '8px 12px', background: '#FEF2F2', color: '#DC2626',
+              border: '1px solid #FECACA', borderRadius: 6, cursor: 'pointer',
+              fontWeight: 600, fontSize: 12,
+            }}
+          >
+            🗑 Delete node
+          </button>
+          <div style={{ fontSize: 10.5, color: '#9CA3AF', marginTop: 6 }}>
+            Tip: you can also select a node on the canvas and press Delete or Backspace.
+          </div>
         </div>
       )}
     </div>
