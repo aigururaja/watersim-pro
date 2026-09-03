@@ -28,7 +28,7 @@
 'use strict';
 
 const { query } = require('../db/pool');
-const { getDriver } = require('./registry');
+const { getDriver, probeAvailability } = require('./registry');
 const { broadcastToRoom } = require('../collab/wsServer');
 const logger = require('../utils/logger');
 
@@ -275,6 +275,10 @@ async function markStale(bindings, pushUpdate) {
 function startPoller({ force = false, tickMs = TICK_MS } = {}) {
   if (timer) return;
   if (process.env.NODE_ENV === 'test' && !force) return;
+
+  // Warm the bridge-driver availability probe (memoized, never rejects) so
+  // GET /plc/protocols is accurate without paying for the first probe inline.
+  probeAvailability().catch(() => {});
 
   timer = setInterval(async () => {
     if (ticking) return; // never overlap slow cycles

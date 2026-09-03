@@ -157,9 +157,32 @@ router.patch('/plc-bindings/:bindingId', requireRole('engineer'), [
   if (vErr(req, res)) return;
   try {
     if (!await checkFlowsheet(req, res)) return;
+    let conn = null;
     if (req.body.connectionId !== undefined) {
-      const conn = await loadConnection(req.body.connectionId, orgId(req), res);
+      conn = await loadConnection(req.body.connectionId, orgId(req), res);
       if (!conn) return;
+    }
+
+    // A changed address must pass the effective connection's driver grammar,
+    // exactly like POST — otherwise a PATCH can smuggle in addresses the
+    // driver would have rejected (e.g. pycomm3 element-count reads that blow
+    // the poll timeout and take the whole connection down).
+    if (req.body.address !== undefined) {
+      let protocol = conn?.protocol;
+      if (!protocol) {
+        const cur = await query(
+          `SELECT c.protocol FROM plc_bindings b
+             JOIN plc_connections c ON c.id = b.connection_id
+            WHERE b.id = $1 AND b.flowsheet_id = $2 AND b.organisation_id = $3`,
+          [req.params.bindingId, req.params.flowsheetId, orgId(req)]
+        );
+        protocol = cur.rows[0]?.protocol;
+      }
+      const driver = protocol ? getDriver(protocol) : null;
+      const addrError = driver?.validateAddress ? driver.validateAddress(req.body.address) : null;
+      if (addrError) {
+        return res.status(422).json({ error: 'Validation failed', details: [{ msg: addrError, path: 'address' }] });
+      }
     }
 
     const fields = []; const vals = []; let i = 1;
@@ -233,6 +256,24 @@ router.get('/plc-values', flowsheetParams, async (req, res, next) => {
 });
 
 // ── POST /plc-bindings/:bindingId/write (operator+) ──────────────────────────
+
+// Writes are serialized per connection: some device writes are read-modify-
+// write under the hood (S7 bools rewrite their containing byte), so two
+// concurrent writes to sibling addresses could silently revert each other.
+// Single-backend-instance scope — the same assumption the poller documents.
+const connectionWriteLocks = new Map(); // connectionId -> tail promise
+function withConnectionWriteLock(connectionId, fn) {
+  const key = String(connectionId);
+  const prev = connectionWriteLocks.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn); // each write runs regardless of the previous one's outcome
+  const tail = run.catch(() => {});
+  connectionWriteLocks.set(key, tail);
+  tail.then(() => {
+    if (connectionWriteLocks.get(key) === tail) connectionWriteLocks.delete(key);
+  });
+  return run;
+}
+
 router.post('/plc-bindings/:bindingId/write', requireRole('operator'), [
   ...flowsheetParams,
   param('bindingId').isUUID(),
@@ -265,19 +306,23 @@ router.post('/plc-bindings/:bindingId/write', requireRole('operator'), [
     const offset = Number(binding.offset_val) || 0;
     const raw = (req.body.value - offset) / scale;
 
-    let client;
     try {
-      client = driver.createClient(binding.config || {}, {
-        connectionId:   binding.connection_id,
-        organisationId: binding.organisation_id,
+      await withConnectionWriteLock(binding.connection_id, async () => {
+        let client;
+        try {
+          client = driver.createClient(binding.config || {}, {
+            connectionId:   binding.connection_id,
+            organisationId: binding.organisation_id,
+          });
+          await client.connect();
+          await client.writeTag(binding.address, raw);
+        } finally {
+          if (client) await client.disconnect().catch(() => {});
+        }
       });
-      await client.connect();
-      await client.writeTag(binding.address, raw);
     } catch (err) {
       logger.warn('PLC write failed', { bindingId: binding.id, err: err.message });
       return res.status(502).json({ error: `PLC write failed: ${err.message}` });
-    } finally {
-      if (client) await client.disconnect().catch(() => {});
     }
 
     // Reflect the write in the latest-value columns so /plc-values shows it

@@ -26,7 +26,7 @@ const {
 
 const simulator = require('../plc/drivers/simulator');
 const modbus    = require('../plc/drivers/modbusTcp');
-const { getDriver, listProtocols } = require('../plc/registry');
+const { getDriver, listProtocols, probeAvailability } = require('../plc/registry');
 const poller    = require('../plc/poller');
 const { broadcastToRoom } = require('../collab/wsServer');
 const { query } = require('../db/pool');
@@ -275,29 +275,64 @@ describe('Modbus TCP driver (mock server)', () => {
 // ── Registry / protocol listing ──────────────────────────────────────────────
 
 describe('Protocol registry', () => {
-  test('lists modbus_tcp + simulator as available and 3 honest stubs', () => {
-    const protocols = listProtocols();
-    const byKey = Object.fromEntries(protocols.map((p) => [p.protocol, p]));
+  const BRIDGE_PROTOCOLS = ['opcua', 's7', 'ethernet_ip'];
+
+  test('bridge protocols are honest stubs (with a reason) before any probe', () => {
+    // Must run before anything triggers probeAvailability() in this file.
+    const byKey = Object.fromEntries(listProtocols().map((p) => [p.protocol, p]));
 
     expect(byKey.modbus_tcp.status).toBe('available');
     expect(byKey.simulator.status).toBe('available');
     expect(byKey.simulator.label).toBe('Simulator (built-in virtual PLC)');
 
-    const stubs = protocols.filter((p) => p.status === 'stub').map((p) => p.protocol).sort();
-    expect(stubs).toEqual(['ethernet_ip', 'opcua', 's7']);
+    for (const key of BRIDGE_PROTOCOLS) {
+      expect(byKey[key].status).toBe('stub');
+      expect(typeof byKey[key].reason).toBe('string'); // additive field
+    }
 
-    for (const p of protocols) {
+    for (const p of listProtocols()) {
       expect(Array.isArray(p.configFields)).toBe(true);
       expect(typeof p.addressHint).toBe('string');
     }
   });
 
-  test('stub createClient throws a clear error naming the optional package', () => {
-    expect(() => getDriver('opcua').createClient({})).toThrow(
-      /OPC UA driver requires the optional 'node-opcua' package — see backend\/src\/plc\/README\.md/
-    );
-    expect(() => getDriver('s7').createClient({})).toThrow(/nodes7/);
-    expect(() => getDriver('ethernet_ip').createClient({})).toThrow(/ethernet-ip/);
+  test('after probeAvailability(), bridge protocol status reflects the probe result', async () => {
+    // Works both with and without the Python packages installed: 'available'
+    // when the probe passed, otherwise an honest 'stub' + reason.
+    const probe = await probeAvailability();
+    const byKey = Object.fromEntries(listProtocols().map((p) => [p.protocol, p]));
+
+    for (const key of BRIDGE_PROTOCOLS) {
+      expect(typeof probe[key].available).toBe('boolean');
+      if (probe[key].available) {
+        expect(byKey[key].status).toBe('available');
+        expect(byKey[key].reason).toBeUndefined();
+      } else {
+        expect(byKey[key].status).toBe('stub');
+        expect(byKey[key].reason).toMatch(/./); // non-empty explanation
+      }
+    }
+
+    // Modbus/simulator stay statically available either way.
+    expect(byKey.modbus_tcp.status).toBe('available');
+    expect(byKey.simulator.status).toBe('available');
+  }, 20000);
+
+  test('bridge drivers expose the full driver interface (no stub throw)', () => {
+    for (const key of BRIDGE_PROTOCOLS) {
+      const driver = getDriver(key);
+      const client = driver.createClient({ host: '10.0.0.5', endpoint: 'opc.tcp://10.0.0.5:4840' });
+      expect(typeof client.connect).toBe('function');
+      expect(typeof client.readTag).toBe('function');
+      expect(typeof client.writeTag).toBe('function');
+      expect(typeof client.disconnect).toBe('function');
+      expect(typeof driver.validateConfig).toBe('function');
+      expect(typeof driver.validateAddress).toBe('function');
+    }
+    // Required-config errors are still enforced up front.
+    expect(getDriver('opcua').validateConfig({}).join(' ')).toMatch(/endpoint is required/);
+    expect(getDriver('s7').validateConfig({}).join(' ')).toMatch(/host is required/);
+    expect(getDriver('ethernet_ip').validateConfig({}).join(' ')).toMatch(/host is required/);
   });
 
   test('getDriver returns null for unknown protocols', () => {

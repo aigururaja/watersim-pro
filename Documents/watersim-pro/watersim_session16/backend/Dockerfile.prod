@@ -37,11 +37,15 @@ FROM node:20-alpine AS release
 # Security: run as non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nodeapp -u 1001
 
-# Install Python3 + pip for report generation:
+# Install Python3 + pip for report generation and the PLC bridge:
 #   PDF   → reportlab + matplotlib (+ numpy)
 #   Excel → openpyxl (src/reports/excel_report.py)
+#   PLC   → asyncua / python-snap7 / pycomm3 (src/plc/bridge/plc_bridge.py,
+#           pinned in backend/requirements-plc.txt)
+COPY backend/requirements-plc.txt /repo/backend/requirements-plc.txt
 RUN apk add --no-cache python3 py3-pip py3-numpy py3-matplotlib && \
-    pip3 install --break-system-packages reportlab==4.2.5 openpyxl==3.1.5
+    pip3 install --break-system-packages reportlab==4.2.5 openpyxl==3.1.5 \
+      -r /repo/backend/requirements-plc.txt
 
 WORKDIR /repo
 

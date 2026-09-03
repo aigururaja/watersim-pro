@@ -21,7 +21,7 @@ const { query } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
-const { getDriver, listProtocols } = require('../plc/registry');
+const { getDriver, listProtocols, probeAvailability } = require('../plc/registry');
 
 const router = express.Router();
 router.use(authenticate);
@@ -78,7 +78,11 @@ const validProtocol = (p) => {
 };
 
 // ── GET /protocols ───────────────────────────────────────────────────────────
-router.get('/protocols', (_req, res) => {
+router.get('/protocols', async (_req, res) => {
+  // Bridge-protocol status (opcua/s7/ethernet_ip) is dynamic: make sure the
+  // Python availability probe has run (memoized — only the first request
+  // pays for it) so even the first response is accurate.
+  await probeAvailability(); // never rejects
   res.json(listProtocols());
 });
 

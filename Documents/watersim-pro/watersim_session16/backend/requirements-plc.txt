@@ -1,0 +1,18 @@
+# WaterSim Pro — Python dependencies for the PLC bridge
+# (backend/src/plc/bridge/plc_bridge.py — real OPC UA / Siemens S7 /
+# Allen-Bradley EtherNet/IP drivers).
+#
+# Local dev:            pip install -r backend/requirements-plc.txt
+# Production image:     installed by backend/Dockerfile.prod
+#
+# These are OPTIONAL at runtime: without them the backend still works and the
+# affected protocols are listed as honest stubs with a `reason` (see
+# registry.probeAvailability in backend/src/plc/registry.js).
+#
+# Note: python-snap7 bundles the snap7 native library in its manylinux/macOS/
+# Windows wheels; on musl-based images (Alpine) the wheel may not provide the
+# library — the availability probe reports that honestly instead of crashing.
+
+asyncua==2.0.1       # OPC UA client            (drivers/opcua.js)
+python-snap7==3.1.2  # Siemens S7 ISO-on-TCP    (drivers/s7.js)
+pycomm3==1.2.16      # Allen-Bradley EtherNet/IP / Logix CIP (drivers/ethernetIp.js)

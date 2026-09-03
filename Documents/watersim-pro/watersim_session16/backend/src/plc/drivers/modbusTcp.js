@@ -92,10 +92,41 @@ function parseAddress(address) {
  * PLC_ALLOW_LOCAL_HOSTS === 'true' — the test/poll paths would otherwise act
  * as a port-probe oracle against the backend host itself. Private RFC1918
  * ranges stay allowed: real PLCs live on plant LANs. See ../README.md.
+ *
+ * Normalizes evasive literal forms before checking: trailing dots, bracketed
+ * IPv6, the any-addresses 0.0.0.0/'::' (which connect to loopback), IPv4-
+ * mapped IPv6 (::ffff:127.0.0.1 and ::ffff:7f00:1), and pure decimal/hex
+ * integer IPv4 literals (2130706433, 0x7f000001). DNS names that RESOLVE to
+ * loopback are not caught (validation is synchronous) — documented residual.
  */
 function isLocalHost(host) {
-  const h = String(host).trim().toLowerCase();
-  return h === 'localhost' || h === '::1' || h.startsWith('127.') || h.startsWith('169.254.');
+  let h = String(host).trim().toLowerCase().replace(/\.+$/, '');
+  if (h.startsWith('[') && h.endsWith(']')) h = h.slice(1, -1);
+
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  if (h === '::' || h === '::1' || h === '0.0.0.0') return true;
+
+  // IPv4-mapped IPv6 → unmap and re-check the v4 part.
+  if (h.startsWith('::ffff:')) {
+    const tail = h.slice(7);
+    if (/^\d+(\.\d+){3}$/.test(tail)) h = tail;
+    else if (/^7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(tail)) return true; // 7fxx:xxxx = 127.x
+    else if (/^a9fe:[0-9a-f]{1,4}$/.test(tail)) return true;         // a9fe = 169.254
+    else if (tail === '0:0') return true;                            // 0.0.0.0
+  }
+
+  // Pure decimal/hex integer IPv4 literals (inet_aton single-part form).
+  if (/^(0x[0-9a-f]+|\d+)$/.test(h)) {
+    const n = Number(h);
+    if (Number.isFinite(n) && n >= 0 && n <= 0xFFFFFFFF) {
+      const b1 = (n >>> 24) & 0xff;
+      const b2 = (n >>> 16) & 0xff;
+      if (b1 === 127 || b1 === 0 || (b1 === 169 && b2 === 254)) return true;
+    }
+  }
+
+  // 0.x.y.z behaves as loopback ('this network') on Linux connect().
+  return h.startsWith('127.') || h.startsWith('169.254.') || h.startsWith('0.');
 }
 
 /** Returns an array of human-readable error strings; empty array = valid. */
@@ -351,4 +382,5 @@ module.exports = {
   validateConfig,
   validateAddress,
   parseAddress, // exported for tests
+  isLocalHost,  // shared loopback/metadata guard (bridge drivers reuse it)
 };
