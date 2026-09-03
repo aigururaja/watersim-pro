@@ -1,6 +1,6 @@
-import { memo, useContext } from 'react';
+import { memo, useContext, useState } from 'react';
 import { Handle, Position } from 'reactflow';
-import { NodeControlContext, isControlOn, controlPct } from './controlState';
+import { NodeControlContext, NodeInfoContext, isControlOn, controlPct } from './controlState';
 
 const TYPE_COLORS = {
   inlet:              { bg: '#F0FDF4', border: '#16A34A', icon: '🌊' },
@@ -84,6 +84,44 @@ function ControlRow({ nodeId, opType, data }) {
   );
 }
 
+// ── In-node ⓘ: opens the node info modal (what / how / watch-for + params) ────
+//
+// Same in-node control contract as the pump/valve switch above: `nodrag` so the
+// node is not dragged, and stopPropagation so the click never selects the node
+// or opens the params panel.
+
+function NodeInfoButton({ opType, label, data }) {
+  const openInfoViaContext = useContext(NodeInfoContext);
+  const [hover, setHover] = useState(false);
+
+  const handleInfo = (e) => {
+    e.stopPropagation();
+    if (typeof data?.onNodeInfo === 'function') data.onNodeInfo(opType, label);
+    else openInfoViaContext?.(opType, label);
+  };
+
+  return (
+    <button
+      type="button"
+      className="nodrag"
+      aria-label={`About ${label}`}
+      title={`About ${label}`}
+      onClick={handleInfo}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      style={{
+        ...styles.infoBtn,
+        opacity: hover ? 1 : 0.35,
+        color: hover ? '#1F4E79' : '#6B7280',
+      }}
+    >
+      ⓘ
+    </button>
+  );
+}
+
 const UnitOpNode = memo(({ id, data, selected }) => {
   const style = TYPE_COLORS[data.opType] || TYPE_COLORS.default;
   const isControl = !!CONTROL_DEFS[data.opType];
@@ -100,6 +138,9 @@ const UnitOpNode = memo(({ id, data, selected }) => {
     }}>
       {/* Input handle (left) */}
       <Handle type="target" position={Position.Left} style={styles.handle} />
+
+      {/* Corner ⓘ — every node explains itself */}
+      <NodeInfoButton opType={data.opType} label={data.label} data={data} />
 
       <div style={styles.body}>
         <span style={styles.icon}>{style.icon}</span>
@@ -118,10 +159,16 @@ UnitOpNode.displayName = 'UnitOpNode';
 export default UnitOpNode;
 
 const styles = {
-  node:   { borderRadius: 8, padding: '10px 14px', minWidth: 150, cursor: 'grab', userSelect: 'none' },
-  body:   { display: 'flex', alignItems: 'center', gap: 8 },
+  node:   { position: 'relative', borderRadius: 8, padding: '10px 14px', minWidth: 150, cursor: 'grab', userSelect: 'none' },
+  body:   { display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12 },
   icon:   { fontSize: 18 },
   label:  { fontSize: 12, fontWeight: 600, color: '#111', fontFamily: 'Arial, sans-serif', lineHeight: 1.3 },
+  infoBtn: {
+    position: 'absolute', top: 1, right: 3, zIndex: 1,
+    background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
+    fontSize: 11, lineHeight: '14px', fontWeight: 700,
+    transition: 'opacity 0.12s ease, color 0.12s ease',
+  },
   handle: { width: 10, height: 10, background: '#2E75B6', border: '2px solid #fff' },
   controlRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 },
   pill:   { fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', borderRadius: 8, padding: '1px 7px', lineHeight: '14px' },

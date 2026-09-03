@@ -30,7 +30,9 @@ import PLCLiveChip from '../components/plc/PLCLiveChip';
 import {
   bindingKey, bindingsToMap, liveFromBindings, mergePlcValues, worstQuality,
 } from '../components/plc/plcState';
-import { NodeControlContext, isControlOn } from '../components/canvas/controlState';
+import { NodeControlContext, NodeInfoContext, isControlOn } from '../components/canvas/controlState';
+import InfoTip, { InfoFacts } from '../components/InfoTip';
+import { OP_INFO, METRIC_INFO, paramInfo } from '../content/explanations';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 
@@ -98,8 +100,11 @@ const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, target
 });
 
 // ── Node param definitions ────────────────────────────────────────────────────
+//
+// Exported so the explanation-coverage test can assert that every parameter
+// here resolves through paramInfo() in src/content/explanations.js.
 
-const PARAM_DEFS = {
+export const PARAM_DEFS = {
   inlet: [
     { key: 'Q',    label: 'Flow (m³/d)',      type: 'number', step: 100 },
     { key: 'BOD',  label: 'BOD (mg/L)',       type: 'number', step: 5 },
@@ -994,6 +999,15 @@ export default function CanvasPage() {
     updateParamRef.current(nodeId, paramKey, value);
   }, []);
 
+  // ── Node info (the ⓘ rendered inside every canvas node) ───────────────────
+  // Exactly the same contract as onControlToggle above: ONE stable useCallback
+  // so the module-scope nodeTypes map never changes and memoized nodes are not
+  // re-rendered just because the modal opened.
+  const [nodeInfo, setNodeInfo] = useState(null);   // { opType, label } | null
+  const onNodeInfo = useCallback((opType, label) => {
+    setNodeInfo({ opType, label });
+  }, []);
+
   // Broadcast node position after drag ends + record ONE history entry for the
   // whole drag (per-tick position updates were already committed to state).
   const onNodeDragStop = useCallback((_evt, node) => {
@@ -1227,6 +1241,7 @@ export default function CanvasPage() {
             {/* Remote collaborator cursors */}
             <RemoteCursors cursors={remoteCursors} />
             <NodeControlContext.Provider value={onControlToggle}>
+            <NodeInfoContext.Provider value={onNodeInfo}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -1256,6 +1271,7 @@ export default function CanvasPage() {
                 </Panel>
               )}
             </ReactFlow>
+            </NodeInfoContext.Provider>
             </NodeControlContext.Provider>
           </div>
 
@@ -1292,6 +1308,7 @@ export default function CanvasPage() {
                   plcBindings={plcBindings}
                   plcLive={plcLive}
                   onOpenPlcBind={openPlcBind}
+                  onOpenNodeInfo={onNodeInfo}
                 />
               )}
               {showSummary && !selectedNode && summary && (
@@ -1380,6 +1397,15 @@ export default function CanvasPage() {
         </div>
       )}
 
+      {/* Node info modal — opened by the ⓘ on a canvas node or the panel header */}
+      {nodeInfo && (
+        <NodeInfoDialog
+          opType={nodeInfo.opType}
+          label={nodeInfo.label}
+          onClose={() => setNodeInfo(null)}
+        />
+      )}
+
       {/* PLC bind dialog */}
       {plcBindDialog && (
         <PLCBindDialog
@@ -1401,15 +1427,30 @@ export default function CanvasPage() {
 
 // ── Param Panel ───────────────────────────────────────────────────────────────
 
-const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onClose, onDeleteNode, plcBindings, plcLive, onOpenPlcBind }) {
-  const defs = PARAM_DEFS[node.data.opType] || [];
+const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onClose, onDeleteNode, plcBindings, plcLive, onOpenPlcBind, onOpenNodeInfo }) {
+  const opType = node.data.opType;
+  const defs = PARAM_DEFS[opType] || [];
+  const op = OP_INFO[opType];
 
   return (
     <div>
       <div style={S.panelHdr}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 13, color: '#1F4E79' }}>{node.data.label}</div>
-          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{node.data.opType}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#1F4E79', display: 'flex', alignItems: 'center' }}>
+            <span>{node.data.label}</span>
+            {onOpenNodeInfo && (
+              <button
+                type="button"
+                aria-label={`About ${node.data.label}`}
+                title={op ? `About ${op.title}` : `About ${node.data.label}`}
+                onClick={() => onOpenNodeInfo(opType, node.data.label)}
+                style={S.headerInfoBtn}
+              >
+                ⓘ
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{opType}</div>
         </div>
         <button style={S.closeBtn} onClick={onClose}>✕</button>
       </div>
@@ -1422,6 +1463,7 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
           return (
             <ParamRow
               key={def.key}
+              opType={opType}
               def={def}
               value={node.data.params?.[def.key]}
               onChange={v => onUpdateParam(node.id, def.key, v)}
@@ -1438,14 +1480,7 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
           <div style={S.secTitle}>Simulation Output</div>
           {Object.entries(unitResult.metrics).map(([k, v]) => {
             if (Array.isArray(v) || v === null || v === undefined) return null;
-            return (
-              <div key={k} style={S.metricRow}>
-                <span style={S.metricKey}>{k.replace(/_/g,' ')}</span>
-                <span style={S.metricVal}>
-                  {typeof v === 'boolean' ? (v ? '✓ Yes' : '✗ No') : String(v)}
-                </span>
-              </div>
-            );
+            return <MetricRow key={k} metricKey={k} value={v} />;
           })}
         </div>
       )}
@@ -2350,7 +2385,48 @@ function ScenariosPanel({ nodes, running, results, onRun, onClose }) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function ParamRow({ def, value, onChange, binding, live, onBind }) {
+/** The body of a parameter ⓘ: what it means, its unit, typical values, effect. */
+function ParamInfoBody({ info, hint }) {
+  return (
+    <InfoFacts
+      facts={[
+        { label: 'What it is', value: info?.meaning },
+        { label: 'Unit', value: info?.unit },
+        { label: 'Typical', value: info?.typical },
+        { label: 'Effect', value: info?.effect },
+        { label: 'Note', value: hint },
+      ]}
+    />
+  );
+}
+
+/** One Simulation Output row; keys documented in METRIC_INFO get an ⓘ. */
+function MetricRow({ metricKey, value }) {
+  const sentence = METRIC_INFO[metricKey];
+  const pretty   = metricKey.replace(/_/g, ' ');
+  const shown    = typeof value === 'boolean' ? (value ? '✓ Yes' : '✗ No') : String(value);
+
+  const row = (infoButton) => (
+    <div style={S.metricRow}>
+      <span style={{ ...S.metricKey, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+        <span style={{ minWidth: 0 }}>{pretty}</span>
+        {infoButton}
+      </span>
+      <span style={S.metricVal}>{shown}</span>
+    </div>
+  );
+
+  if (!sentence) return row(null);
+
+  return (
+    <InfoTip label={`About ${pretty}`} title={pretty} detail={<span>{sentence}</span>}>
+      {row}
+    </InfoTip>
+  );
+}
+
+function ParamRow({ opType, def, value, onChange, binding, live, onBind }) {
+  const info = paramInfo(opType, def.key);
   // PLC bind button (Link2, 14px, ghost) — accent-filled when this node+param
   // has a binding.
   const bindBtn = onBind ? (
@@ -2413,15 +2489,30 @@ function ParamRow({ def, value, onChange, binding, live, onBind }) {
     />
   );
 
+  const row = (infoButton) => (
+    <div style={{ ...S.paramRow, marginBottom: 0 }}>
+      <label style={{ ...S.paramLabel, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+        <span style={{ minWidth: 0 }}>{def.label}</span>
+        {infoButton}
+        {bindBtn}
+      </label>
+      {input}
+    </div>
+  );
+
+  const documented = !!info || !!def.hint;
+
   return (
     <div style={{ marginBottom: 7 }}>
-      <div style={{ ...S.paramRow, marginBottom: 0 }}>
-        <label style={{ ...S.paramLabel, display: 'flex', alignItems: 'center', minWidth: 0 }}>
-          <span style={{ minWidth: 0 }}>{def.label}</span>
-          {bindBtn}
-        </label>
-        {input}
-      </div>
+      {documented ? (
+        <InfoTip
+          label={`About ${def.label}`}
+          title={def.label}
+          detail={<ParamInfoBody info={info} hint={def.hint} />}
+        >
+          {row}
+        </InfoTip>
+      ) : row(null)}
       {binding && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 3 }}>
           <PLCLiveChip live={live} />
@@ -2430,6 +2521,120 @@ function ParamRow({ def, value, onChange, binding, live, onBind }) {
     </div>
   );
 }
+
+// ── Node info modal ───────────────────────────────────────────────────────────
+//
+// Opened by the ⓘ inside a canvas node (via NodeInfoContext) or by the ⓘ in the
+// params panel header. Overlay styling matches PLCBindDialog; closes on ✕, on an
+// overlay click, and on Escape.
+
+function NodeInfoDialog({ opType, label, onClose }) {
+  const op   = OP_INFO[opType];
+  const defs = PARAM_DEFS[opType] || [];
+
+  useEffect(() => {
+    const onKeyDown = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  const title = op?.title || label || opType;
+
+  return (
+    <div
+      style={NI.overlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`About ${title}`}
+      onClick={onClose}
+    >
+      <div style={NI.box} onClick={e => e.stopPropagation()}>
+        <div style={NI.header}>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={NI.title}>ⓘ {title}</h2>
+            <div style={NI.subtitle}>{label && label !== title ? `${label} · ${opType}` : opType}</div>
+          </div>
+          <button style={NI.closeBtn} onClick={onClose} aria-label="Close">&times;</button>
+        </div>
+
+        {op ? (
+          <>
+            <div style={NI.tagline}>{op.tagline}</div>
+            <Section heading="In plain language" body={op.what} />
+            <Section heading="How this simulator models it" body={op.how} />
+            <Section heading="Watch out for" body={op.watchFor} tone="warn" />
+          </>
+        ) : (
+          <div style={NI.tagline}>
+            No explanation has been written for this unit type yet.
+          </div>
+        )}
+
+        <div style={NI.secTitle}>Parameters</div>
+        {defs.length === 0 ? (
+          <p style={{ ...S.noParams, marginBottom: 4 }}>
+            This unit has no configurable parameters.
+          </p>
+        ) : (
+          <dl style={{ margin: 0 }}>
+            {defs.map(def => {
+              const info = paramInfo(opType, def.key);
+              return (
+                <div key={def.key} style={NI.paramBlock}>
+                  <dt style={NI.paramName}>
+                    {def.label}
+                    <span style={NI.paramKey}>{def.key}</span>
+                  </dt>
+                  <dd style={NI.paramBody}>
+                    {info ? (
+                      <>
+                        <div>{info.meaning}</div>
+                        <div style={NI.paramMeta}>
+                          <strong>Unit:</strong> {info.unit} · <strong>Typical:</strong> {info.typical}
+                        </div>
+                        <div style={NI.paramMeta}><strong>Effect:</strong> {info.effect}</div>
+                      </>
+                    ) : (
+                      <div style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Not documented yet.</div>
+                    )}
+                    {def.hint && <div style={NI.paramMeta}><strong>Note:</strong> {def.hint}</div>}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Section({ heading, body, tone }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={NI.secTitle}>{heading}</div>
+      <p style={{ ...NI.body, ...(tone === 'warn' ? NI.bodyWarn : null) }}>{body}</p>
+    </div>
+  );
+}
+
+const NI = {
+  overlay:  { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
+  box:      { background: '#fff', borderRadius: 12, padding: '22px 26px', width: 560, maxWidth: 'calc(100vw - 32px)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' },
+  header:   { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
+  title:    { fontSize: 17, fontWeight: 700, margin: 0, color: '#111' },
+  subtitle: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  closeBtn: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#9CA3AF', minWidth: 32, minHeight: 32, flexShrink: 0 },
+  tagline:  { background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 13, color: '#1E40AF', fontWeight: 600 },
+  secTitle: { fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 },
+  body:     { fontSize: 13, lineHeight: 1.6, color: '#374151', margin: 0 },
+  bodyWarn: { background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '7px 10px', color: '#92400E' },
+  paramBlock: { padding: '7px 0', borderTop: '1px solid #F3F4F6' },
+  paramName:  { fontSize: 12.5, fontWeight: 700, color: '#1F4E79', display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' },
+  paramKey:   { fontSize: 10.5, fontWeight: 500, color: '#9CA3AF', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+  paramBody:  { margin: '2px 0 0', fontSize: 12, lineHeight: 1.55, color: '#374151' },
+  paramMeta:  { marginTop: 2, color: '#6B7280' },
+};
 
 function StreamTable({ stream }) {
   if (!stream) return null;
@@ -2487,6 +2692,7 @@ const S = {
   tab:         (active) => ({ background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 10px 8px', fontSize: 12, fontWeight: 600, color: active ? '#1F4E79' : '#6B7280', borderBottom: active ? '2px solid #2E75B6' : '2px solid transparent' }),
   panelHdr:    { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #E5E7EB' },
   closeBtn:    { background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 16, minWidth: 32, minHeight: 32 },
+  headerInfoBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 13, lineHeight: '16px', padding: '0 4px', marginLeft: 2, flexShrink: 0 },
   panelSection:{ padding: '10px 14px', borderBottom: '1px solid #F3F4F6' },
   secTitle:    { fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 },
   noParams:    { fontSize: 12, color: '#9CA3AF', fontStyle: 'italic', margin: 0 },

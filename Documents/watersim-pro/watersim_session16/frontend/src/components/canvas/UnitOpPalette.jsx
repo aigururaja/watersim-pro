@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
-const PALETTE = [
+// Exported so the explanation-coverage test can assert that every unit type a
+// user can drop on the canvas has an OP_INFO entry in src/content/explanations.js.
+export const PALETTE = [
   {
     category: 'Flow Boundaries',
     items: [

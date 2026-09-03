@@ -13,7 +13,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ReactFlowProvider } from 'reactflow';
 import UnitOpNode from '../components/canvas/UnitOpNode';
-import { NodeControlContext, isControlOn, controlPct } from '../components/canvas/controlState';
+import { NodeControlContext, NodeInfoContext, isControlOn, controlPct } from '../components/canvas/controlState';
 
 // Handle needs ReactFlow's zustand store — provide it around every render.
 function renderNode(ui) {
@@ -102,6 +102,86 @@ describe('UnitOpNode — flow-control switch', () => {
   it('renders no switch for non-control op types', () => {
     renderNode(<UnitOpNode id="n1" data={{ label: 'Inlet', opType: 'inlet', params: {} }} />);
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+  });
+});
+
+describe('UnitOpNode — ⓘ node info affordance', () => {
+  function renderWithInfo(ui, onInfo) {
+    return render(
+      <ReactFlowProvider>
+        <NodeInfoContext.Provider value={onInfo}>{ui}</NodeInfoContext.Provider>
+      </ReactFlowProvider>
+    );
+  }
+
+  it('renders an ⓘ on every node, labelled with the node name', () => {
+    renderNode(<UnitOpNode id="n1" data={{ label: 'Primary Clarifier', opType: 'primary_clarifier', params: {} }} />);
+    expect(screen.getByRole('button', { name: 'About Primary Clarifier' })).toBeInTheDocument();
+  });
+
+  it('calls the NodeInfoContext callback with the opType and label', async () => {
+    const onInfo = vi.fn();
+    renderWithInfo(
+      <UnitOpNode id="n1" data={{ label: 'Aeration Basin', opType: 'activated_sludge', params: {} }} />,
+      onInfo
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'About Aeration Basin' }));
+    expect(onInfo).toHaveBeenCalledTimes(1);
+    expect(onInfo).toHaveBeenCalledWith('activated_sludge', 'Aeration Basin');
+  });
+
+  it('stops propagation — the ⓘ click never reaches the node body', async () => {
+    const onInfo = vi.fn();
+    const parentClick = vi.fn();
+    render(
+      <ReactFlowProvider>
+        <NodeInfoContext.Provider value={onInfo}>
+          <div onClick={parentClick}>
+            <UnitOpNode id="n1" data={{ label: 'Inlet', opType: 'inlet', params: {} }} />
+          </div>
+        </NodeInfoContext.Provider>
+      </ReactFlowProvider>
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'About Inlet' }));
+    expect(onInfo).toHaveBeenCalledTimes(1);
+    expect(parentClick).not.toHaveBeenCalled();
+  });
+
+  it('carries the nodrag class so dragging the node is unaffected', () => {
+    renderNode(<UnitOpNode id="n1" data={{ label: 'Inlet', opType: 'inlet', params: {} }} />);
+    expect(screen.getByRole('button', { name: 'About Inlet' })).toHaveClass('nodrag');
+  });
+
+  it('coexists with the pump toggle without interfering with it', async () => {
+    const onInfo = vi.fn();
+    const onControlToggle = vi.fn();
+    renderWithInfo(
+      <UnitOpNode id="p1" data={{ label: 'Feed Pump', opType: 'pump', params: { running: 1 }, onControlToggle }} />,
+      onInfo
+    );
+    // Both controls are present…
+    expect(screen.getByRole('switch', { name: 'Toggle pump' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'About Feed Pump' })).toBeInTheDocument();
+    // …and each fires only its own handler.
+    await userEvent.click(screen.getByRole('switch', { name: 'Toggle pump' }));
+    expect(onControlToggle).toHaveBeenCalledWith('running', 0);
+    expect(onInfo).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'About Feed Pump' }));
+    expect(onInfo).toHaveBeenCalledWith('pump', 'Feed Pump');
+    expect(onControlToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers a data.onNodeInfo handler when the node data provides one', async () => {
+    const onNodeInfo = vi.fn();
+    const ctxInfo = vi.fn();
+    renderWithInfo(
+      <UnitOpNode id="n1" data={{ label: 'Valve', opType: 'valve', params: {}, onNodeInfo }} />,
+      ctxInfo
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'About Valve' }));
+    expect(onNodeInfo).toHaveBeenCalledWith('valve', 'Valve');
+    expect(ctxInfo).not.toHaveBeenCalled();
   });
 });
 

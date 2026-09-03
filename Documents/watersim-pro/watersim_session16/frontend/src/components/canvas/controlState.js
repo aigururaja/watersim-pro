@@ -32,3 +32,11 @@ export function controlPct(value) {
  * scope nodeTypes map is never recreated and memoized nodes don't re-render.
  */
 export const NodeControlContext = createContext(null);
+
+/**
+ * Stable info channel from the canvas node renderer up to CanvasPage — the
+ * exact same pattern as NodeControlContext.
+ * Value: (opType, label) => void — CanvasPage provides ONE stable useCallback
+ * that opens the node-info modal (title, what/how/watch-for + parameter docs).
+ */
+export const NodeInfoContext = createContext(null);
