@@ -29,6 +29,8 @@ const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, target
   const stream     = data?.streamResult;
   const isRecycle  = data?.isRecycle || (data?.streamType && data.streamType !== 'stream');
   const streamType = data?.streamType || 'stream';
+  // Live-mode change indicator: Q delta vs the previous simulation
+  const delta      = typeof data?.streamDelta === 'number' ? data.streamDelta : null;
 
   const label = stream
     ? isRecycle
@@ -67,6 +69,15 @@ const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, target
             className="nodrag nopan"
           >
             {label}
+            {delta !== null && (
+              <span style={{
+                marginLeft: 5,
+                fontWeight: 700,
+                color: delta > 0 ? '#B45309' : '#0E7490',
+              }}>
+                {delta > 0 ? '▲' : '▼'}{Math.abs(delta) >= 10 ? Math.round(Math.abs(delta)) : Math.abs(delta).toFixed(1)}
+              </span>
+            )}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -478,9 +489,9 @@ export default function CanvasPage() {
   };
 
   // ── Build nodeParams from canvas state ────────────────────────────────────
-  const buildNodeParams = () => {
+  const buildNodeParams = (ns = nodes) => {
     const nodeParams = {};
-    for (const n of nodes) {
+    for (const n of ns) {
       if (n.data?.params && Object.keys(n.data.params).length > 0) {
         const p = { ...n.data.params };
         if (p.denitrification !== undefined)
@@ -498,6 +509,28 @@ export default function CanvasPage() {
     }
     return nodeParams;
   };
+  const buildNodeParamsRef = useRef(buildNodeParams);
+  buildNodeParamsRef.current = buildNodeParams;
+
+  // ── Apply stream results onto edges, with change deltas ───────────────────
+  // Compares against the previous run's streamResults so edges whose flow
+  // changed carry a ▲/▼ delta badge (rendered by StreamEdge).
+  const prevStreamsRef = useRef(null);
+  const applyStreamResults = useCallback((data) => {
+    const streams = data.results?.streamResults || {};
+    const prev = prevStreamsRef.current;
+    setEdges(eds => eds.map(e => {
+      const cur = streams[e.id] || null;
+      let streamDelta = null;
+      const p = prev?.[e.id];
+      if (cur && p && Number.isFinite(cur.Q) && Number.isFinite(p.Q)) {
+        const d = cur.Q - p.Q;
+        if (Math.abs(d) >= 0.5) streamDelta = d;
+      }
+      return { ...e, type: 'stream', data: { ...e.data, streamResult: cur, streamDelta } };
+    }));
+    prevStreamsRef.current = streams;
+  }, [setEdges]);
 
   // ── Simulate ───────────────────────────────────────────────────────────────
   const simulate = async () => {
@@ -510,11 +543,7 @@ export default function CanvasPage() {
         { mode: 'steady_state', nodeParams: buildNodeParams() }
       );
       setSimResults(data);
-      setEdges(eds => eds.map(e => ({
-        ...e,
-        type: 'stream',
-        data: { ...e.data, streamResult: data.results?.streamResults?.[e.id] || null },
-      })));
+      applyStreamResults(data);
       setShowSummary(true);
       setShowDynamic(false);
       setShowScenarios(false);
@@ -526,6 +555,72 @@ export default function CanvasPage() {
       setSimulating(false);
     }
   };
+
+  // ── Live mode: preview-simulate automatically on flowsheet/param changes ──
+  // Previews run the real solver but are never recorded in run history
+  // (backend `preview: true`), and carry the CURRENT canvas inline so unsaved
+  // edits simulate without waiting for auto-save.
+  const [liveMode, setLiveMode]         = useState(false);
+  const [liveStatus, setLiveStatus]     = useState('idle');   // idle | pending | running | error
+  const [liveUpdatedAt, setLiveUpdatedAt] = useState(null);
+  const liveInFlightRef = useRef(false);
+  const livePendingRef  = useRef(false);
+
+  const runLivePreview = useCallback(async () => {
+    if (liveInFlightRef.current) { livePendingRef.current = true; return; }
+    const ns = nodesRef.current;
+    if (!ns.length) { setLiveStatus('idle'); return; }
+    liveInFlightRef.current = true;
+    setLiveStatus('running');
+    try {
+      const payload = {
+        mode: 'steady_state',
+        preview: true,
+        nodeParams: buildNodeParamsRef.current(ns),
+        canvasData: {
+          nodes: ns,
+          // Strip result decorations — they're outputs, not inputs
+          edges: edgesRef.current.map(e => ({
+            ...e,
+            data: e.data ? { ...e.data, streamResult: undefined, streamDelta: undefined } : e.data,
+          })),
+        },
+      };
+      const { data } = await api.post(
+        `/projects/${projectId}/flowsheets/${flowsheetId}/simulate`,
+        payload
+      );
+      setSimResults(data);
+      applyStreamResults(data);
+      setSimError(null);
+      setLiveUpdatedAt(new Date());
+      setLiveStatus('idle');
+    } catch (err) {
+      setLiveStatus('error');
+      setSimError(err.response?.data?.error || err.message);
+    } finally {
+      liveInFlightRef.current = false;
+      if (livePendingRef.current) {
+        livePendingRef.current = false;
+        runLivePreview();
+      }
+    }
+  }, [projectId, flowsheetId, applyStreamResults]);
+
+  // Signature of everything that affects simulation RESULTS — deliberately
+  // excludes node positions so dragging doesn't trigger re-simulation.
+  const liveSignature = useMemo(() => JSON.stringify({
+    n: nodes.map(n => [n.id, n.data?.opType, n.data?.params]),
+    e: edges.map(e => [e.id, e.source, e.target, e.sourceHandle ?? null, e.targetHandle ?? null, e.data?.streamType ?? null]),
+  }), [nodes, edges]);
+
+  useEffect(() => {
+    if (!liveMode) return;
+    if (!nodesRef.current.length) return;
+    setLiveStatus('pending');
+    const t = setTimeout(runLivePreview, 800);
+    return () => clearTimeout(t);
+  }, [liveMode, liveSignature, runLivePreview]);
 
   // ── Dynamic simulation ─────────────────────────────────────────────────────
   const runDynamic = async (timeSeriesConfig) => {
@@ -569,7 +664,8 @@ export default function CanvasPage() {
     setShowSummary(false);
     setShowDynamic(false);
     setShowScenarios(false);
-    setEdges(eds => eds.map(e => ({ ...e, data: { ...e.data, streamResult: null } })));
+    setEdges(eds => eds.map(e => ({ ...e, data: { ...e.data, streamResult: null, streamDelta: null } })));
+    prevStreamsRef.current = null;
   };
 
   // ── Add nodes (drop + palette keyboard/click) ──────────────────────────────
@@ -735,6 +831,20 @@ export default function CanvasPage() {
             <PresenceAvatars presence={presence} self={collabSelf} />
             {simBanner && <SimBanner simBanner={simBanner} />}
             {!saved && <span style={S.unsaved}>● Unsaved</span>}
+            {liveMode && (
+              <span style={{
+                fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                color: liveStatus === 'error' ? '#DC2626' : '#0369A1',
+              }} aria-live="polite">
+                {(liveStatus === 'running' || liveStatus === 'pending')
+                  ? '⚡ updating…'
+                  : liveStatus === 'error'
+                    ? '⚡ error'
+                    : liveUpdatedAt
+                      ? `⚡ ${liveUpdatedAt.toLocaleTimeString()}`
+                      : '⚡ live'}
+              </span>
+            )}
             {hasAnyResults && (
               <button style={{ ...S.btn, background: '#F3F4F6', color: '#374151' }} onClick={clearResults}>
                 Clear Results
@@ -794,6 +904,20 @@ export default function CanvasPage() {
               disabled={nodes.length === 0}
             >
               📸
+            </button>
+            <button
+              title="Live mode: re-simulates automatically as you change parameters or the flowsheet. Previews are not saved to the run history."
+              style={{
+                ...S.btn,
+                background: liveMode ? '#0EA5E9' : '#F3F4F6',
+                color: liveMode ? '#fff' : '#374151',
+                border: liveMode ? 'none' : '1px solid #D1D5DB',
+              }}
+              onClick={() => setLiveMode(v => !v)}
+              disabled={nodes.length === 0}
+              aria-pressed={liveMode}
+            >
+              ⚡ Live
             </button>
             <button
               style={{ ...S.btn, background: '#16A34A', color: '#fff', opacity: simulating ? 0.7 : 1 }}

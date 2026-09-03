@@ -121,6 +121,14 @@ router.post('/', requireRole('operator'), [
     .optional()
     .isObject()
     .withMessage('unitCosts must be an object'),
+  body('preview')
+    .optional()
+    .isBoolean()
+    .withMessage('preview must be a boolean'),
+  body('canvasData')
+    .optional()
+    .isObject()
+    .withMessage('canvasData must be an object'),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
 
@@ -129,6 +137,10 @@ router.post('/', requireRole('operator'), [
   const nodeParams       = req.body.nodeParams       || {};
   const timeSeriesConfig = req.body.timeSeriesConfig || null;
   const reqUnitCosts     = req.body.unitCosts        || {};
+  // Preview runs (live mode in the canvas) execute the solver but are never
+  // recorded in simulation_runs — they may also carry an inline canvasData so
+  // unsaved edits can be simulated without a save round-trip.
+  const isPreview        = req.body.preview === true;
 
   let runId;
   try {
@@ -146,7 +158,9 @@ router.post('/', requireRole('operator'), [
     } catch (_) { /* non-fatal */ }
     const unitCosts = { ...projectUnitCosts, ...reqUnitCosts };
 
-    const canvasData   = flowsheet.canvas_data || { nodes: [], edges: [] };
+    const canvasData = (isPreview && req.body.canvasData)
+      ? req.body.canvasData
+      : (flowsheet.canvas_data || { nodes: [], edges: [] });
 
     // Reject oversized flowsheets before creating a run or spawning a worker.
     const sizeError = canvasTooLarge(canvasData);
@@ -154,17 +168,21 @@ router.post('/', requireRole('operator'), [
 
     const permitLimits = await loadPermitTemplate(orgId(req));
 
-    // Create run record with 'running' status
-    const insertRun = await query(
-      `INSERT INTO simulation_runs
-         (flowsheet_id, created_by, mode, status, config, started_at)
-       VALUES ($1,$2,$3,'running',$4,NOW())
-       RETURNING id`,
-      [flowsheetId, userId(req), mode, JSON.stringify({ nodeParams, timeSeriesConfig, unitCosts })]
-    );
-    runId = insertRun.rows[0].id;
-
-    logger.info('Simulation started', { runId, flowsheetId, mode });
+    // Create run record with 'running' status (skipped for previews — live
+    // mode would otherwise flood the run history with intermediate states)
+    if (!isPreview) {
+      const insertRun = await query(
+        `INSERT INTO simulation_runs
+           (flowsheet_id, created_by, mode, status, config, started_at)
+         VALUES ($1,$2,$3,'running',$4,NOW())
+         RETURNING id`,
+        [flowsheetId, userId(req), mode, JSON.stringify({ nodeParams, timeSeriesConfig, unitCosts })]
+      );
+      runId = insertRun.rows[0].id;
+      logger.info('Simulation started', { runId, flowsheetId, mode });
+    } else {
+      logger.debug('Preview simulation started', { flowsheetId, mode });
+    }
 
     // ── Execute solver (worker thread — keeps the event loop free) ────────
     let results, warnings;
@@ -179,24 +197,26 @@ router.post('/', requireRole('operator'), [
       endSimTimer({ status: 'completed' });
     } catch (simErr) {
       endSimTimer({ status: simErr.timedOut ? 'timeout' : 'failed' });
-      // Mark run as failed
-      await query(
-        `UPDATE simulation_runs SET status='failed', error_message=$1, completed_at=NOW() WHERE id=$2`,
-        [simErr.message, runId]
-      ).catch(() => {});
+      // Mark run as failed (previews have no run row)
+      if (runId) {
+        await query(
+          `UPDATE simulation_runs SET status='failed', error_message=$1, completed_at=NOW() WHERE id=$2`,
+          [simErr.message, runId]
+        ).catch(() => {});
+      }
       if (simErr.timedOut) {
         logger.error('Simulation timed out', { runId, err: simErr.message });
         return res.status(504).json({
           error:   'Simulation timed out',
           details: simErr.message,
-          run_id:  runId,
+          run_id:  runId || null,
         });
       }
       logger.error('Solver error', { runId, err: simErr.message });
       return res.status(422).json({
         error:   'Simulation solver failed',
         details: simErr.message,
-        run_id:  runId,
+        run_id:  runId || null,
       });
     }
 
@@ -216,26 +236,28 @@ router.post('/', requireRole('operator'), [
       }
     }
 
-    // ── Persist results ────────────────────────────────────────────────────
-    await query(
-      `UPDATE simulation_runs
-       SET status='completed', results=$1, completed_at=NOW()
-       WHERE id=$2`,
-      [JSON.stringify(results), runId]
-    );
-
-    logger.info('Simulation completed', {
-      runId,
-      nodes: results.summary?.nodeCount,
-      warnings: warnings.length,
-    });
+    // ── Persist results (previews are never persisted) ─────────────────────
+    if (!isPreview) {
+      await query(
+        `UPDATE simulation_runs
+         SET status='completed', results=$1, completed_at=NOW()
+         WHERE id=$2`,
+        [JSON.stringify(results), runId]
+      );
+      logger.info('Simulation completed', {
+        runId,
+        nodes: results.summary?.nodeCount,
+        warnings: warnings.length,
+      });
+    }
 
     // A run that did not converge (or was degraded by non-finite sweeps) is
     // still 'completed' — but the response carries the flags prominently in
     // top-level `quality` alongside the warnings.
     if (mode === 'dynamic') {
       return res.status(201).json({
-        run_id:   runId,
+        run_id:   runId || null,
+        preview:  isPreview || undefined,
         status:   'completed',
         mode,
         quality,
@@ -249,7 +271,8 @@ router.post('/', requireRole('operator'), [
       });
     } else {
       return res.status(201).json({
-        run_id:   runId,
+        run_id:   runId || null,
+        preview:  isPreview || undefined,
         status:   'completed',
         mode,
         quality,
