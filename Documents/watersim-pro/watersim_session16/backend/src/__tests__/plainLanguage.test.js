@@ -201,6 +201,128 @@ describe('buildPlainSummary — the story sections', () => {
   });
 });
 
+// ── Step order and names (the jsonb key-order trap) ──────────────────────────
+
+describe('buildPlainSummary — treatment steps follow the water, not the storage order', () => {
+  // Postgres jsonb does not preserve key insertion order: it returns keys
+  // sorted by length then bytewise, so a mid-train 'p_feed' comes back AFTER
+  // 'n0'…'n6'. Reproduce that exactly, and require the canvas to fix it.
+  function jsonbShuffle(unitResults) {
+    const out = {};
+    for (const k of Object.keys(unitResults).sort((a, b) => a.length - b.length || (a < b ? -1 : 1))) {
+      out[k] = unitResults[k];
+    }
+    return out;
+  }
+
+  const CANVAS_WITH_PUMPS = {
+    nodes: [
+      { id: 'n0',     data: { opType: 'inlet',               label: 'Influent' } },
+      { id: 'n1',     data: { opType: 'screening',           label: 'Bar Screen' } },
+      { id: 'n3',     data: { opType: 'activated_sludge',    label: 'Aeration Basin' } },
+      { id: 'n4',     data: { opType: 'secondary_clarifier', label: 'Secondary Clarifier' } },
+      { id: 'n6',     data: { opType: 'outlet',              label: 'Effluent Discharge' } },
+      { id: 'p_feed', data: { opType: 'pump',                label: 'Feed Pump' } },
+      { id: 'p_ras',  data: { opType: 'pump',                label: 'RAS Pump' } },
+      { id: 'v_eff',  data: { opType: 'valve',               label: 'Effluent Valve' } },
+    ],
+    edges: [
+      { id: 'a', source: 'n0',     target: 'p_feed' },
+      { id: 'b', source: 'p_feed', target: 'n1' },
+      { id: 'c', source: 'n1',     target: 'n3' },
+      { id: 'd', source: 'n3',     target: 'n4' },
+      { id: 'e', source: 'n4',     target: 'v_eff' },
+      { id: 'f', source: 'v_eff',  target: 'n6' },
+      { id: 'r1', source: 'n4',    target: 'p_ras', data: { streamType: 'ras', isRecycle: true } },
+      { id: 'r2', source: 'p_ras', target: 'n3',    data: { streamType: 'ras' } },
+    ],
+  };
+
+  const NP = {
+    n0: { Q: 5000, TSS: 260, BOD: 220, COD: 420, TN: 45, NH4: 35, TP: 8, pH: 7.2, temp: 20 },
+    n3: { SRT_d: 10, MLSS_mg_L: 3000 },
+    n4: { RAS_ratio: 0.5 },
+  };
+
+  function runWithCanvas() {
+    const results = runSteadyState(CANVAS_WITH_PUMPS, { nodeParams: NP });
+    results.costBreakdown = estimateCosts(results);
+    return {
+      run_id: 'r', mode: 'steady_state',
+      results: {
+        summary: results.summary,
+        unitResults: jsonbShuffle(results.unitResults), // as Postgres returns it
+        streamResults: results.streamResults,
+        costBreakdown: results.costBreakdown,
+      },
+    };
+  }
+
+  test('with the canvas, the feed pump appears before the screen it feeds', () => {
+    const plain = buildPlainSummary(runWithCanvas(), CANVAS_WITH_PUMPS);
+    const ids = plain.treatmentSteps.map(s => s.id);
+    expect(ids.indexOf('n0')).toBeLessThan(ids.indexOf('p_feed'));
+    expect(ids.indexOf('p_feed')).toBeLessThan(ids.indexOf('n1'));   // the bug: was last
+    expect(ids.indexOf('n4')).toBeLessThan(ids.indexOf('v_eff'));
+    expect(ids.indexOf('v_eff')).toBeLessThan(ids.indexOf('n6'));
+  });
+
+  test('steps use the operator’s own node names, not generic type names', () => {
+    const plain = buildPlainSummary(runWithCanvas(), CANVAS_WITH_PUMPS);
+    const labels = plain.treatmentSteps.map(s => s.label);
+    expect(labels).toEqual(expect.arrayContaining(['Feed Pump', 'RAS Pump', 'Effluent Valve']));
+    // Two different pumps must not both read as a bare "Pump".
+    expect(labels.filter(l => l === 'Pump')).toHaveLength(0);
+  });
+
+  test('a recycle line never drags its destination to the end of the story', () => {
+    const plain = buildPlainSummary(runWithCanvas(), CANVAS_WITH_PUMPS);
+    const ids = plain.treatmentSteps.map(s => s.id);
+    // The RAS pump returns sludge to n3; n3 must still be told in forward order.
+    expect(ids.indexOf('n3')).toBeLessThan(ids.indexOf('n4'));
+    expect(new Set(ids).size).toBe(ids.length);       // every node exactly once
+    expect(ids).toHaveLength(Object.keys(runWithCanvas().results.unitResults).length);
+  });
+
+  test('a RAS pump is told next to the clarifier it drains, not before the inlet', () => {
+    const plain = buildPlainSummary(runWithCanvas(), CANVAS_WITH_PUMPS);
+    const ids = plain.treatmentSteps.map(s => s.id);
+    // It is fed only by a recycle edge from n4 — it must not look like a source.
+    expect(ids.indexOf('p_ras')).toBeGreaterThan(ids.indexOf('n0'));
+    expect(ids.indexOf('p_ras')).toBe(ids.indexOf('n4') + 1);
+  });
+
+  test('a node connected to nothing is reported last, not mid-journey', () => {
+    const report = runWithCanvas();
+    // Someone dropped a spare pump on the canvas and never wired it up.
+    report.results.unitResults = jsonbShuffle({
+      ...report.results.unitResults,
+      spare: { type: 'pump', paletteType: 'pump', metrics: { status: 'ON', power_kW: 0 }, outputs: {} },
+    });
+    const canvas = {
+      ...CANVAS_WITH_PUMPS,
+      nodes: [...CANVAS_WITH_PUMPS.nodes, { id: 'spare', data: { opType: 'pump', label: 'Spare Pump' } }],
+    };
+    const ids = buildPlainSummary(report, canvas).treatmentSteps.map(s => s.id);
+    expect(ids).toContain('spare');
+    expect(ids[ids.length - 1]).toBe('spare');
+  });
+
+  test('without a canvas it still lists every unit (degraded, never dropped)', () => {
+    const report = runWithCanvas();
+    const plain = buildPlainSummary(report); // no canvas — old rows / Excel path
+    expect(plain.treatmentSteps.map(s => s.id).sort())
+      .toEqual(Object.keys(report.results.unitResults).sort());
+  });
+
+  test('a node deleted from the canvas after the run is still reported', () => {
+    const report = runWithCanvas();
+    const trimmed = { ...CANVAS_WITH_PUMPS, nodes: CANVAS_WITH_PUMPS.nodes.filter(n => n.id !== 'p_ras') };
+    const plain = buildPlainSummary(report, trimmed);
+    expect(plain.treatmentSteps.map(s => s.id)).toContain('p_ras');
+  });
+});
+
 // ── Glossary ─────────────────────────────────────────────────────────────────
 
 describe('buildPlainSummary — glossary', () => {

@@ -530,12 +530,123 @@ function buildComplianceStory(summary) {
   return story;
 }
 
-function buildTreatmentSteps(unitResults) {
+/**
+ * Order node ids the way the water actually flows.
+ *
+ * unitResults CANNOT be trusted for this: results are stored as Postgres
+ * jsonb, which discards key insertion order (keys come back sorted by length,
+ * so 'n0'…'n6' precede 'p_feed' regardless of where the pump sits in the
+ * train). When the flowsheet canvas is available we sort topologically from
+ * the inlets instead; otherwise we keep whatever order we were given.
+ *
+ * @returns {string[]} node ids in flow order (every id of unitResults, once)
+ */
+function orderNodesByFlow(unitResults, canvas) {
+  const ids = Object.keys(unitResults || {});
+  const nodes = canvas && Array.isArray(canvas.nodes) ? canvas.nodes : null;
+  const edges = canvas && Array.isArray(canvas.edges) ? canvas.edges : [];
+  if (!nodes || !nodes.length) return ids;
+
+  const known = new Set(ids);
+  const canvasIds = nodes.map(n => n && n.id).filter(id => known.has(id));
+  const inSet = new Set(canvasIds);
+
+  const isRecycleEdge = (e) => {
+    if (e && e.data && e.data.isRecycle === true) return true;
+    const st = String((e && e.data && e.data.streamType) || '').toLowerCase();
+    return st === 'ras' || st === 'was' || st === 'recycle' || st === 'internal_recycle';
+  };
+
+  const indeg    = new Map(canvasIds.map(id => [id, 0]));
+  const out      = new Map(canvasIds.map(id => [id, []]));
+  const anyEdge  = new Set();                       // touched by any edge at all
+  const feederOf = new Map();                       // recycle-fed node → its source
+  for (const e of edges) {
+    if (!e || !inSet.has(e.source) || !inSet.has(e.target)) continue;
+    anyEdge.add(e.source); anyEdge.add(e.target);
+    // Recycle/return lines (RAS, WAS…) are not forward flow — following them
+    // would create a cycle and push the receiving unit to the end.
+    if (isRecycleEdge(e)) {
+      if (!feederOf.has(e.target)) feederOf.set(e.target, e.source);
+      continue;
+    }
+    indeg.set(e.target, indeg.get(e.target) + 1);
+    out.get(e.source).push(e.target);
+  }
+
+  // Seed only genuine starting points: units with nothing flowing into them
+  // (forward OR recycle) that do feed something. A pump on a RAS line has no
+  // forward inlet but is NOT where the story starts.
+  const hasInbound = new Set();
+  for (const e of edges) {
+    if (e && inSet.has(e.source) && inSet.has(e.target)) hasInbound.add(e.target);
+  }
+  const isolated = canvasIds.filter(id => !anyEdge.has(id));
+  const queue = canvasIds.filter(id =>
+    indeg.get(id) === 0 && !hasInbound.has(id) && anyEdge.has(id));
+
+  const ordered = [];
+  const seen = new Set();
+  const visit = () => {
+    while (queue.length) {
+      const id = queue.shift();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+      for (const t of out.get(id) || []) {
+        indeg.set(t, indeg.get(t) - 1);
+        if (indeg.get(t) === 0 && !seen.has(t)) queue.push(t);
+      }
+    }
+  };
+  visit();
+
+  // Recycle-fed units (a RAS pump, a return valve) read best right after the
+  // unit whose stream they carry — "clarifier → RAS pump" — so splice them in
+  // there rather than leaving them stranded at either end.
+  for (const id of canvasIds) {
+    if (seen.has(id) || isolated.includes(id)) continue;
+    const feeder = feederOf.get(id);
+    const at = feeder ? ordered.indexOf(feeder) : -1;
+    seen.add(id);
+    if (at >= 0) ordered.splice(at + 1, 0, id);
+    else ordered.push(id);
+    // Anything this unit feeds forward can now follow normally.
+    for (const t of out.get(id) || []) {
+      indeg.set(t, indeg.get(t) - 1);
+      if (indeg.get(t) === 0 && !seen.has(t)) queue.push(t);
+    }
+    visit();
+  }
+
+  // Units connected to nothing are real (someone dropped them on the canvas)
+  // but they are not part of the journey — mention them last.
+  for (const id of isolated) if (!seen.has(id)) { seen.add(id); ordered.push(id); }
+  // Results for nodes that are no longer on the canvas still get told.
+  for (const id of ids) if (!inSet.has(id)) ordered.push(id);
+  return ordered;
+}
+
+/**
+ * @param {object} unitResults  per-node solver results
+ * @param {object} [canvas]     flowsheet canvas_data — supplies flow order and
+ *                              the operator's own node names ("RAS Pump"),
+ *                              neither of which survives into unitResults
+ */
+function buildTreatmentSteps(unitResults, canvas) {
   const steps = [];
   if (!unitResults || typeof unitResults !== 'object') return steps;
 
-  // unitResults preserves the solver's topological order → flow order.
-  for (const [nodeId, ur] of Object.entries(unitResults)) {
+  const labelById = new Map();
+  if (canvas && Array.isArray(canvas.nodes)) {
+    for (const n of canvas.nodes) {
+      const label = n && n.data && typeof n.data.label === 'string' ? n.data.label.trim() : '';
+      if (n && n.id && label) labelById.set(n.id, label);
+    }
+  }
+
+  for (const nodeId of orderNodesByFlow(unitResults, canvas)) {
+    const ur = unitResults[nodeId];
     if (!ur || typeof ur !== 'object') continue;
     const palette = ur.paletteType || ur.type || 'unit';
     const kind    = ur.type || palette;
@@ -544,9 +655,12 @@ function buildTreatmentSteps(unitResults) {
     try {
       keyFact = keyFactFor(kind, ur.metrics);
     } catch { keyFact = null; }
+    // The name on the canvas is what the reader sees in the app; the generic
+    // type name is only a fallback ("Pump" when nobody named it).
+    const label = labelById.get(nodeId) || (entry ? entry.label : titleCase(palette));
     steps.push({
       id:          nodeId,
-      label:       entry ? entry.label : titleCase(palette),
+      label,
       kind,
       explanation: entry ? entry.explanation : 'A treatment step in the process train.',
       keyFact,
@@ -681,7 +795,12 @@ const EMPTY_VERDICT = {
  *            complianceStory: Array, treatmentSteps: Array,
  *            costStory: {lines: Array}, glossary: Array}}
  */
-function buildPlainSummary(report) {
+/**
+ * @param {object} report  the report JSON built by reportData.js
+ * @param {object} [canvas] flowsheet canvas_data (nodes/edges) — optional;
+ *                          supplies flow order and node names for the steps
+ */
+function buildPlainSummary(report, canvas) {
   const plain = {
     verdict:         { ...EMPTY_VERDICT },
     waterStory:      [],
@@ -705,7 +824,7 @@ function buildPlainSummary(report) {
   try { plain.waterStory = buildWaterStory(summary); } catch { plain.waterStory = []; }
   try { plain.qualityRows = buildQualityRows(summary); } catch { plain.qualityRows = []; }
   try { plain.complianceStory = buildComplianceStory(summary); } catch { plain.complianceStory = []; }
-  try { plain.treatmentSteps = buildTreatmentSteps(unitResults); } catch { plain.treatmentSteps = []; }
+  try { plain.treatmentSteps = buildTreatmentSteps(unitResults, canvas); } catch { plain.treatmentSteps = []; }
   try { plain.costStory = buildCostStory(results.costBreakdown); } catch { plain.costStory = { lines: [] }; }
   try {
     plain.glossary = buildGlossary({

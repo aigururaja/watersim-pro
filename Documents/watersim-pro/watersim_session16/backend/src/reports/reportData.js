@@ -46,8 +46,11 @@ function buildReportData(row) {
 
   // Plain-language layer — additive; a failure here must never break the
   // report endpoint (buildPlainSummary itself never throws, but be safe).
+  // canvas_data (when the caller's query selected it) gives the treatment
+  // steps true flow order and the operator's own node names — neither
+  // survives into results.unitResults, which jsonb also reorders.
   try {
-    report.plain = buildPlainSummary(report);
+    report.plain = buildPlainSummary(report, row.canvas_data || null);
   } catch (err) {
     logger.warn('Plain-language summary generation failed — omitting from report', {
       runId: row.id, error: err.message,
