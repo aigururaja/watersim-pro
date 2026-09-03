@@ -3,11 +3,19 @@
 # Runs on every push and pull request to main / develop.
 #
 # Jobs:
-#   lint-backend    → ESLint + dependency audit
+#   lint-backend    → ESLint + Prettier check + dependency audit
 #   test-backend    → Jest (with a real Postgres service container)
-#   lint-frontend   → ESLint
+#   lint-frontend   → ESLint + Prettier check + dependency audit
 #   test-frontend   → Vitest
 #   build-images    → docker buildx build (no push; confirms builds succeed)
+#
+# ESLint/Prettier live in the ROOT devDependencies (single root flat config:
+# eslint.config.js), so the lint jobs run a full root `npm ci`.
+# Playwright e2e is scaffolded separately (e2e.yml, manual dispatch only).
+#
+# NOTE: this is an npm-workspaces monorepo — there is exactly ONE lockfile,
+# package-lock.json at the repo root. All `npm ci` runs at the root (optionally
+# filtered with --workspace); per-workspace lockfiles do not exist.
 #
 # Deployment is handled by cd.yml (deploy job runs only on push to main).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -29,9 +37,6 @@ jobs:
   lint-backend:
     name: Backend — Lint & Audit
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
@@ -39,19 +44,24 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
+      # Full root install — ESLint/Prettier are root devDependencies.
       - run: npm ci
-      - run: npm audit --audit-level=high
+
+      - run: npm audit --audit-level=high --workspace=backend
         continue-on-error: true  # report but don't fail CI on advisories
+
+      - name: ESLint (backend)
+        run: npm run lint --workspace=backend
+
+      - name: Prettier check
+        run: npm run format:check
 
   # ── Backend tests ───────────────────────────────────────────────────────────
   test-backend:
     name: Backend — Tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
 
     services:
       postgres:
@@ -86,15 +96,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - run: npm ci
+      - run: npm ci --workspace=backend
 
       - name: Run migrations (test DB)
+        working-directory: backend
         run: node src/db/migrate.js up
 
       - name: Run tests with coverage
-        run: npm run test:ci
+        run: npm run test:ci --workspace=backend
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -108,9 +119,6 @@ jobs:
   lint-frontend:
     name: Frontend — Lint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -118,19 +126,24 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
+      # Full root install — ESLint/Prettier are root devDependencies.
       - run: npm ci
-      - run: npm audit --audit-level=high
+
+      - run: npm audit --audit-level=high --workspace=frontend
         continue-on-error: true
+
+      - name: ESLint (frontend)
+        run: npm run lint --workspace=frontend
+
+      - name: Prettier check
+        run: npm run format:check
 
   # ── Frontend tests ───────────────────────────────────────────────────────────
   test-frontend:
     name: Frontend — Tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -138,12 +151,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - run: npm ci
-      - run: npm test -- --run
+      - run: npm ci --workspace=frontend
+      - run: npm test --workspace=frontend -- --run
 
   # ── Docker image builds (smoke test only, no push) ───────────────────────────
+  # Contexts are the REPO ROOT — the Dockerfiles do workspace installs from the
+  # single root package-lock.json.
   build-images:
     name: Docker — Build Images
     runs-on: ubuntu-latest
@@ -156,7 +171,7 @@ jobs:
       - name: Build backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: .
           file: ./backend/Dockerfile.prod
           push: false
           tags: watersim-backend:ci-${{ github.sha }}
@@ -166,7 +181,7 @@ jobs:
       - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./frontend
+          context: .
           file: ./frontend/Dockerfile.prod
           push: false
           tags: watersim-frontend:ci-${{ github.sha }}

@@ -1,7 +1,13 @@
 # syntax=docker/dockerfile:1
 # ─────────────────────────────────────────────────────────────
 # WaterSim Pro — Backend Production Dockerfile (multi-stage)
-# Stage 1 "deps"    : install only production dependencies
+#
+# This is an npm-workspaces monorepo with a SINGLE root package-lock.json.
+# Build context MUST be the repo root:
+#   docker build -f backend/Dockerfile.prod .
+# (docker-compose.prod.yml and CI/CD already pass context: . )
+#
+# Stage 1 "deps"    : install only production dependencies (workspace-filtered)
 # Stage 2 "release" : minimal runtime image — no dev tools
 # ─────────────────────────────────────────────────────────────
 
@@ -11,10 +17,19 @@ FROM node:20-alpine AS deps
 # Add dumb-init for proper PID 1 signal handling
 RUN apk add --no-cache dumb-init
 
-WORKDIR /app
+WORKDIR /repo
 
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev --ignore-scripts
+# Root manifest + lockfile + every workspace manifest (npm ci validates the
+# lockfile against ALL declared workspaces, even for a filtered install)
+COPY package.json package-lock.json ./
+COPY backend/package.json ./backend/package.json
+COPY frontend/package.json ./frontend/package.json
+
+# Production deps for the backend workspace only.
+# mkdir guarantees backend/node_modules exists for the release-stage COPY
+# (npm only creates it when hoisting conflicts occur).
+RUN npm ci --workspace=backend --omit=dev --ignore-scripts && \
+    mkdir -p backend/node_modules
 
 # ── Stage 2: production image ─────────────────────────────────
 FROM node:20-alpine AS release
@@ -22,26 +37,31 @@ FROM node:20-alpine AS release
 # Security: run as non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nodeapp -u 1001
 
-# Install Python3 + pip for PDF report generation (reportlab + matplotlib)
+# Install Python3 + pip for report generation:
+#   PDF   → reportlab + matplotlib (+ numpy)
+#   Excel → openpyxl (src/reports/excel_report.py)
 RUN apk add --no-cache python3 py3-pip py3-numpy py3-matplotlib && \
-    pip3 install --break-system-packages reportlab==4.2.5
+    pip3 install --break-system-packages reportlab==4.2.5 openpyxl==3.1.5
 
-WORKDIR /app
+WORKDIR /repo
 
 # Carry in dumb-init from deps stage
 COPY --from=deps /usr/bin/dumb-init /usr/bin/dumb-init
 
-# Production node_modules only
-COPY --from=deps /app/node_modules ./node_modules
+# Production node_modules only — hoisted root tree + any nested workspace tree
+COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/backend/node_modules ./backend/node_modules
 
 # Application source (no tests, no dev files)
-COPY src ./src
-COPY .env.example .env.example
+COPY backend/src ./backend/src
+COPY backend/package.json ./backend/package.json
 
 # Ownership
-RUN chown -R nodeapp:nodejs /app
+RUN chown -R nodeapp:nodejs /repo
 
 USER nodeapp
+
+WORKDIR /repo/backend
 
 EXPOSE 4000
 

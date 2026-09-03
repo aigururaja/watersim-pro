@@ -1,0 +1,19 @@
+# Dependencies & build output
+node_modules
+dist
+coverage
+
+# Lockfile
+package-lock.json
+
+# Docs & prose (formatting churn not worth it)
+docs
+*.md
+
+# Infra manifests with deliberate alignment/comments
+k8s
+nginx
+.github
+
+# Shell scripts (not prettier's domain)
+scripts

@@ -8,8 +8,29 @@ namespace: watersim
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secret.yaml        # NOT committed; create from secret.example.yaml
+  # secret.yaml is intentionally NOT listed (it is gitignored and must never be
+  # committed). Create it from secret.example.yaml and apply it separately:
+  #   cp k8s/secret.example.yaml k8s/secret.yaml   # fill in base64 values
+  #   kubectl apply -f k8s/secret.yaml
   - postgres.yaml
   - backend.yaml
   - frontend.yaml
   - ingress.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+  - backup-cronjob.yaml
+  # migrate-job.yaml is intentionally NOT listed: Job pod templates are
+  # immutable, so re-applying with a new tag would fail. Run it explicitly
+  # before each rollout — see docs/RUNBOOK-deploy.md.
+
+# Pin image names/tags here (CD or an operator can run:
+#   cd k8s && kustomize edit set image \
+#     ghcr.io/YOUR_ORG/watersim-backend=ghcr.io/<org>/watersim-backend:<tag>
+# ). Placeholders below — replace YOUR_ORG / your-org and the tag.
+images:
+  - name: ghcr.io/YOUR_ORG/watersim-backend
+    newName: ghcr.io/your-org/watersim-backend
+    newTag: latest
+  - name: ghcr.io/YOUR_ORG/watersim-frontend
+    newName: ghcr.io/your-org/watersim-frontend
+    newTag: latest

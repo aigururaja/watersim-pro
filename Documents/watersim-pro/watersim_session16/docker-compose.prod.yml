@@ -1,21 +1,25 @@
 # WaterSim Pro — Production Docker Compose
 #
 # Prerequisites:
-#   1. Create .env.prod from .env.prod.example and populate all values.
-#   2. Place TLS certs at ./nginx/certs/ (or use Certbot volume below).
-#   3. docker compose -f docker-compose.prod.yml up -d
+#   1. Create .env.prod from .env.prod.example and populate all values
+#      (CD writes it automatically; it must also contain IMAGE_ORG + IMAGE_TAG).
+#   2. Bootstrap TLS certs ONCE via scripts/init-tls.sh (see docs/RUNBOOK-deploy.md),
+#      then run the certbot renewer with: --profile tls
+#   3. docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+#
+# Always pass `--env-file .env.prod` — the ${VAR} interpolations below are
+# resolved from it (env_file: alone only sets vars INSIDE containers).
+#
+# Images are pulled from GHCR (pushed by .github/workflows/cd.yml). The build:
+# blocks are a fallback for building locally; normal deploys must `pull`, never
+# rebuild on the host. All build contexts are the repo root (npm workspaces
+# monorepo with a single root package-lock.json).
 #
 # To run a one-off migration:
-#   docker compose -f docker-compose.prod.yml run --rm backend node src/db/migrate.js up
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
 #
 # To seed:
-#   docker compose -f docker-compose.prod.yml run --rm backend node src/seeds/index.js
-
-version: "3.9"
-
-# ── Secrets (Docker Swarm syntax; for plain Compose, use env_file) ────────────
-# In Swarm: docker secret create jwt_secret ./secrets/jwt_secret.txt
-# For non-Swarm environments, env_file is used instead (see below).
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm backend node src/seeds/index.js
 
 services:
   # ── PostgreSQL ──────────────────────────────────────────────────────────────
@@ -37,13 +41,17 @@ services:
     restart: unless-stopped
     networks:
       - internal
+    # docker compose (non-Swarm) ignores deploy.resources — use mem_limit/cpus
+    mem_limit: 1g
+    cpus: 1.0
     # No ports exposed — only reachable from internal network
 
   # ── Migration runner (exits after completion) ────────────────────────────────
   migrate:
+    image: ghcr.io/${IMAGE_ORG:-your-org}/watersim-backend:${IMAGE_TAG:-latest}
     build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: backend/Dockerfile.prod
     container_name: watersim-migrate
     env_file: .env.prod
     environment:
@@ -58,9 +66,10 @@ services:
 
   # ── Backend API ──────────────────────────────────────────────────────────────
   backend:
+    image: ghcr.io/${IMAGE_ORG:-your-org}/watersim-backend:${IMAGE_TAG:-latest}
     build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: backend/Dockerfile.prod
     container_name: watersim-api-prod
     env_file: .env.prod
     environment:
@@ -82,17 +91,15 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
+    mem_limit: 512m
+    cpus: 1.0
 
   # ── Frontend (Nginx + Vite static build) ────────────────────────────────────
   frontend:
+    image: ghcr.io/${IMAGE_ORG:-your-org}/watersim-frontend:${IMAGE_TAG:-latest}
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: frontend/Dockerfile.prod
       args:
         VITE_API_BASE: /api/v1
         VITE_WS_URL:   wss://${PUBLIC_HOST}/ws
@@ -108,11 +115,8 @@ services:
     networks:
       - internal
       - public
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 128M
+    mem_limit: 128m
+    cpus: 0.5
 
   # ── Nginx reverse proxy (TLS termination) ────────────────────────────────────
   proxy:
@@ -123,7 +127,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx/proxy.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/certs:/etc/letsencrypt:ro      # Certbot certs
+      - ./nginx/certs:/etc/letsencrypt:ro      # Certbot certs (bootstrap: scripts/init-tls.sh)
       - certbot_www:/var/www/certbot:ro
     depends_on:
       - frontend
@@ -131,20 +135,18 @@ services:
     restart: unless-stopped
     networks:
       - public
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 64M
+      - internal
+    mem_limit: 64m
+    cpus: 0.25
 
-  # ── Certbot (optional — renew certs) ─────────────────────────────────────────
+  # ── Certbot (renewal only — first issuance is scripts/init-tls.sh) ──────────
   certbot:
     image: certbot/certbot:latest
     container_name: watersim-certbot
     volumes:
       - ./nginx/certs:/etc/letsencrypt
       - certbot_www:/var/www/certbot
-    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done'
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done'
     restart: unless-stopped
     profiles:
       - tls   # only active with: docker compose --profile tls up

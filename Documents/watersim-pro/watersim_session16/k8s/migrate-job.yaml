@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Database migration Job — run ONCE before each backend rollout.
+#
+# Deliberately NOT listed in kustomization.yaml: Job pod templates are
+# immutable, so re-applying with a new image tag would fail. Run explicitly:
+#
+#   kubectl -n watersim delete job watersim-migrate --ignore-not-found
+#   kubectl apply -f k8s/migrate-job.yaml       # (set the image tag first)
+#   kubectl -n watersim wait --for=condition=complete job/watersim-migrate --timeout=300s
+#   kubectl apply -k k8s/                       # then roll the deployments
+#
+# See docs/RUNBOOK-deploy.md.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: watersim-migrate
+  namespace: watersim
+  labels:
+    app: migrate
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400   # auto-clean after 24h (logs stay until then)
+  template:
+    metadata:
+      labels:
+        app: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser:    1001
+        runAsGroup:   1001
+      containers:
+        - name: migrate
+          # Keep this tag in sync with the backend Deployment / kustomize images: block
+          image: ghcr.io/YOUR_ORG/watersim-backend:latest
+          command: [node, src/db/migrate.js, up]
+          envFrom:
+            - configMapRef:
+                name: watersim-config
+          env:
+            # ORDER MATTERS: POSTGRES_PASSWORD must precede DATABASE_URL so the
+            # $(POSTGRES_PASSWORD) reference resolves (see k8s/backend.yaml).
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: watersim-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgres://watersim:$(POSTGRES_PASSWORD)@postgres:5432/watersim_prod
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem:   true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu:    100m
+              memory: 128Mi
+            limits:
+              cpu:    500m
+              memory: 256Mi

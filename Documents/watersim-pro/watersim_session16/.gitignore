@@ -38,8 +38,12 @@ Thumbs.db
 *.swo
 
 # Docker
-*.dockerignore
 docker-compose.override.yml
+
+# Deploy-host state (created by scripts on the server, never committed)
+.deploy/
+backups/
+nginx/certs/
 
 # Logs
 *.log

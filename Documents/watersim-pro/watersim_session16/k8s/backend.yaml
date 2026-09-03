@@ -1,5 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Backend — Deployment, Service, HPA
+#
+# Migrations are NOT run here. They run as a dedicated Job
+# (k8s/migrate-job.yaml) BEFORE each rollout — an init container on every
+# replica races against itself under the HPA. See docs/RUNBOOK-deploy.md.
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -23,6 +27,7 @@ spec:
       labels:
         app: backend
     spec:
+      automountServiceAccountToken: false
       # Security: drop all capabilities, run as non-root
       securityContext:
         runAsNonRoot: true
@@ -37,18 +42,30 @@ spec:
             - configMapRef:
                 name: watersim-config
           env:
-            - name: DATABASE_URL
-              value: postgres://watersim:$(POSTGRES_PASSWORD)@postgres:5432/watersim_prod
+            # ORDER MATTERS: $(VAR) substitution only sees variables declared
+            # EARLIER in this list — POSTGRES_PASSWORD must precede DATABASE_URL,
+            # otherwise the DSN contains the literal string "$(POSTGRES_PASSWORD)".
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: watersim-secrets
                   key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgres://watersim:$(POSTGRES_PASSWORD)@postgres:5432/watersim_prod
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: watersim-secrets
                   key: JWT_SECRET
+            # matplotlib (PDF reports) needs a writable config dir under the
+            # read-only root filesystem — points into the /tmp emptyDir below.
+            - name: MPLCONFIGDIR
+              value: /tmp/mpl
+          volumeMounts:
+            # Writable scratch space: report generators (matplotlib/reportlab)
+            # and tmpfiles work despite readOnlyRootFilesystem.
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             httpGet:
               path: /health
@@ -75,27 +92,9 @@ spec:
             readOnlyRootFilesystem:   true
             capabilities:
               drop: [ALL]
-      # Init container: run migrations before pods start
-      initContainers:
-        - name: migrate
-          image: ghcr.io/YOUR_ORG/watersim-backend:latest
-          command: [node, src/db/migrate.js, up]
-          envFrom:
-            - configMapRef:
-                name: watersim-config
-          env:
-            - name: DATABASE_URL
-              value: postgres://watersim:$(POSTGRES_PASSWORD)@postgres:5432/watersim_prod
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: watersim-secrets
-                  key: POSTGRES_PASSWORD
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: watersim-secrets
-                  key: JWT_SECRET
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

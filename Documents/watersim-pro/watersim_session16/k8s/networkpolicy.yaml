@@ -1,0 +1,87 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NetworkPolicies — default-deny ingress inside the namespace, then explicitly
+# allow:   ingress-controller → frontend/backend
+#          frontend → backend (nginx /api and /ws proxy paths)
+#          backend / migrate Job / backup CronJob → postgres
+#
+# NOTE: the ingress-controller selector assumes the standard ingress-nginx
+# namespace label (kubernetes.io/metadata.name=ingress-nginx). Adjust if your
+# controller lives elsewhere. Requires a CNI that enforces NetworkPolicy
+# (Calico, Cilium, ...).
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: watersim
+spec:
+  podSelector: {}          # every pod in the namespace
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-ingress
+  namespace: watersim
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-ingress
+  namespace: watersim
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # Ingress controller routes /api/, /ws/, /health straight to backend
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        # Frontend nginx also proxies /api/ and /ws/ to backend
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 4000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-ingress
+  namespace: watersim
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [backend, migrate, pg-backup]
+      ports:
+        - protocol: TCP
+          port: 5432

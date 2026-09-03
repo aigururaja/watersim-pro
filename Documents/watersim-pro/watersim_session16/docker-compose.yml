@@ -1,11 +1,13 @@
 # WaterSim Pro — Local Development Stack
 # Usage:
-#   docker compose up          # start all services
+#   docker compose up          # start all services (migrations run automatically)
 #   docker compose up -d       # detached
 #   docker compose down -v     # stop + remove volumes
-#   docker compose run --rm backend npm run seed
-
-version: "3.9"
+#   docker compose run --rm backend npm run seed     # seed demo data
+#   docker compose run --rm migrate                  # re-run migrations manually
+#
+# NOTE: this is an npm-workspaces monorepo with a single root package-lock.json,
+# so every build context is the repo root (context: .).
 
 services:
   # ── PostgreSQL ─────────────────────────────────────────────────────────────
@@ -18,7 +20,8 @@ services:
       POSTGRES_PASSWORD: watersim_dev_pw
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d:ro   # auto-run on first start
+      # Schema is managed by the versioned migration runner (migrate service
+      # below) — NOT by initdb SQL dumps, which go stale.
     ports:
       - "5432:5432"
     healthcheck:
@@ -28,11 +31,28 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ── Migration runner (one-shot; exits after applying pending migrations) ───
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: watersim-backend-dev
+    container_name: watersim-migrate-dev
+    environment:
+      NODE_ENV:     development
+      DATABASE_URL: postgres://watersim:watersim_dev_pw@postgres:5432/watersim_dev
+    command: ["npm", "run", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   # ── Backend API ─────────────────────────────────────────────────────────────
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
+    image: watersim-backend-dev
     container_name: watersim-api
     environment:
       NODE_ENV:         development
@@ -46,27 +66,28 @@ services:
       BCRYPT_ROUNDS:    10
       RATE_LIMIT_MAX:   500
     volumes:
-      - ./backend/src:/app/src:ro          # live reload reads from host
-      - /app/node_modules                   # container-private node_modules
+      - ./backend/src:/repo/backend/src:ro   # nodemon hot reload reads from host
+      - /repo/node_modules                    # container-private node_modules
     ports:
       - "4000:4000"
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # ── Frontend (Vite dev server) ─────────────────────────────────────────────
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: watersim-ui
     environment:
       VITE_API_BASE: http://localhost:4000/api/v1
     volumes:
-      - ./frontend/src:/app/src:ro
-      - ./frontend/public:/app/public:ro
-      - /app/node_modules
+      - ./frontend/src:/repo/frontend/src:ro   # Vite HMR reads from host
+      - /repo/node_modules                      # container-private node_modules
     ports:
       - "3000:3000"
     depends_on:

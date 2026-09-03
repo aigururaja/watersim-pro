@@ -1,0 +1,103 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Nightly PostgreSQL backup — CronJob + PVC
+#
+# Runs pg_dump (custom format, pg_restore-compatible) at 02:30 every night,
+# writes timestamped dumps to the pg-backups PVC and prunes dumps older than
+# RETENTION_DAYS.
+#
+# ⚠ OFFSITE STORAGE: a PVC in the same cluster does NOT survive cluster loss.
+# To ship dumps to S3/object storage instead, swap the tail of the shell
+# script below for an upload, e.g.:
+#     apk add --no-cache aws-cli
+#     aws s3 cp "${out}" "s3://YOUR-BUCKET/watersim/$(basename "${out}")"
+# (credentials via a Secret + IRSA/workload identity) and drop the PVC mount.
+#
+# Restore procedure: docs/RUNBOOK-backup-restore.md
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pg-backups
+  namespace: watersim
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-backup
+  namespace: watersim
+spec:
+  schedule: "30 2 * * *"          # nightly at 02:30 (cluster timezone)
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: pg-backup        # matched by allow-postgres-ingress NetworkPolicy
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser:    999
+            runAsGroup:   999
+            fsGroup:      999
+          containers:
+            - name: pg-dump
+              image: postgres:16-alpine     # matches the server major version
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  value: watersim
+                - name: PGDATABASE
+                  value: watersim_prod
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: watersim-secrets
+                      key: POSTGRES_PASSWORD
+                - name: RETENTION_DAYS
+                  value: "14"
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  ts="$(date +%Y%m%d-%H%M%S)"
+                  out="/backups/watersim-${ts}.dump"
+                  echo "[backup] dumping ${PGDATABASE} -> ${out}"
+                  pg_dump --format=custom --compress=6 --file="${out}.partial"
+                  mv "${out}.partial" "${out}"
+                  echo "[backup] wrote $(du -h "${out}" | cut -f1)"
+                  echo "[backup] pruning dumps older than ${RETENTION_DAYS} days"
+                  find /backups -name 'watersim-*.dump' -mtime +"${RETENTION_DAYS}" -print -delete
+                  rm -f /backups/*.partial
+                  echo "[backup] current backups:"
+                  ls -lh /backups
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu:    100m
+                  memory: 128Mi
+                limits:
+                  cpu:    500m
+                  memory: 512Mi
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: pg-backups

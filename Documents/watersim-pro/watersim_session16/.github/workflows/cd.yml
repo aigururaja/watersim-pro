@@ -3,8 +3,13 @@
 # Triggers on push to main (after CI passes).
 # Builds, pushes to GHCR, then SSH-deploys to production server.
 #
+# The production host runs PRE-BUILT images pulled from GHCR — it never builds
+# from source. Only the deploy files (docker-compose.prod.yml, nginx/, scripts/)
+# are checked out on the host; scripts/deploy.sh handles pull → migrate → up,
+# with a retried health check and automatic rollback to the previously
+# deployed tag (recorded in .deploy/current_tag on the host).
+#
 # Required GitHub Secrets:
-#   GHCR_TOKEN        — GitHub PAT with packages:write scope (or use GITHUB_TOKEN)
 #   DEPLOY_HOST       — production server IP / hostname
 #   DEPLOY_USER       — SSH user (e.g. deploy)
 #   DEPLOY_SSH_KEY    — private SSH key (PEM format)
@@ -15,6 +20,7 @@
 #   POSTGRES_PASSWORD — production DB password
 #   JWT_SECRET        — production JWT secret (>=32 chars)
 #   CORS_ORIGIN       — production CORS origin
+# (Image push uses the built-in GITHUB_TOKEN with packages:write.)
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: CD
@@ -61,22 +67,22 @@ jobs:
             type=sha,prefix=,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
-      # Backend
+      # Backend — context is the REPO ROOT (workspace build, single root lockfile)
       - name: Build + push backend
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: .
           file: ./backend/Dockerfile.prod
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/watersim-backend:${{ steps.meta.outputs.version }},${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/watersim-backend:latest
           cache-from: type=gha
           cache-to:   type=gha,mode=max
 
-      # Frontend
+      # Frontend — context is the REPO ROOT (also needs nginx/frontend.conf)
       - name: Build + push frontend
         uses: docker/build-push-action@v5
         with:
-          context: ./frontend
+          context: .
           file: ./frontend/Dockerfile.prod
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/watersim-frontend:${{ steps.meta.outputs.version }},${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/watersim-frontend:latest
@@ -94,8 +100,6 @@ jobs:
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -106,11 +110,17 @@ jobs:
             set -euo pipefail
             cd ${{ secrets.DEPLOY_PATH }}
 
-            # Pull latest docker-compose files from this deploy
+            # Minimal checkout: ONLY the files needed to run pulled images on
+            # the host (compose file, nginx configs, scripts). No source build,
+            # no `git reset --hard` over the whole tree.
             git fetch origin main
-            git reset --hard origin/main
+            git checkout --force origin/main -- \
+              docker-compose.prod.yml nginx scripts .env.prod.example
 
-            # Write production env file from secrets
+            # Write production env file from secrets.
+            # IMAGE_ORG / IMAGE_TAG pin the exact images this pipeline pushed;
+            # docker compose is always invoked with --env-file .env.prod so
+            # these reach the ${VAR} interpolations in the compose file.
             cat > .env.prod << 'EOF'
             NODE_ENV=production
             PORT=4000
@@ -129,23 +139,28 @@ jobs:
             AUTH_RATE_LIMIT_MAX=10
             DB_POOL_MIN=2
             DB_POOL_MAX=20
+            IMAGE_ORG=${{ env.IMAGE_ORG }}
+            IMAGE_TAG=${{ needs.push-images.outputs.image_tag }}
             EOF
+            chmod 600 .env.prod
 
-            # Pull updated images
-            docker compose -f docker-compose.prod.yml pull backend frontend
+            # Pull → migrate → rolling update → health check (30×2s) → rollback
+            # on failure. The script records the previously deployed tag to
+            # .deploy/previous_tag before switching.
+            IMAGE_TAG='${{ needs.push-images.outputs.image_tag }}' \
+              bash scripts/deploy.sh
 
-            # Run migrations before swapping traffic
-            docker compose -f docker-compose.prod.yml run --rm migrate
+            echo "Deploy complete — $(date)"
 
-            # Rolling update (zero downtime: new container starts, old stops)
-            docker compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans backend frontend proxy
-
-            # Clean up dangling images
-            docker image prune -f
-
-            echo "✅ Deploy complete — $(date)"
-
-      - name: Smoke test health endpoint
+      - name: Smoke test health endpoint (retry loop)
         run: |
-          sleep 10
-          curl -f https://${{ secrets.PUBLIC_HOST }}/health | jq .
+          for i in $(seq 1 30); do
+            if curl -fsS "https://${{ secrets.PUBLIC_HOST }}/health" | grep -q '"status":"healthy"'; then
+              echo "Health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i/30 failed; retrying in 2s..."
+            sleep 2
+          done
+          echo "Health endpoint never became healthy" >&2
+          exit 1

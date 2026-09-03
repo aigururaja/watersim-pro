@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────
+# WaterSim Pro — root .dockerignore
+# All image builds use the REPO ROOT as build context (npm workspaces
+# monorepo with a single root package-lock.json), so this file governs
+# every backend/frontend dev & prod build.
+# ─────────────────────────────────────────────────────────────
+
+# Dependencies (installed inside the image from the lockfile)
+node_modules
+**/node_modules
+
+# VCS / CI
+.git
+.github
+
+# Environment files & secrets — never bake into images
+.env
+.env.*
+**/.env
+**/.env.*
+*.env
+
+# Build outputs & test artifacts (built inside the image)
+**/dist
+**/build
+coverage
+**/coverage
+
+# Docs / manifests not needed in any image
+docs
+k8s
+*.md
+**/*.md
+SESSION_STATE*
+
+# Deploy-host state & local certs
+.deploy
+backups
+nginx/certs
+
+# Compose files & deploy scripts (not part of any image)
+docker-compose*.yml
+scripts
+
+# Editor / OS noise
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.log

@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Frontend — Deployment, Service
+# Frontend — Deployment, Service, HPA
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -23,6 +23,7 @@ spec:
       labels:
         app: frontend
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser:    101    # nginx user
@@ -69,3 +70,23 @@ spec:
     - port: 80
       targetPort: 80
   type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-hpa
+  namespace: watersim
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type:               AverageUtilization
+          averageUtilization: 70
