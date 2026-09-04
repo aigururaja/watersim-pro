@@ -3,9 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactFlow, {
   addEdge, Background, Controls, MiniMap,
   useNodesState, useEdgesState, useStore,
-  Panel, EdgeLabelRenderer, BaseEdge, getStraightPath,
+  Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+// The canvas design system. These two files are the ONLY place canvas colours
+// and @keyframes live, and until now they were in no bundle at all.
+import '../styles/canvas-tokens.css';
+import '../styles/canvas-motion.css';
 import { ArrowLeft, Undo2, Redo2, Zap, Play, MoreHorizontal, Camera, Settings2, Trash2, PanelRight, Link2 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -16,6 +20,11 @@ import { downloadFile } from '../utils/download';
 import AppLayout from '../components/layout/AppLayout';
 import UnitOpNode from '../components/canvas/UnitOpNode';
 import UnitOpPalette from '../components/canvas/UnitOpPalette';
+import StreamEdge, { SERVICES } from '../components/canvas/StreamEdge';
+import SymbolDefs from '../components/canvas/symbols/defs';
+import { setFrame, getRefs } from '../components/canvas/liveStore';
+import { AlarmFloodContext, countAlarms, ALARM_FLOOD_LIMIT } from '../components/canvas/nodeReadouts';
+import { useReducedMotion } from '../components/AccessibilityProvider';
 import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
 import SimBanner from '../components/canvas/SimBanner';
@@ -35,69 +44,11 @@ import InfoTip, { InfoFacts } from '../components/InfoTip';
 import { OP_INFO, METRIC_INFO, paramInfo } from '../content/explanations';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
-
-const StreamEdge = React.memo(function StreamEdge({ id, sourceX, sourceY, targetX, targetY, data, style = {}, markerEnd }) {
-  const zoom = useStore(s => s.transform[2]);
-  const [edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY });
-  const stream     = data?.streamResult;
-  const isRecycle  = data?.isRecycle || (data?.streamType && data.streamType !== 'stream');
-  const streamType = data?.streamType || 'stream';
-  // Live-mode change indicator: Q delta vs the previous simulation
-  const delta      = typeof data?.streamDelta === 'number' ? data.streamDelta : null;
-
-  const fmtQ = (q) => Number(q).toLocaleString('en-US', { maximumFractionDigits: 0 });
-  const label = stream
-    ? isRecycle
-      ? `RAS: ${fmtQ(stream.Q)} m³/d`
-      : `Q: ${fmtQ(stream.Q)} m³/d`
-    : null;
-
-  const edgeColor = isRecycle ? '#F97316' : (stream ? '#0ea5e9' : '#2E75B6');
-  const edgeDash  = isRecycle ? '6 3' : undefined;
-
-  return (
-    <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={{
-        stroke: edgeColor,
-        strokeWidth: stream ? 2.5 : 2,
-        strokeDasharray: edgeDash,
-        ...style,
-      }} />
-      {label && zoom >= 0.55 && (
-        <EdgeLabelRenderer>
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              background: isRecycle ? '#FFF7ED' : '#f0f9ff',
-              border: `1px solid ${isRecycle ? '#FED7AA' : '#7dd3fc'}`,
-              borderRadius: 3,
-              padding: '0 6px',
-              lineHeight: '15px',
-              fontSize: 9.5,
-              fontWeight: 600,
-              color: isRecycle ? '#9A3412' : '#0369a1',
-              pointerEvents: 'none',
-              whiteSpace: 'nowrap',
-            }}
-            className="nodrag nopan"
-          >
-            {label}
-            {delta !== null && (
-              <span style={{
-                marginLeft: 5,
-                fontWeight: 700,
-                color: delta > 0 ? '#B45309' : '#0E7490',
-              }}>
-                {delta > 0 ? '▲' : '▼'}{Math.abs(delta) >= 10 ? Math.round(Math.abs(delta)) : Math.abs(delta).toFixed(1)}
-              </span>
-            )}
-          </div>
-        </EdgeLabelRenderer>
-      )}
-    </>
-  );
-});
+//
+// Moved to `components/canvas/StreamEdge.jsx` (spec §8 phase G). It keeps
+// `getStraightPath`, its single per-edge `useStore` subscription, the
+// `zoom >= 0.55` label gate and the ▲/▼ delta badge, and adds the §4 three-layer
+// geometry, `serviceOf()` classification and the value-driven pulse.
 
 // ── Node param definitions ────────────────────────────────────────────────────
 //
@@ -275,6 +226,112 @@ const edgeTypes = { stream: StreamEdge };
 let idCounter = 1;
 const getId = () => `node_${idCounter++}`;
 
+// ── Level of detail (spec §6.4) — EXACTLY ONE new store subscription ─────────
+//
+// A zero-child component that reads the zoom and writes `data-lod` and the
+// `.ws-lod-far` class onto the pane VIA A REF. It renders nothing, so no node
+// and no edge re-renders when you zoom; the whole LOD collapse is CSS.
+//
+// `onlyRenderVisibleElements` stays OFF on purpose: it thrashes on pan and
+// fights `fitView`, and the worst case for element count is the best case for
+// animation count — the two never coincide.
+
+const LOD_FAR = 0.40;   // below this: all node motion off, symbols collapse
+const LOD_MID = 0.75;
+
+function CanvasLod({ paneRef }) {
+  const zoom = useStore(s => s.transform[2]);
+  useEffect(() => {
+    const wrap = paneRef?.current;
+    if (!wrap) return;
+    const far = zoom < LOD_FAR;
+    const lod = far ? 'far' : zoom < LOD_MID ? 'mid' : 'near';
+    if (wrap.dataset.lod !== lod) wrap.dataset.lod = lod;
+
+    // The class goes on the ReactFlow ROOT, not on the wrapper.
+    //
+    // The wrapper's `className` is React-controlled (`ws-sheet` + `ws-live`), so
+    // React rewrites the whole attribute the moment live mode is toggled — and
+    // that would silently wipe an imperatively-added `ws-lod-far`, leaving a
+    // zoomed-out sheet animating. ReactFlow's own root carries a className React
+    // computes once and never changes, and it is still an ancestor of every node
+    // and edge, which is all the `.ws-lod-far` rules need.
+    const rf = wrap.querySelector('.react-flow');
+    if (rf) rf.classList.toggle('ws-lod-far', far);
+    // Mirrored on the wrapper as well, so a stylesheet or a devtools inspection
+    // that expects it there still sees it between live toggles.
+    wrap.classList.toggle('ws-lod-far', far);
+  }, [zoom, paneRef]);
+  return null;
+}
+
+// ── Encoding legend (spec §3.4) — mandatory, not optional ────────────────────
+//
+// "Without it the monochrome relearn fails." Five service classes with their
+// dash patterns, the width ramp with the CURRENT Qref, and the two conventions
+// a reader cannot guess: pulse speed = flow, dashed = not simulated.
+
+const LEGEND_ROWS = [
+  ['water', 'Process water'],
+  ['recycle', 'Recycle / RAS — pulses run backwards'],
+  ['sludge', 'Sludge'],
+  ['air', 'Air'],
+  ['chemical', 'Chemical'],
+  ['permeate', 'Permeate'],
+  ['dead', 'Not simulated / no flow'],
+];
+
+function EncodingLegend({ qref }) {
+  const [open, setOpen] = useState(() => {
+    try { return localStorage.getItem('ws.canvasLegend') === '1'; } catch { /* ignore */ }
+    return false;
+  });
+  const toggle = () => {
+    setOpen(v => {
+      try { localStorage.setItem('ws.canvasLegend', v ? '0' : '1'); } catch { /* ignore */ }
+      return !v;
+    });
+  };
+
+  return (
+    <div style={S.legend}>
+      <button type="button" onClick={toggle} style={S.legendToggle} aria-expanded={open}>
+        {open ? '▾' : '▸'} Encoding
+      </button>
+      {open && (
+        <div style={S.legendBody}>
+          {LEGEND_ROWS.map(([key, label]) => {
+            const svc = SERVICES[key];
+            return (
+              <div key={key} style={S.legendRow}>
+                <svg width="34" height="8" aria-hidden="true" style={{ flexShrink: 0 }}>
+                  <line
+                    x1="1" y1="4" x2="33" y2="4"
+                    stroke={svc.color}
+                    strokeWidth={key === 'dead' ? 1 : 2.5}
+                    strokeDasharray={svc.dash || undefined}
+                    strokeLinecap={svc.cap}
+                  />
+                </svg>
+                <span>{label}</span>
+              </div>
+            );
+          })}
+          <div style={S.legendRule} />
+          <div style={S.legendRow}>
+            <svg width="34" height="12" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <line x1="1" y1="3" x2="33" y2="3" stroke="var(--ws-svc-water, #2E75B6)" strokeWidth="1.5" />
+              <line x1="1" y1="9" x2="33" y2="9" stroke="var(--ws-svc-water, #2E75B6)" strokeWidth="4" />
+            </svg>
+            <span>{`line width = flow · Qref ${Math.round(qref).toLocaleString('en-US')} m³/d`}</span>
+          </div>
+          <div style={S.legendNote}>pulse speed = flow · dashed = not simulated</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CanvasPage() {
   const { projectId, flowsheetId } = useParams();
   const navigate   = useNavigate();
@@ -388,6 +445,11 @@ export default function CanvasPage() {
             type: 'stream',
             data: { ...e.data, streamResult: payload.results?.streamResults?.[e.id] || null },
           })));
+          // Same publish as the two local paths: a collaborator's results are
+          // results, and without this the symbols would stay empty while the
+          // summary panel filled up. The gate is untouched — `motionRef` still
+          // decides whether anything moves.
+          publishFrame(payload, motionRef.current);
           setShowSummary(true);
           setShowDynamic(false);
           setShowScenarios(false);
@@ -469,7 +531,12 @@ export default function CanvasPage() {
       ...params,
       id:       `edge_${Date.now()}`,
       type:     'stream',
-      animated: true,
+      // §4.5: ReactFlow v11 runs `dashdraw 0.5s linear infinite` on every
+      // `animated` edge at a CONSTANT FAKE SPEED. Left on, that runs underneath
+      // the real value-driven pulse and is the single most likely "why does it
+      // look wrong" bug. canvas-motion.css ships the matching override for the
+      // edges already saved with `animated: true`.
+      animated: false,
       data:     { streamType: 'stream' },
     };
     setEdges(eds => addEdge(newEdge, eds));
@@ -602,6 +669,29 @@ export default function CanvasPage() {
     prevStreamsRef.current = streams;
   }, [setEdges]);
 
+  // ── The live-animation frame (spec §6.1, §6.2) ────────────────────────────
+  //
+  // ONE publish per simulation path, immediately after `applyStreamResults`.
+  // Everything else about the store is read-only.
+  //
+  // NOTHING here enters `node.data` or `params`: `node.data` is saved to the DB
+  // by `save()`, JSON.stringify'd by the collab `sendEvent`, and hashed by
+  // `liveSignature` — UI state stashed there would retrigger the simulation.
+  const publishFrame = useCallback((data, live) => {
+    setFrame({
+      live,
+      unitResults: data?.results?.unitResults || {},
+      streamResults: data?.results?.streamResults || {},
+      nodes: nodesRef.current,
+      edges: edgesRef.current,
+    });
+  }, []);
+
+  // The §6.1 gate, in a ref so the two simulation paths (both defined above the
+  // state they depend on) can read it without a dependency cycle. It is written
+  // once per render, further down, right where `motion` is computed.
+  const motionRef = useRef(false);
+
   // ── Live charts history — one point per run (manual or live preview) ──────
   const [liveHistory, setLiveHistory]     = useState([]);
   const [dockCollapsed, setDockCollapsed] = useState(false);
@@ -638,6 +728,7 @@ export default function CanvasPage() {
       );
       setSimResults(data);
       applyStreamResults(data);
+      publishFrame(data, motionRef.current);
       recordLivePoint(data);
       setShowSummary(true);
       setShowDynamic(false);
@@ -687,6 +778,7 @@ export default function CanvasPage() {
       );
       setSimResults(data);
       applyStreamResults(data);
+      publishFrame(data, motionRef.current);
       recordLivePoint(data);
       setSimError(null);
       setLiveUpdatedAt(new Date());
@@ -701,7 +793,45 @@ export default function CanvasPage() {
         runLivePreview();
       }
     }
-  }, [projectId, flowsheetId, applyStreamResults, recordLivePoint]);
+  }, [projectId, flowsheetId, applyStreamResults, recordLivePoint, publishFrame]);
+
+  // ── THE GATE (spec §6.1) ──────────────────────────────────────────────────
+  //
+  //   const live   = liveMode && liveStatus !== 'error';
+  //   const motion = live && !reducedMotion && !documentHidden;
+  //
+  // `liveMode` is the ONLY truth. Both tempting alternatives are traps and are
+  // deliberately NOT used:
+  //   · `simResults != null`     — set by a manual Simulate AND by the remote
+  //                                `sim:result` handler, so motion would keep
+  //                                running with live mode switched off.
+  //   · `edge.data.streamResult` — survives turning live off entirely; only
+  //                                `clearResults()` ever nulls it.
+  //
+  // Governing principle: VALUES ALWAYS, MOTION ONLY LIVE. Every static encoder
+  // — stroke widths, service colours, fill levels and densities, blanket
+  // heights, disc angles, clogging bands, compliance chips and every readout —
+  // renders from whatever results exist, including after a manual run and in
+  // print. Only the loops are gated.
+  const reducedMotion = useReducedMotion();
+  const [docHidden, setDocHidden] = useState(
+    () => (typeof document !== 'undefined' && document.visibilityState === 'hidden')
+  );
+  useEffect(() => {
+    const onVis = () => setDocHidden(document.visibilityState === 'hidden');
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
+  const live   = liveMode && liveStatus !== 'error';
+  const motion = live && !reducedMotion && !docHidden;
+  motionRef.current = motion;
+
+  // The gate is published on its own whenever it flips. `setFrame` CARRIES OVER
+  // every field it is not given, so this changes the play-state and the
+  // existence gate without touching a single result — which is what makes
+  // "turn Live off, everything stops, every value stays" true.
+  useEffect(() => { setFrame({ live: motion }); }, [motion]);
 
   // Signature of everything that affects simulation RESULTS — deliberately
   // excludes node positions so dragging doesn't trigger re-simulation.
@@ -889,6 +1019,10 @@ export default function CanvasPage() {
     setShowScenarios(false);
     setEdges(eds => eds.map(e => ({ ...e, data: { ...e.data, streamResult: null, streamDelta: null } })));
     prevStreamsRef.current = null;
+    // Clearing the results must clear the frame too, or every vessel would keep
+    // drawing the last level it was told about after the numbers behind it are
+    // gone. Vessels fall back to their empty outline, edges go dead-grey.
+    setFrame({ unitResults: {}, streamResults: {}, nodes: nodesRef.current, edges: edgesRef.current });
   };
 
   // ── Add nodes (drop + palette keyboard/click) ──────────────────────────────
@@ -1090,6 +1224,21 @@ export default function CanvasPage() {
   const hasAnyResults = simResults || dynamicResults || scenarioResults;
   const showRight     = selectedNode || showSummary || showDynamic || showScenarios;
 
+  // §5 row 19 FLOOD GUARD. Derived from the SAME `deriveNodeState` the cards
+  // use, so the count can never disagree with what is on screen. Above six
+  // alarmed cards, per-card blinking is suppressed entirely — severity is
+  // carried by colour and chip count, never by tempo, and twenty blinking cards
+  // is noise, not information.
+  const alarmCount = useMemo(
+    () => countAlarms(nodes, simResults?.results?.unitResults),
+    [nodes, simResults]
+  );
+  const alarmFlood = alarmCount > ALARM_FLOOD_LIMIT;
+
+  // The reference the whole width ramp is normalised against, printed in the
+  // legend so a reader can convert a stroke width back into a flow.
+  const legendQref = useMemo(() => getRefs().Qref, [simResults]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <AppLayout immersive defaultCollapsed>
       <div style={S.shell}>
@@ -1123,6 +1272,29 @@ export default function CanvasPage() {
             </span>
             <button className="tb-ghost" title="Undo (Ctrl/Cmd+Z)" style={{ ...S.btn, ...S.iconBtn, opacity: canUndo ? 1 : 0.35 }} onClick={doUndo} disabled={!canUndo}><Undo2 size={16} /></button>
             <button className="tb-ghost" title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)" style={{ ...S.btn, ...S.iconBtn, opacity: canRedo ? 1 : 0.35 }} onClick={doRedo} disabled={!canRedo}><Redo2 size={16} /></button>
+            {/* §5 row 19: above the flood limit the per-card blinking is
+                suppressed and THIS is the only thing that blinks. It also
+                renders statically whenever there are alarms at all, so the
+                count survives a still frame and a print. */}
+            {alarmCount > 0 && (
+              /* The play-state gate is a DESCENDANT selector (`.ws-sheet.ws-live
+                 .ws-anim`), so the sheet classes and the animation classes must
+                 sit on two different elements. */
+              <span
+                className={['ws-sheet', motion && 'ws-live'].filter(Boolean).join(' ')}
+                style={{ display: 'inline-flex', flexShrink: 0 }}
+                title={alarmFlood
+                  ? `${alarmCount} nodes in alarm — per-card blinking is suppressed above ${ALARM_FLOOD_LIMIT}`
+                  : `${alarmCount} node${alarmCount === 1 ? '' : 's'} in alarm`}
+              >
+                <span
+                  className={alarmFlood && motion ? 'ws-anim ws-alarm' : undefined}
+                  style={S.alarmChip}
+                >
+                  ⚠ {alarmCount}
+                </span>
+              </span>
+            )}
             <span style={S.divider} />
             <button
               className="tb-ghost"
@@ -1237,9 +1409,25 @@ export default function CanvasPage() {
           <UnitOpPalette onAddNode={addNodeAtCenter} />
 
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <div ref={canvasWrapRef} style={{ ...S.canvasWrap, flex: 1, minHeight: 0 }} onDrop={onDrop} onDragOver={onDragOver} onMouseMove={onMouseMoveCanvas}>
+          <div
+            ref={canvasWrapRef}
+            /* `ws-sheet` carries every design token; `ws-live` is the ONE
+               className the play-state gate acts on — toggling live mutates one
+               class on one DOM node, so nothing re-renders and no loop restarts.
+               `ws-lod-far` is written by <CanvasLod/> via this same ref. */
+            className={['ws-sheet', motion && 'ws-live'].filter(Boolean).join(' ')}
+            style={{ ...S.canvasWrap, flex: 1, minHeight: 0 }}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onMouseMove={onMouseMoveCanvas}
+          >
+            {/* The ONE shared <defs> sprite for the whole canvas — hatch, media
+                stipples, the UV radial gradient and the reusable marks. Thirty
+                nodes must not each carry their own. */}
+            <SymbolDefs />
             {/* Remote collaborator cursors */}
             <RemoteCursors cursors={remoteCursors} />
+            <AlarmFloodContext.Provider value={alarmFlood}>
             <NodeControlContext.Provider value={onControlToggle}>
             <NodeInfoContext.Provider value={onNodeInfo}>
             <ReactFlow
@@ -1259,10 +1447,17 @@ export default function CanvasPage() {
               edgeTypes={edgeTypes}
               fitView
             >
-              <Background variant="dots" gap={20} size={1} color="#D1D5DB" />
+              {/* Drafting sheet: an 80px major line grid beneath an 8px minor
+                  dot grid. Two <Background/>s need distinct ids. */}
+              <Background id="major" variant="lines" gap={80} lineWidth={1} color="var(--ws-grid-major, #EDF0F4)" />
+              <Background id="minor" variant="dots" gap={8} size={0.6} color="var(--ws-grid-minor, #E6E9EF)" />
+              <CanvasLod paneRef={canvasWrapRef} />
               <PerfOverlay />
               <Controls />
               <MiniMap nodeColor={() => '#2E75B6'} maskColor="rgba(240,246,255,0.6)" style={{ width: 140, height: 92 }} pannable zoomable className="ws-minimap" />
+              <Panel position="bottom-left" style={{ marginLeft: 52, marginBottom: 34 }}>
+                <EncodingLegend qref={legendQref} />
+              </Panel>
               {nodes.length === 0 && (
                 <Panel position="top-right">
                   <div style={S.hint}>
@@ -1273,6 +1468,7 @@ export default function CanvasPage() {
             </ReactFlow>
             </NodeInfoContext.Provider>
             </NodeControlContext.Provider>
+            </AlarmFloodContext.Provider>
           </div>
 
           {/* Live charts dock — one point per run; updates on every live preview */}
@@ -2563,6 +2759,7 @@ function NodeInfoDialog({ opType, label, onClose }) {
             <Section heading="In plain language" body={op.what} />
             <Section heading="How this simulator models it" body={op.how} />
             <Section heading="Watch out for" body={op.watchFor} tone="warn" />
+            {op.animation && <Section heading="What the animation shows" body={op.animation} />}
           </>
         ) : (
           <div style={NI.tagline}>
@@ -2683,10 +2880,44 @@ const S = {
   menu:        { position: 'absolute', top: 44, right: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, minWidth: 200, zIndex: 500 },
   menuItem:    { display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 6, fontSize: 13, fontWeight: 500, color: '#374151', background: 'transparent', border: 'none', cursor: 'pointer' },
   body:        { display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 },
-  canvasWrap:  { flex: 1, position: 'relative', minWidth: 0 },
+  canvasWrap:  { flex: 1, position: 'relative', minWidth: 0, background: 'var(--ws-paper, #F7F8FA)' },
   hint:        { background: 'rgba(255,255,255,0.92)', border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 10px', fontSize: 11, color: '#6B7280' },
   errBanner:   { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', background: '#FEF2F2', borderBottom: '1px solid #FECACA', color: '#991B1B', fontSize: 13 },
   dismissBtn:  { background: 'none', border: 'none', cursor: 'pointer', color: '#991B1B', marginLeft: 'auto', fontSize: 16 },
+  alarmChip: {
+    display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
+    fontFamily: "var(--ws-font-mono, ui-monospace, Menlo, Consolas, monospace)",
+    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+    padding: '2px 7px', borderRadius: 10,
+    background: '#FEE2E2', color: 'var(--ws-alarm, #DC2626)',
+    border: '1px solid #FCA5A5',
+  },
+  // ── Encoding legend (spec §3.4) ───────────────────────────────────────────
+  legend: {
+    background: 'var(--ws-card, #FFFFFF)',
+    border: '1px solid var(--ws-ink-200, #E2E8F0)',
+    borderRadius: 'var(--ws-r-chip, 2px)',
+    fontFamily: "var(--ws-font-label, 'Inter', system-ui, sans-serif)",
+    fontSize: 10,
+    color: 'var(--ws-ink-700, #1E293B)',
+    maxWidth: 230,
+    overflow: 'hidden',
+  },
+  legendToggle: {
+    display: 'block', width: '100%', textAlign: 'left',
+    background: 'none', border: 'none', cursor: 'pointer',
+    padding: '4px 8px', fontSize: 9.5, fontWeight: 700,
+    letterSpacing: '0.06em', textTransform: 'uppercase',
+    color: 'var(--ws-ink-400, #94A3B8)',
+  },
+  legendBody: { padding: '2px 8px 8px', display: 'flex', flexDirection: 'column', gap: 3 },
+  legendRow:  { display: 'flex', alignItems: 'center', gap: 6, lineHeight: '12px' },
+  legendRule: { height: 1, background: 'var(--ws-ink-200, #E2E8F0)', margin: '4px 0 2px' },
+  legendNote: {
+    marginTop: 3, fontSize: 9,
+    color: 'var(--ws-ink-400, #94A3B8)',
+    fontFamily: "var(--ws-font-mono, ui-monospace, Menlo, Consolas, monospace)",
+  },
   rightPanel:  { width: 320, maxWidth: '85vw', background: '#fff', borderLeft: '1px solid #E5E7EB', flexShrink: 0, display: 'flex', flexDirection: 'column' },   // overflowY moved to inner wrapper
   tabBar:      { display: 'flex', borderBottom: '1px solid #E5E7EB', padding: '0 8px', flexShrink: 0 },
   tab:         (active) => ({ background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 10px 8px', fontSize: 12, fontWeight: 600, color: active ? '#1F4E79' : '#6B7280', borderBottom: active ? '2px solid #2E75B6' : '2px solid transparent' }),

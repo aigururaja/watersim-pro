@@ -9,19 +9,37 @@
  * Drop <PerfOverlay /> anywhere inside the canvas container to display the
  * live HUD. It renders nothing in production builds.
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const IS_DEV = import.meta.env.DEV;
 
-export function useCanvasPerf(nodes = [], edges = []) {
+/**
+ * The HUD itself — a module-scope component, so its identity is CONSTANT for
+ * the life of the app.
+ *
+ * It also OWNS the rAF loop. Both of those matter (spec §7):
+ *
+ *  · The old `PerfOverlay` was a `useCallback([fps, …])` whose identity changed
+ *    once per second. As a child of <ReactFlow>, a new element type every
+ *    second unmounted and remounted that subtree and re-rendered ReactFlow's
+ *    children with it — in dev, forever.
+ *  · The `fps` state also lived in CanvasPage, so the whole page re-rendered
+ *    once a second whether or not the HUD was on screen. Owning the loop here
+ *    confines that to this one 40x14px box, and in a production build the
+ *    component returns null before the effect is ever declared to matter — no
+ *    rAF runs at all.
+ *
+ * This remains the ONLY requestAnimationFrame in the application.
+ */
+function PerfHud({ nodeCount, edgeCount }) {
   const [fps, setFps] = useState(0);
-  const frameRef  = useRef(0);
-  const lastRef   = useRef(performance.now());
+  const frameRef = useRef(0);
+  const lastRef = useRef(0);
   const rafHandle = useRef(null);
 
-  // FPS loop (dev only)
   useEffect(() => {
-    if (!IS_DEV) return;
+    if (!IS_DEV) return undefined;
+    lastRef.current = performance.now();
 
     const tick = (now) => {
       frameRef.current++;
@@ -29,7 +47,7 @@ export function useCanvasPerf(nodes = [], edges = []) {
       if (elapsed >= 1000) {
         setFps(Math.round((frameRef.current * 1000) / elapsed));
         frameRef.current = 0;
-        lastRef.current  = now;
+        lastRef.current = now;
       }
       rafHandle.current = requestAnimationFrame(tick);
     };
@@ -38,6 +56,44 @@ export function useCanvasPerf(nodes = [], edges = []) {
     return () => cancelAnimationFrame(rafHandle.current);
   }, []);
 
+  if (!IS_DEV) return null;
+
+  const fpsColor = fps >= 55 ? '#10b981' : fps >= 30 ? '#f59e0b' : '#ef4444';
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: 8,
+      left: 56,
+      background: 'rgba(15,23,42,0.82)',
+      color: '#e2e8f0',
+      fontFamily: 'monospace',
+      fontSize: 11,
+      padding: '4px 8px',
+      borderRadius: 6,
+      lineHeight: 1.6,
+      zIndex: 999,
+      pointerEvents: 'none',
+      userSelect: 'none',
+    }}>
+      <span style={{ color: fpsColor, fontWeight: 700 }}>{fps} fps</span>
+      {'  '}
+      <span style={{ color: '#94a3b8' }}>
+        {nodeCount}N · {edgeCount}E
+      </span>
+    </div>
+  );
+}
+
+/**
+ * WaterSim Pro — useCanvasPerf
+ *
+ * Usage:
+ *   const { nodeCount, edgeCount, PerfOverlay } = useCanvasPerf(nodes, edges);
+ *
+ * `PerfOverlay` has a STABLE identity across every render — drop it anywhere
+ * inside the canvas container. It renders nothing in production builds.
+ */
+export function useCanvasPerf(nodes = [], edges = []) {
   const nodeCount = nodes.length;
   const edgeCount = edges.length;
 
@@ -48,35 +104,16 @@ export function useCanvasPerf(nodes = [], edges = []) {
     if (edgeCount > 100) console.warn(`[WaterSim Canvas] High edge count: ${edgeCount}. Performance may degrade.`);
   }, [nodeCount, edgeCount]);
 
-  const PerfOverlay = useCallback(() => {
-    if (!IS_DEV) return null;
+  // Counts change rarely (a node or edge added/removed), so this ref keeps the
+  // element the caller renders free of per-second churn while staying current.
+  const countsRef = useRef({ nodeCount, edgeCount });
+  countsRef.current = { nodeCount, edgeCount };
 
-    const fpsColor = fps >= 55 ? '#10b981' : fps >= 30 ? '#f59e0b' : '#ef4444';
-    return (
-      <div style={{
-        position: 'absolute',
-        bottom: 8,
-        left: 56,
-        background: 'rgba(15,23,42,0.82)',
-        color: '#e2e8f0',
-        fontFamily: 'monospace',
-        fontSize: 11,
-        padding: '4px 8px',
-        borderRadius: 6,
-        lineHeight: 1.6,
-        zIndex: 999,
-        pointerEvents: 'none',
-        backdropFilter: 'blur(4px)',
-        userSelect: 'none',
-      }}>
-        <span style={{ color: fpsColor, fontWeight: 700 }}>{fps} fps</span>
-        {'  '}
-        <span style={{ color: '#94a3b8' }}>
-          {nodeCount}N · {edgeCount}E
-        </span>
-      </div>
-    );
-  }, [fps, nodeCount, edgeCount]);
+  // ONE stable component identity, created once. `useState`'s lazy initialiser
+  // is the cheapest way to say "this value is computed exactly once".
+  const [PerfOverlay] = useState(() => function PerfOverlay() {
+    return <PerfHud {...countsRef.current} />;
+  });
 
-  return { fps, nodeCount, edgeCount, PerfOverlay };
+  return { nodeCount, edgeCount, PerfOverlay };
 }

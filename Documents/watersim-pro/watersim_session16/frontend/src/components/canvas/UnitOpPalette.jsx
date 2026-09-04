@@ -1,4 +1,14 @@
 import { useState } from 'react';
+import { getSymbol, getTag } from './symbols';
+
+// NOTE ON THE REGISTRY: this module reads `getSymbol()` at RENDER time and
+// deliberately does NOT import `symbols/register`. `UnitOpNode` owns that one
+// import; CanvasPage imports UnitOpNode, so the rail is populated in the app.
+// Pulling the registrations in here instead would also pull them into
+// `src/test/symbolPrimitives.test.jsx` (which imports PALETTE from this file to
+// assert TAG coverage) and flip its `hasSymbol('pump') === false` assertion.
+// With an empty registry every chip simply falls back to the placeholder glyph
+// — the rail degrades, it never breaks.
 
 // Exported so the explanation-coverage test can assert that every unit type a
 // user can drop on the canvas has an OP_INFO entry in src/content/explanations.js.
@@ -76,6 +86,26 @@ export const PALETTE = [
   },
 ];
 
+/**
+ * The rail IS the legend (spec §3.4): each item renders its ACTUAL symbol at
+ * 24x18 from the same `SYMBOLS` registry the canvas uses, with the same
+ * `viewBox="0 0 144 60"` scaled down. Learn it here, read it on the sheet.
+ *
+ * The chip is a rest-pose render: no `nodeId`, so no live subscription, and
+ * `state="rest"` with no snapshot, so every symbol draws its empty-outline
+ * form. 26 of these cost 26 static SVGs and zero animations.
+ */
+function PaletteGlyph({ type }) {
+  const Symbol = getSymbol(type);
+  return (
+    <span className="ws-sheet" style={styles.glyphWrap} aria-hidden="true">
+      <svg viewBox="0 0 144 60" width="24" height="18" focusable="false" style={styles.glyph}>
+        <Symbol opType={type} state="rest" />
+      </svg>
+    </span>
+  );
+}
+
 function PaletteItem({ type, label, onAdd }) {
   const onDragStart = (e) => {
     e.dataTransfer.setData('application/unitop-type', type);
@@ -104,6 +134,8 @@ function PaletteItem({ type, label, onAdd }) {
       style={styles.item}
       title={`Click or press Enter to add · drag to place: ${label}`}
     >
+      <PaletteGlyph type={type} />
+      <span style={styles.itemTag}>{getTag(type)}</span>
       <span style={styles.itemText}>{label}</span>
       <span style={styles.dragHint}>⠿</span>
     </div>
@@ -159,7 +191,7 @@ export default function UnitOpPalette({ onAddNode }) {
           fixed md:relative top-0 left-0 h-full z-40
           md:translate-x-0 md:flex md:z-auto
           ${open ? 'translate-x-0 flex' : '-translate-x-full hidden md:flex'}
-          ${rail ? 'md:w-10' : 'md:w-[176px]'} w-64 max-w-[85vw]
+          ${rail ? 'md:w-10' : 'md:w-[208px]'} w-64 max-w-[85vw]
         `}
       >
         {rail ? (
@@ -215,8 +247,15 @@ const styles = {
   scrollArea:{ flex: 1, overflowY: 'auto', padding: '8px 0' },
   group:     { marginBottom: 8 },
   groupTitle:{ padding: '6px 12px', fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em' },
-  item:      { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', cursor: 'grab', fontSize: 12, color: '#374151', userSelect: 'none' },
-  itemText:  { flex: 1 },
-  dragHint:  { color: '#CBD5E1', fontSize: 14 },
+  item:      { display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', cursor: 'grab', fontSize: 12, color: '#374151', userSelect: 'none' },
+  glyphWrap: { display: 'inline-flex', flexShrink: 0, width: 24, height: 18, alignItems: 'center', justifyContent: 'center' },
+  glyph:     { display: 'block', overflow: 'visible' },
+  itemTag:   {
+    fontFamily: "var(--ws-font-mono, ui-monospace, Menlo, Consolas, monospace)",
+    fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: '#94A3B8',
+    width: 26, flexShrink: 0, textAlign: 'left',
+  },
+  itemText:  { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  dragHint:  { color: '#CBD5E1', fontSize: 14, flexShrink: 0 },
   hint:      { padding: '10px 12px', fontSize: 10, color: '#9CA3AF', borderTop: '1px solid #E5E7EB', fontStyle: 'italic' },
 };
