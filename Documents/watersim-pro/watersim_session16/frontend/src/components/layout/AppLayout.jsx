@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   Droplets, LayoutDashboard, FolderOpen, FileText, Settings,
-  LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck,
+  LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck, Bell,
 } from 'lucide-react';
 import { OnboardingTrigger } from '../OnboardingWizard';
 
@@ -11,6 +11,7 @@ const baseNavItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: FolderOpen,      label: 'Projects',  path: '/projects' },
   { icon: FileText,        label: 'Reports',   path: '/reports' },
+  { icon: Bell,            label: 'Alarms',    path: '/alarms' },
   { icon: Settings,        label: 'Settings',  path: '/settings' },
 ];
 

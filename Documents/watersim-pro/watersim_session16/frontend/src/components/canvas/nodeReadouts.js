@@ -294,7 +294,17 @@ function watchReason(t, m) {
 }
 
 /**
- * Red ALARM conditions — the ones that must survive a screenshot and a print.
+ * Red ALARM conditions INTRINSIC to the model — the ones that must survive a
+ * screenshot and a print.
+ *
+ * These are conditions the SOLVER discovered: a permit violation, a soured
+ * digester, a UV train that did not make its dose. They are true whether or not
+ * anyone configured anything, which is why they are computed here from metrics
+ * alone. Limits a user configured arrive separately (see `deriveNodeState`'s
+ * `configured` argument) and are deliberately NOT mixed into this function —
+ * keeping them apart is what lets the precedence order treat a `critical`
+ * configured rule as equal to an intrinsic alarm while a `warning` one is not.
+ *
  * @returns {string|null}
  */
 function alarmReason(t, m) {
@@ -314,18 +324,67 @@ function alarmReason(t, m) {
 }
 
 /**
+ * Normalise the optional configured-alarm input to `{severity, ruleName}` or
+ * null. Accepts the `worstSeverityByNode` entry shape, or a bare severity
+ * string, so a caller with only a severity does not have to build an object.
+ */
+function normalizeConfigured(configured) {
+  if (!configured) return null;
+  if (typeof configured === 'string') {
+    return CONFIGURED_RANK[configured] ? { severity: configured, ruleName: 'Alarm' } : null;
+  }
+  const severity = configured.severity;
+  if (!CONFIGURED_RANK[severity]) return null;
+  return { severity, ruleName: configured.ruleName || 'Alarm' };
+}
+
+/** Only these two severities move a card. `info` is recorded, never painted. */
+const CONFIGURED_RANK = { warning: 1, critical: 2 };
+
+/**
  * The card's state, in strict precedence order.
  *
  *   error   — the model threw; ALL animation is suppressed
  *   off     — pump stopped / valve closed: red border, hatch, 45% ink
  *   alarm   — red ring + violation chips, STATIC in a still, blinks only live
+ *             · an INTRINSIC breach (permit violation, digester pH, UV), OR
+ *             · an ACTIVE configured rule of severity `critical`
  *   watch   — 1px amber ring, amber band, static, NEVER blinks
+ *             · an intrinsic watch condition, OR
+ *             · an ACTIVE configured rule of severity `warning`
  *   nomodel — slate chip + hatch, no motion (tank, unlinked blower)
  *   rest    — flat, hairline only
  *
+ * ── WHY OFF STILL BEATS A CRITICAL RULE ──────────────────────────────────────
+ * A stopped pump reads OFF, never ALARM, even with a critical limit breaching on
+ * it. `off` is the equipment's actual state and the operator's next question is
+ * "why is it stopped?"; a threshold on a parameter of a machine that is not
+ * running is downstream of that. The order below is the whole answer, and
+ * `src/test/nodeAlarmState.test.jsx` pins it.
+ *
+ * ── WHY `warning` DOES NOT OUTRANK AN INTRINSIC ALARM ────────────────────────
+ * An intrinsic alarm is the plant failing its permit. A configured `warning` is
+ * someone's early-notice threshold. Letting the second demote the first would
+ * make a compliance failure disappear behind a housekeeping limit.
+ *
+ * ── WHY `configured` IS AN ARGUMENT AND NOT `node.data` ───────────────────────
+ * `node.data` is saved to the DB by `save()`, JSON.stringify'd by the collab
+ * `sendEvent`, and hashed by `liveSignature`. An alarm severity written there
+ * would be persisted, broadcast to every collaborator, and would retrigger the
+ * simulation on every alarm transition. The severity reaches the card through
+ * `NodeAlarmContext` instead — the same pattern as `AlarmFloodContext` and
+ * `NodeControlContext`, and it keeps `nodeTypes` referentially stable.
+ *
+ * @param {string} opType
+ * @param {object} snap    NodeSnapshot from liveStore
+ * @param {object} [params] node.data.params
+ * @param {{severity:string, ruleName?:string}|string|null} [configured]
+ *        the worst ACTIVE configured alarm on this node, from
+ *        `worstSeverityByNode()`. Omitted → identical behaviour to before
+ *        configured alarms existed.
  * @returns {{state:string, chip:string|null, reason:string|null}}
  */
-export function deriveNodeState(opType, snap, params) {
+export function deriveNodeState(opType, snap, params, configured) {
   const t = resolveType(opType);
   const m = snap?.metrics || EMPTY;
 
@@ -336,15 +395,42 @@ export function deriveNodeState(opType, snap, params) {
     return { state: 'off', chip: null, reason: def.offLabel };
   }
 
+  const cfg = normalizeConfigured(configured);
+
+  // A critical configured rule and an intrinsic alarm are peers. The intrinsic
+  // one is checked second so its specific chip ("2 VIOLATIONS") wins the label
+  // when both are true — it says more than a rule name does.
   const alarm = alarmReason(t, m);
   if (alarm) return { state: 'alarm', chip: alarm, reason: alarm };
+  if (cfg && cfg.severity === 'critical') {
+    return { state: 'alarm', chip: ruleChipText(cfg.ruleName), reason: cfg.ruleName };
+  }
 
   const unlinked = unlinkedChip(t, snap);
   const watch = watchReason(t, m);
   if (watch) return { state: 'watch', chip: watch, reason: watch };
+  if (cfg && cfg.severity === 'warning') {
+    return { state: 'watch', chip: ruleChipText(cfg.ruleName), reason: cfg.ruleName };
+  }
   if (unlinked) return { state: 'nomodel', chip: unlinked, reason: unlinked };
 
   return { state: 'rest', chip: null, reason: null };
+}
+
+/**
+ * The footer chip for a configured rule. The chip is a 9px mono badge in a 22px
+ * footer whose height is load-bearing (6+22+60+22+6 = 116), so a long rule name
+ * is truncated rather than allowed to wrap the card. The full name stays in
+ * `reason`, which the card uses for the title attribute.
+ *
+ * Deliberately a local copy of `alarms/alarmState.ruleChip` rather than an
+ * import: nodeReadouts is on the per-node render path and must not pull in the
+ * alarms module (and, with it, lucide) for every card on the sheet.
+ */
+function ruleChipText(name, max = 14) {
+  const s = String(name ?? '').trim().toUpperCase();
+  if (!s) return 'ALARM';
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
 /** True when this node's card carries the red ring. */
@@ -361,27 +447,44 @@ export const isAlarmState = (state) => state === 'alarm' || state === 'error';
  * Derived in CanvasPage from the SAME `deriveNodeState` the cards use, so the
  * count can never disagree with what is on screen.
  *
+ * `configuredByNode` is passed through to `deriveNodeState` for exactly that
+ * reason: once a configured critical rule can ring a card, a count that did not
+ * know about configured rules would under-report, the flood guard would fail to
+ * trip, and the toolbar chip would contradict the canvas.
+ *
+ * A node with a configured alarm but NO simulation result is still counted —
+ * the `!u` skip only applies to nodes the solver said nothing about AND no rule
+ * is breaching on, because an open alarm_event is a fact about the plant that
+ * does not stop being true between runs.
+ *
  * @param {Array}  nodes       ReactFlow nodes
  * @param {Object} unitResults results.unitResults keyed by node id
+ * @param {Map}    [configuredByNode] nodeId → {severity, ruleName}, from
+ *                 `worstSeverityByNode()`. Omitted → pre-alarm behaviour.
  * @returns {number} how many cards are in `alarm` or `error`
  */
-export function countAlarms(nodes, unitResults) {
-  if (!Array.isArray(nodes) || !unitResults) return 0;
+export function countAlarms(nodes, unitResults, configuredByNode) {
+  if (!Array.isArray(nodes)) return 0;
+  const results = unitResults || EMPTY;
   let n = 0;
   for (const node of nodes) {
-    const u = unitResults[node?.id];
-    if (!u) continue;
-    const snap = {
+    const u = results[node?.id];
+    const cfg = configuredByNode?.get?.(node?.id);
+    if (!u && !cfg) continue;
+    const snap = u ? {
       metrics: u.metrics || EMPTY,
       derived: EMPTY,
       biogas: u.biogas ?? null,
       outputs: u.outputs || EMPTY,
-    };
-    const { state } = deriveNodeState(node.data?.opType, snap, node.data?.params);
+    } : EMPTY_SNAP;
+    const { state } = deriveNodeState(node.data?.opType, snap, node.data?.params, cfg);
     if (isAlarmState(state)) n++;
   }
   return n;
 }
+
+/** The snapshot shape for a node the solver has said nothing about. */
+const EMPTY_SNAP = Object.freeze({ metrics: EMPTY, derived: EMPTY, biogas: null, outputs: EMPTY });
 
 /** More than six alarmed cards suppresses every per-card blink. */
 export const ALARM_FLOOD_LIMIT = 6;
@@ -400,6 +503,36 @@ export const AlarmFloodContext = createContext(false);
 
 /** @returns {boolean} true while per-card alarm blinking is suppressed. */
 export const useAlarmFlood = () => useContext(AlarmFloodContext);
+
+/**
+ * The worst ACTIVE CONFIGURED alarm per node — `Map<nodeId, {severity, ruleName}>`,
+ * produced by `alarms/alarmState.worstSeverityByNode()` and consumed by
+ * `deriveNodeState` through `useNodeAlarm(id)`.
+ *
+ * A CONTEXT for the same reason `AlarmFloodContext` is one, and for one more:
+ * the alternative — writing the severity into `node.data` — is actively wrong.
+ * `node.data` is persisted by `save()`, JSON.stringify'd into every collab
+ * `sendEvent`, and hashed by `liveSignature`; an alarm severity there would be
+ * saved to the database, broadcast to every collaborator, and would re-trigger
+ * the live simulation each time an alarm raised or cleared. It also keeps the
+ * module-scope `nodeTypes` map referentially stable, which is what stops
+ * ReactFlow from remounting every node.
+ *
+ * The default is a frozen EMPTY map, so a card rendered with no provider (every
+ * existing test, and the print path) behaves exactly as it did before configured
+ * alarms existed.
+ */
+const NO_NODE_ALARMS = Object.freeze(new Map());
+export const NodeAlarmContext = createContext(NO_NODE_ALARMS);
+
+/**
+ * @param {string} nodeId
+ * @returns {{severity:string, ruleName:string}|undefined}
+ */
+export function useNodeAlarm(nodeId) {
+  const map = useContext(NodeAlarmContext);
+  return map && typeof map.get === 'function' ? map.get(nodeId) : undefined;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6. VIOLATION CHIPS (spec §5 row 18)

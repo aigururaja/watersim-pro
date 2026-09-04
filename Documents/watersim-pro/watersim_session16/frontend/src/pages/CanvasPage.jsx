@@ -23,7 +23,9 @@ import UnitOpPalette from '../components/canvas/UnitOpPalette';
 import StreamEdge, { SERVICES } from '../components/canvas/StreamEdge';
 import SymbolDefs from '../components/canvas/symbols/defs';
 import { setFrame, getRefs } from '../components/canvas/liveStore';
-import { AlarmFloodContext, countAlarms, ALARM_FLOOD_LIMIT } from '../components/canvas/nodeReadouts';
+import {
+  AlarmFloodContext, NodeAlarmContext, countAlarms, ALARM_FLOOD_LIMIT,
+} from '../components/canvas/nodeReadouts';
 import { useReducedMotion } from '../components/AccessibilityProvider';
 import PresenceAvatars from '../components/canvas/PresenceAvatars';
 import RemoteCursors from '../components/canvas/RemoteCursors';
@@ -39,6 +41,13 @@ import PLCLiveChip from '../components/plc/PLCLiveChip';
 import {
   bindingKey, bindingsToMap, liveFromBindings, mergePlcValues, worstQuality,
 } from '../components/plc/plcState';
+import AlarmRuleDialog from '../components/alarms/AlarmRuleDialog';
+import AlarmBell from '../components/alarms/AlarmBell';
+import AlarmsPanel from '../components/alarms/AlarmsPanel';
+import {
+  ruleKey, rulesByTarget, rulesById as indexRulesById, mergeAlarmEvents,
+  activeByRuleId, previewByRuleId, worstSeverityByNode, severityMeta,
+} from '../components/alarms/alarmState';
 import { NodeControlContext, NodeInfoContext, isControlOn } from '../components/canvas/controlState';
 import InfoTip, { InfoFacts } from '../components/InfoTip';
 import { OP_INFO, METRIC_INFO, paramInfo } from '../content/explanations';
@@ -367,6 +376,8 @@ export default function CanvasPage() {
   // PLC live-update handler — assigned further down (after the PLC state is
   // declared); a ref so the stable applyRemoteEvent closure can reach it.
   const handlePlcUpdateRef = useRef(null);
+  // Same contract for alarm transitions — assigned below the alarm state.
+  const handleAlarmEventRef = useRef(null);
 
   // Record the post-change canvas state one tick later, after React has
   // committed the setNodes/setEdges from the local action (so the refs above
@@ -436,6 +447,12 @@ export default function CanvasPage() {
         // Live PLC tag values — merge into the live-value map and (in live
         // mode) apply readable bindings into node params (digital-twin loop).
         handlePlcUpdateRef.current?.(payload);
+        break;
+      case 'alarm:event':
+        // `{ event, transition: 'raised'|'cleared' }` — merged into the live
+        // feed, which re-derives the per-node severity, the card rings and the
+        // toolbar chip. No refetch.
+        handleAlarmEventRef.current?.(payload);
         break;
       case 'sim:result':
         if (payload?.results) {
@@ -975,6 +992,109 @@ export default function CanvasPage() {
     [plcTagCount, plcLive, plcBindings]
   );
 
+  // ── Configured alarms (rules + their events) ──────────────────────────────
+  //
+  // Loaded exactly like the PLC bindings above, and for the same reason: this
+  // is flowsheet-scoped state the canvas reads but never owns. NOTHING here is
+  // written into `node.data` — see the NodeAlarmContext note in nodeReadouts.js.
+  const [alarmRules, setAlarmRules] = useState([]);
+  const [alarmEvents, setAlarmEvents] = useState([]);
+  const [alarmsLoading, setAlarmsLoading] = useState(true);
+  const [alarmDialog, setAlarmDialog] = useState(null); // { rule, prefill } | null
+  const [showAlarms, setShowAlarms] = useState(false);
+
+  const canEditAlarms = ['admin', 'engineer'].includes(user?.role);
+
+  // Rule lookups, rebuilt only when the rules themselves change.
+  const alarmRuleByTarget = useMemo(() => rulesByTarget(alarmRules), [alarmRules]);
+  const alarmRuleById     = useMemo(() => indexRulesById(alarmRules), [alarmRules]);
+
+  const loadAlarms = useCallback(async () => {
+    setAlarmsLoading(true);
+    const [rulesRes, eventsRes] = await Promise.allSettled([
+      api.get(`/projects/${projectId}/flowsheets/${flowsheetId}/alarms`),
+      api.get(`/projects/${projectId}/flowsheets/${flowsheetId}/alarm-events?limit=50`),
+    ]);
+    const rules = rulesRes.status === 'fulfilled' && Array.isArray(rulesRes.value.data)
+      ? rulesRes.value.data : [];
+    setAlarmRules(rules);
+    if (eventsRes.status === 'fulfilled' && Array.isArray(eventsRes.value.data)) {
+      // Seeded through the SAME reducer the websocket uses, so a row that
+      // arrives twice (GET then broadcast) merges instead of duplicating.
+      setAlarmEvents(mergeAlarmEvents([], eventsRes.value.data, { rulesById: indexRulesById(rules) }));
+    }
+    setAlarmsLoading(false);
+    // Both endpoints are optional from the canvas's point of view: a flowsheet
+    // with no alarm layer available stays fully usable.
+  }, [projectId, flowsheetId]);
+
+  useEffect(() => {
+    setAlarmRules([]);
+    setAlarmEvents([]);
+    loadAlarms();
+  }, [loadAlarms]);
+
+  // WS 'alarm:event' entry point (reached via handleRemoteEvent's switch).
+  // `{ event, transition }` goes straight into the reducer — a raised alarm
+  // appears on the canvas with no refresh and no refetch.
+  const alarmRuleByIdRef = useRef(alarmRuleById);
+  alarmRuleByIdRef.current = alarmRuleById;
+  handleAlarmEventRef.current = (payload) => {
+    if (!payload?.event) return;
+    if (payload.event.flowsheetId != null &&
+        String(payload.event.flowsheetId) !== String(flowsheetIdRef.current)) return;
+    setAlarmEvents(prev => mergeAlarmEvents(prev, payload, { rulesById: alarmRuleByIdRef.current }));
+  };
+
+  // The open event per rule — read by the bells, the panel and the chip.
+  const activeAlarmByRule = useMemo(() => activeByRuleId(alarmEvents), [alarmEvents]);
+
+  // Preview breaches ride on the simulate response (`data.alarms`, present only
+  // on preview runs). They are what WOULD fire on the values currently on the
+  // canvas — kept in their own map and never merged into the event feed, because
+  // nothing has actually happened yet.
+  const previewAlarmByRule = useMemo(() => previewByRuleId(simResults?.alarms), [simResults]);
+
+  // nodeId → worst ACTIVE configured severity. THE input to the card state
+  // machine, handed down through NodeAlarmContext.
+  const alarmSeverityByNode = useMemo(
+    () => worstSeverityByNode(alarmEvents, alarmRuleById),
+    [alarmEvents, alarmRuleById]
+  );
+
+  const nodeLabels = useMemo(() => {
+    const m = new Map();
+    for (const n of nodes) if (n?.id) m.set(n.id, n.data?.label || n.id);
+    return m;
+  }, [nodes]);
+
+  // Toolbar chip: how many rules are breaching, and how badly.
+  const activeAlarmCount = activeAlarmByRule.size;
+  const worstActiveSeverity = useMemo(() => {
+    let worst = null;
+    for (const e of activeAlarmByRule.values()) {
+      if (!worst || severityMeta(e.severity).rank > severityMeta(worst).rank) worst = e.severity;
+    }
+    return worst;
+  }, [activeAlarmByRule]);
+
+  /** Open the right panel's Alarms tab (clearing the other tab flags). */
+  const openAlarmsTab = useCallback(() => {
+    setShowAlarms(true);
+    setShowSummary(false);
+    setShowDynamic(false);
+    setShowScenarios(false);
+    setSelectedNode(null);
+  }, []);
+
+  /** The 🔔 on a param row: edit the rule that exists, or create one on it. */
+  const openAlarmDialog = useCallback((nodeId, paramKey, existingRule) => {
+    if (!canEditAlarms) return;
+    setAlarmDialog(existingRule
+      ? { rule: existingRule, prefill: null }
+      : { rule: null, prefill: { targetType: 'param', nodeId, paramKey } });
+  }, [canEditAlarms]);
+
   // ── Dynamic simulation ─────────────────────────────────────────────────────
   const runDynamic = async (timeSeriesConfig) => {
     setDynamicRunning(true);
@@ -1222,16 +1342,19 @@ export default function CanvasPage() {
   const costBreakdown = useMemo(() => simResults?.results?.costBreakdown, [simResults]);
   const warnings      = useMemo(() => simResults?.warnings || [],         [simResults]);
   const hasAnyResults = simResults || dynamicResults || scenarioResults;
-  const showRight     = selectedNode || showSummary || showDynamic || showScenarios;
+  const showRight     = selectedNode || showSummary || showDynamic || showScenarios || showAlarms;
 
   // §5 row 19 FLOOD GUARD. Derived from the SAME `deriveNodeState` the cards
   // use, so the count can never disagree with what is on screen. Above six
   // alarmed cards, per-card blinking is suppressed entirely — severity is
   // carried by colour and chip count, never by tempo, and twenty blinking cards
   // is noise, not information.
+  // `alarmSeverityByNode` is passed through so the count reads the SAME inputs
+  // the cards do — a configured critical rule rings a card, so it must also be
+  // counted, or the chip and the flood guard would disagree with the canvas.
   const alarmCount = useMemo(
-    () => countAlarms(nodes, simResults?.results?.unitResults),
-    [nodes, simResults]
+    () => countAlarms(nodes, simResults?.results?.unitResults, alarmSeverityByNode),
+    [nodes, simResults, alarmSeverityByNode]
   );
   const alarmFlood = alarmCount > ALARM_FLOOD_LIMIT;
 
@@ -1306,6 +1429,36 @@ export default function CanvasPage() {
             >
               <Zap size={14} />Live
             </button>
+            {/* Configured-alarm chip — the PLC chip's sibling: same tb-ghost
+                button, same 8px status dot, coloured by the WORST active
+                severity. Hidden entirely when this flowsheet has neither rules
+                nor events, so a plant that has never used alarms shows nothing. */}
+            {(alarmRules.length > 0 || alarmEvents.length > 0) && (
+              <button
+                className="tb-ghost"
+                style={{
+                  ...S.btn,
+                  ...(activeAlarmCount > 0
+                    ? {
+                      background: severityMeta(worstActiveSeverity).bg,
+                      color: severityMeta(worstActiveSeverity).color,
+                      border: `1px solid ${severityMeta(worstActiveSeverity).border}`,
+                    }
+                    : null),
+                }}
+                onClick={openAlarmsTab}
+                aria-pressed={showAlarms}
+                title={activeAlarmCount > 0
+                  ? `${activeAlarmCount} configured alarm${activeAlarmCount === 1 ? '' : 's'} active (worst: ${severityMeta(worstActiveSeverity).label}). Click to open the Alarms panel.`
+                  : `${alarmRules.length} alarm rule${alarmRules.length === 1 ? '' : 's'} on this flowsheet, none active. Click to open the Alarms panel.`}
+              >
+                <span aria-hidden="true" style={{
+                  width: 8, height: 8, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
+                  background: activeAlarmCount > 0 ? severityMeta(worstActiveSeverity).color : '#16A34A',
+                }} />
+                ⚠ {activeAlarmCount} alarm{activeAlarmCount === 1 ? '' : 's'}
+              </button>
+            )}
             {plcTagCount > 0 && (
               <button
                 className="tb-ghost"
@@ -1338,7 +1491,7 @@ export default function CanvasPage() {
                 className="tb-ghost"
                 style={{ ...S.btn, ...S.iconBtn }}
                 title="Open results panel"
-                onClick={() => { if (simResults) { setShowSummary(true); setShowDynamic(false); } else { setShowDynamic(true); setShowSummary(false); } setShowScenarios(false); setSelectedNode(null); }}
+                onClick={() => { if (simResults) { setShowSummary(true); setShowDynamic(false); } else { setShowDynamic(true); setShowSummary(false); } setShowScenarios(false); setShowAlarms(false); setSelectedNode(null); }}
               >
                 <PanelRight size={16} />
               </button>
@@ -1428,6 +1581,11 @@ export default function CanvasPage() {
             {/* Remote collaborator cursors */}
             <RemoteCursors cursors={remoteCursors} />
             <AlarmFloodContext.Provider value={alarmFlood}>
+            {/* Configured-alarm severity per node. A memoized Map, so the value
+                identity changes only when an alarm actually raises or clears —
+                the same reasoning that makes AlarmFloodContext a context, and
+                the reason none of this is in `node.data`. */}
+            <NodeAlarmContext.Provider value={alarmSeverityByNode}>
             <NodeControlContext.Provider value={onControlToggle}>
             <NodeInfoContext.Provider value={onNodeInfo}>
             <ReactFlow
@@ -1468,6 +1626,7 @@ export default function CanvasPage() {
             </ReactFlow>
             </NodeInfoContext.Provider>
             </NodeControlContext.Provider>
+            </NodeAlarmContext.Provider>
             </AlarmFloodContext.Provider>
           </div>
 
@@ -1487,11 +1646,20 @@ export default function CanvasPage() {
               <div style={S.tabBar} role="tablist">
                 {selectedNode && <button style={S.tab(true)} role="tab" aria-selected="true">Node</button>}
                 <button style={S.tab(!selectedNode && showSummary)} role="tab" aria-selected={!selectedNode && showSummary}
-                  onClick={() => { setShowSummary(true); setShowDynamic(false); setShowScenarios(false); setSelectedNode(null); }}>Summary</button>
+                  onClick={() => { setShowSummary(true); setShowDynamic(false); setShowScenarios(false); setShowAlarms(false); setSelectedNode(null); }}>Summary</button>
                 <button style={S.tab(!selectedNode && showDynamic)} role="tab" aria-selected={!selectedNode && showDynamic}
-                  onClick={() => { setShowDynamic(true); setShowSummary(false); setShowScenarios(false); setSelectedNode(null); }}>Dynamic</button>
+                  onClick={() => { setShowDynamic(true); setShowSummary(false); setShowScenarios(false); setShowAlarms(false); setSelectedNode(null); }}>Dynamic</button>
                 <button style={S.tab(!selectedNode && showScenarios)} role="tab" aria-selected={!selectedNode && showScenarios}
-                  onClick={() => { setShowScenarios(true); setShowDynamic(false); setShowSummary(false); setSelectedNode(null); }}>Compare</button>
+                  onClick={() => { setShowScenarios(true); setShowDynamic(false); setShowSummary(false); setShowAlarms(false); setSelectedNode(null); }}>Compare</button>
+                <button style={S.tab(!selectedNode && showAlarms)} role="tab" aria-selected={!selectedNode && showAlarms}
+                  onClick={openAlarmsTab}>
+                  Alarms
+                  {activeAlarmCount > 0 && (
+                    <span style={{ ...S.tabCount, background: severityMeta(worstActiveSeverity).bg, color: severityMeta(worstActiveSeverity).color }}>
+                      {activeAlarmCount}
+                    </span>
+                  )}
+                </button>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               {selectedNode && (
@@ -1505,6 +1673,11 @@ export default function CanvasPage() {
                   plcLive={plcLive}
                   onOpenPlcBind={openPlcBind}
                   onOpenNodeInfo={onNodeInfo}
+                  alarmRuleByTarget={alarmRuleByTarget}
+                  activeAlarmByRule={activeAlarmByRule}
+                  previewAlarmByRule={previewAlarmByRule}
+                  canEditAlarms={canEditAlarms}
+                  onOpenAlarm={openAlarmDialog}
                 />
               )}
               {showSummary && !selectedNode && summary && (
@@ -1538,6 +1711,20 @@ export default function CanvasPage() {
                   results={scenarioResults}
                   onRun={runBatch}
                   onClose={() => setShowScenarios(false)}
+                />
+              )}
+              {showAlarms && !selectedNode && (
+                <AlarmsPanel
+                  rules={alarmRules}
+                  events={alarmEvents}
+                  previewById={previewAlarmByRule}
+                  activeById={activeAlarmByRule}
+                  nodeLabels={nodeLabels}
+                  canEdit={canEditAlarms}
+                  loading={alarmsLoading}
+                  onAdd={() => setAlarmDialog({ rule: null, prefill: null })}
+                  onEditRule={(rule) => setAlarmDialog({ rule, prefill: null })}
+                  onClose={() => setShowAlarms(false)}
                 />
               )}
               </div>
@@ -1617,13 +1804,31 @@ export default function CanvasPage() {
           onRemoved={() => { setPlcBindDialog(null); loadPlcBindings(); }}
         />
       )}
+
+      {/* Alarm rule dialog — create from a param row's 🔔 or from the panel,
+          edit an existing rule, delete with confirm. */}
+      {alarmDialog && (
+        <AlarmRuleDialog
+          projectId={projectId}
+          flowsheetId={flowsheetId}
+          rule={alarmDialog.rule}
+          prefill={alarmDialog.prefill}
+          onClose={() => setAlarmDialog(null)}
+          onSaved={() => { setAlarmDialog(null); loadAlarms(); }}
+          onDeleted={() => { setAlarmDialog(null); loadAlarms(); }}
+        />
+      )}
     </AppLayout>
   );
 }
 
 // ── Param Panel ───────────────────────────────────────────────────────────────
 
-const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdateParam, onClose, onDeleteNode, plcBindings, plcLive, onOpenPlcBind, onOpenNodeInfo }) {
+const ParamPanel = React.memo(function ParamPanel({
+  node, unitResult, onUpdateParam, onClose, onDeleteNode,
+  plcBindings, plcLive, onOpenPlcBind, onOpenNodeInfo,
+  alarmRuleByTarget, activeAlarmByRule, previewAlarmByRule, canEditAlarms, onOpenAlarm,
+}) {
   const opType = node.data.opType;
   const defs = PARAM_DEFS[opType] || [];
   const op = OP_INFO[opType];
@@ -1656,6 +1861,13 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
         {defs.length === 0 && <p style={S.noParams}>No configurable parameters.</p>}
         {defs.map(def => {
           const bkey = `${node.id}:${def.key}`;
+          // A param row's alarm rule is the one whose TARGET is this node+param.
+          // `ruleKey` and `targetKey` produce the same string, so this is the
+          // same match the dialog's picker makes — one definition, not two.
+          const rule = alarmRuleByTarget?.get(
+            ruleKey({ targetType: 'param', nodeId: node.id, paramKey: def.key })
+          );
+          const ruleId = rule ? String(rule.id) : null;
           return (
             <ParamRow
               key={def.key}
@@ -1666,6 +1878,12 @@ const ParamPanel = React.memo(function ParamPanel({ node, unitResult, onUpdatePa
               binding={plcBindings?.[bkey]}
               live={plcLive?.[bkey]}
               onBind={onOpenPlcBind ? () => onOpenPlcBind(node.id, node.data.label, def) : undefined}
+              nodeLabel={node.data.label}
+              alarmRule={rule || null}
+              activeAlarm={ruleId ? activeAlarmByRule?.get(ruleId) || null : null}
+              previewAlarm={ruleId ? previewAlarmByRule?.get(ruleId) || null : null}
+              canEditAlarms={canEditAlarms}
+              onAlarm={onOpenAlarm ? () => onOpenAlarm(node.id, def.key, rule || null) : undefined}
             />
           );
         })}
@@ -2621,7 +2839,24 @@ function MetricRow({ metricKey, value }) {
   );
 }
 
-function ParamRow({ opType, def, value, onChange, binding, live, onBind }) {
+/**
+ * One parameter row in the node panel.
+ *
+ * The label carries THREE affordances, in a fixed order, and each is
+ * independent of the other two:
+ *
+ *   ⓘ      the InfoTip explaining the parameter (may be absent — undocumented)
+ *   🔗     the PLC bind button (absent when no bind handler is supplied)
+ *   🔔     the alarm bell (absent for a viewer with no rule on the row)
+ *
+ * They share `flexShrink: 0` and a 14px icon size so none of them can push the
+ * others out of a 320px panel. `src/test/alarmBell.test.jsx` pins that all
+ * three still render together.
+ */
+export function ParamRow({
+  opType, def, value, onChange, binding, live, onBind,
+  nodeLabel, alarmRule, activeAlarm, previewAlarm, canEditAlarms = true, onAlarm,
+}) {
   const info = paramInfo(opType, def.key);
   // PLC bind button (Link2, 14px, ghost) — accent-filled when this node+param
   // has a binding.
@@ -2643,6 +2878,20 @@ function ParamRow({ opType, def, value, onChange, binding, live, onBind }) {
     >
       <Link2 size={14} />
     </button>
+  ) : null;
+
+  // Alarm bell — outlined with no rule, filled with one, ringing when that
+  // rule has an ACTIVE event, dashed when it would fire on the preview.
+  const alarmBtn = onAlarm ? (
+    <AlarmBell
+      rule={alarmRule}
+      activeEvent={activeAlarm}
+      previewAlarm={previewAlarm}
+      paramLabel={def.label}
+      nodeLabel={nodeLabel}
+      canEdit={canEditAlarms}
+      onClick={onAlarm}
+    />
   ) : null;
 
   // 'switch' rows write NUMERIC 1/0 (PLC values arrive as numbers) through the
@@ -2691,6 +2940,7 @@ function ParamRow({ opType, def, value, onChange, binding, live, onBind }) {
         <span style={{ minWidth: 0 }}>{def.label}</span>
         {infoButton}
         {bindBtn}
+        {alarmBtn}
       </label>
       {input}
     </div>
@@ -2920,7 +3170,8 @@ const S = {
   },
   rightPanel:  { width: 320, maxWidth: '85vw', background: '#fff', borderLeft: '1px solid #E5E7EB', flexShrink: 0, display: 'flex', flexDirection: 'column' },   // overflowY moved to inner wrapper
   tabBar:      { display: 'flex', borderBottom: '1px solid #E5E7EB', padding: '0 8px', flexShrink: 0 },
-  tab:         (active) => ({ background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 10px 8px', fontSize: 12, fontWeight: 600, color: active ? '#1F4E79' : '#6B7280', borderBottom: active ? '2px solid #2E75B6' : '2px solid transparent' }),
+  tab:         (active) => ({ background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 10px 8px', fontSize: 12, fontWeight: 600, color: active ? '#1F4E79' : '#6B7280', borderBottom: active ? '2px solid #2E75B6' : '2px solid transparent', display: 'inline-flex', alignItems: 'center', gap: 5 }),
+  tabCount:    { fontSize: 9.5, fontWeight: 700, borderRadius: 8, padding: '0 5px', lineHeight: '14px' },
   panelHdr:    { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #E5E7EB' },
   closeBtn:    { background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 16, minWidth: 32, minHeight: 32 },
   headerInfoBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 13, lineHeight: '16px', padding: '0 4px', marginLeft: 2, flexShrink: 0 },

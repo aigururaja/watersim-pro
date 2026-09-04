@@ -17,6 +17,7 @@ const ReportPage     = lazy(() => import('./pages/ReportPage'));
 const AdminPage      = lazy(() => import('./pages/AdminPage'));
 const ReportsPage    = lazy(() => import('./pages/ReportsPage'));
 const ComparisonPage = lazy(() => import('./pages/ComparisonPage'));
+const AlarmsPage     = lazy(() => import('./pages/AlarmsPage'));
 
 function PageLoader({ label = 'Loading WaterSim Pro…' }) {
   return (
@@ -69,6 +70,9 @@ function AppRoutes() {
         {/* Reports history + comparison */}
         <Route path="/reports" element={<ProtectedRoute><ErrorBoundary scope="Reports"><ReportsPage /></ErrorBoundary></ProtectedRoute>} />
         <Route path="/reports/compare" element={<ProtectedRoute><ErrorBoundary scope="Comparison"><ComparisonPage /></ErrorBoundary></ProtectedRoute>} />
+
+        {/* Org-wide alarm event history */}
+        <Route path="/alarms" element={<ProtectedRoute><ErrorBoundary scope="Alarms"><AlarmsPage /></ErrorBoundary></ProtectedRoute>} />
 
         {/* Simulations -> redirects to Reports */}
         <Route path="/simulations" element={<Navigate to="/reports" replace />} />

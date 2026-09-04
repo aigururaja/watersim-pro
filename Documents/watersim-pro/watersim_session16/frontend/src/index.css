@@ -80,6 +80,31 @@
   outline: none;
 }
 
+/* ── Alarm bell pulse ────────────────────────────────────────────────────────
+   The per-parameter alarm bell (components/alarms/AlarmBell.jsx) pulses while a
+   configured rule has an OPEN alarm event.
+
+   It lives here and not in canvas-motion.css on purpose. That stylesheet is the
+   canvas's motion system, where EVERY loop is gated by `.ws-anim` inside
+   `.ws-sheet` so the live/still toggle can pause it — an invariant
+   src/test/motionGating.test.js enforces. The bell is UI chrome in the right
+   rail: it is outside `.ws-sheet` (so that gate could never reach it), and its
+   pulse reports a persisted alarm_event rather than a live simulation frame, so
+   it should not stop when live view does.
+
+   Timing deliberately matches the card ring's blink — 1.0s, steps(1, end) — so
+   a ringing card and its ringing bell read as one alarm. The global
+   prefers-reduced-motion rule below neutralises it like any other animation. */
+@keyframes ws-bell-pulse {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.35; }
+  100% { opacity: 1; }
+}
+
+.ws-alarm-bell {
+  animation: ws-bell-pulse 1s steps(1, end) infinite;
+}
+
 /* ── Reduced-motion support ──────────────────────────────────────────────────
    Disable all transitions and animations for users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {

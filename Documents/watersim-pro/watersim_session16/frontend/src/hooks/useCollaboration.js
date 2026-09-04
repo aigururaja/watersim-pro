@@ -94,6 +94,11 @@ export function useCollaboration(flowsheetId, { onRemoteEvent } = {}) {
         case 'edge:delete':
         case 'params:update':
         case 'plc:update':
+        case 'alarm:event':
+          // 'alarm:event' is broadcast into the flowsheet room by the alarm
+          // evaluator exactly like 'plc:update', and is forwarded to the canvas
+          // the same way — an alarm raised by someone else's run has to appear
+          // without a refresh.
           if (onRemoteEventRef.current) onRemoteEventRef.current({ type, payload, from });
           break;
 

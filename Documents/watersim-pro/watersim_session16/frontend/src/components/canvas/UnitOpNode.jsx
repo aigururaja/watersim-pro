@@ -54,7 +54,7 @@ import { getSymbol, getTag, resolveSymbolType } from './symbols';
 import './symbols/register';
 import {
   CONTROL_DEFS, deriveNodeState, isAlarmState, nodeReadout, nodeSecondary,
-  serviceColorOf, useAlarmFlood,
+  serviceColorOf, useAlarmFlood, useNodeAlarm,
 } from './nodeReadouts';
 
 const cxs = (...p) => p.filter(Boolean).join(' ');
@@ -237,6 +237,11 @@ const UnitOpNode = memo(({ id, data, selected, xPos, yPos }) => {
   // 0 once the solver converges to the same numbers.
   const snap = useLiveNode(id);
   const alarmFlood = useAlarmFlood();
+  // The worst ACTIVE user-configured alarm on this node, delivered by context —
+  // never through `data`, which is saved, broadcast and hashed. Undefined
+  // without a provider, so nothing here changes for a card rendered outside the
+  // canvas (tests, print).
+  const configuredAlarm = useNodeAlarm(id);
   const [hover, setHover] = useState(false);
 
   const opType = data.opType;
@@ -244,7 +249,7 @@ const UnitOpNode = memo(({ id, data, selected, xPos, yPos }) => {
   const Symbol = getSymbol(opType);
   const isControl = !!CONTROL_DEFS[opType];
 
-  const { state, chip } = deriveNodeState(opType, snap, data.params);
+  const { state, chip, reason } = deriveNodeState(opType, snap, data.params, configuredAlarm);
   const band = state === 'watch' ? 'var(--ws-watch, #D97706)'
     : state === 'nomodel' ? 'var(--ws-nomodel, #64748B)'
       : serviceColorOf(opType);
@@ -330,7 +335,14 @@ const UnitOpNode = memo(({ id, data, selected, xPos, yPos }) => {
           ? <ControlRow nodeId={id} opType={opType} data={data} />
           : <Readouts opType={opType} snap={snap} params={data.params} />}
         {chip && !isControl && (
-          <span style={{ ...styles.chip, ...(CHIP_TONE[state] || CHIP_TONE.nomodel) }}>{chip}</span>
+          /* `title` carries the UNtruncated reason — a configured rule's chip is
+             cut to fit the 22px footer, and the full name has to stay reachable. */
+          <span
+            style={{ ...styles.chip, ...(CHIP_TONE[state] || CHIP_TONE.nomodel) }}
+            title={reason && reason !== chip ? reason : undefined}
+          >
+            {chip}
+          </span>
         )}
       </footer>
 
