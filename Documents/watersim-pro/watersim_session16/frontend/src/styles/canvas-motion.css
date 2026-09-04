@@ -193,8 +193,25 @@
    hysteresis in liveStore.js — invisible on a repeating dash pattern, and the
    clarifier rake (one visible arm) is bucketed to only four steps.          */
 
+/* EVERY loop shorthand below is scoped to `.ws-anim` ON THE SAME ELEMENT.
+   That is load-bearing, and it is NOT the same as scoping under `.ws-live`:
+
+     - A symbol with no rate to show (no flow, pump OFF, no dosing) emits the
+       loop class WITHOUT `.ws-anim`, so no animation is declared at all. If
+       the shorthand were unconditional, a "flat" wave or a parked rotor would
+       still burn a compositor animation on every vessel, forever, even
+       outside live view — silently violating the live-only gate and the
+       per-node animation budget.
+     - `.ws-anim` is a property of the DATA (is there a rate?), not of the
+       view. Toggling live mode changes only `.ws-live` on the ANCESTOR, so
+       the `animation` declaration is never deleted and phase is preserved
+       across the toggle. That is what §6.3(a) actually wanted.
+
+   Consequence for symbol authors: a loop class alone renders a rest pose.
+   To animate, emit BOTH `ws-anim` and the loop class.                       */
+
 /* Rotor: pump impeller, blower lobes, digester mixer. */
-.ws-sheet .ws-rotor {
+.ws-sheet .ws-anim.ws-rotor {
   animation: ws-spin var(--ws-spin, 1.2s) linear infinite;
 }
 /* The second Roots lobe counter-rotates — one class, no second keyframe. */
@@ -204,45 +221,50 @@
    the name `ws-rake` is reserved on the CLASS for the arm because its
    reduced-motion rest pose is "parked at 45°" (spec §6.5). The bar-screen
    carriage below uses the ws-rake KEYFRAMES under a different class. */
-.ws-sheet .ws-rake {
+.ws-sheet .ws-anim.ws-rake {
   animation: ws-spin var(--ws-rake-dur, 20s) linear infinite;
 }
 
 /* Bar-screen rake carriage — climbs, tips, returns. */
-.ws-sheet .ws-rake-travel {
+.ws-sheet .ws-anim.ws-rake-travel {
   animation: ws-rake var(--ws-rake-dur, 6s) linear infinite;
 }
 
 /* Rising bubbles. Stagger is a static negative delay set inline per circle. */
-.ws-sheet .ws-bubble {
+.ws-sheet .ws-anim.ws-bubble {
   animation: ws-bubble var(--ws-bubble-dur, 2.4s) linear infinite;
 }
 
 /* Surface ripple. */
-.ws-sheet .ws-wave {
+.ws-sheet .ws-anim.ws-wave {
   animation: ws-drift var(--ws-drift, 3.2s) linear infinite;
 }
 
 /* Falling dosing droplet. */
-.ws-sheet .ws-droplet {
+.ws-sheet .ws-anim.ws-droplet {
   animation: ws-bubble var(--ws-droplet-dur, 2s) linear infinite;
 }
 
 /* Edge pulse. `stroke-dasharray` is authored on the element so the period and
-   the -134px offset always agree. */
+   the -134px offset always agree. The dasharray is unconditional (it is the
+   pulse's static appearance); only the travel is gated. */
 .ws-sheet .ws-pulse {
   stroke-dasharray: 14 120;
+}
+.ws-sheet .ws-anim.ws-pulse {
   animation: ws-flow var(--ws-flow, 2.2s) linear infinite;
 }
 .ws-sheet .ws-pulse--rev { animation-direction: reverse; }
 
 /* Blocked-discharge throb and the UV breathe — both loops, both linear. */
-.ws-sheet .ws-throb   { animation: ws-throb   var(--ws-throb, 1.1s)   linear infinite; }
-.ws-sheet .ws-breathe { animation: ws-breathe var(--ws-breathe, 1.8s) linear infinite; }
+.ws-sheet .ws-anim.ws-throb   { animation: ws-throb   var(--ws-throb, 1.1s)   linear infinite; }
+.ws-sheet .ws-anim.ws-breathe { animation: ws-breathe var(--ws-breathe, 1.8s) linear infinite; }
 
 /* Alarm ring. The ring is a pre-composed `box-shadow` on an ::after element;
-   we animate its OPACITY, never the shadow itself. */
-.ws-sheet .ws-alarm {
+   we animate its OPACITY, never the shadow itself. The static red ring and
+   its violation chips render whenever results exist (§5 row 18); only the
+   BLINK is live-gated, so the card must emit `ws-anim` alongside. */
+.ws-sheet .ws-anim.ws-alarm {
   animation: ws-alarm var(--ws-dur-alarm, 1s) steps(1, end) infinite;
 }
 

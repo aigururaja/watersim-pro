@@ -282,10 +282,16 @@ function computeRefs(unitResults, streamResults, base) {
     else if (t === 'screening') up('screenRef', num(m.screenings_kg_d));
     else if (DOSING.has(t)) up('doseRef', num(m.dose_kg_d));
     else if (t === 'anaerobic_digester') up('gasRef', num(u.biogas?.volume_m3_d));
-    else if (CLARIFIER.has(t)) {
-      up('sludgeRef', num(m.sludge_Q_m3_d));
-      up('sludgeRef', num(m.RAS_Q_m3_d));
-    }
+
+    // Solids-handling reference. Read by TYPE ABOVE, but by METRIC here: a
+    // thickener reports thickened_Q_m3_d and no clarifier metric at all, so a
+    // type-gated read leaves sludgeRef at 1 on a sheet that has a thickener
+    // and no clarifier — every drive() against it then saturates and the rake
+    // sits permanently in the fastest bucket. Whatever reports a solids flow
+    // in m3/d contributes to the reference for solids flows in m3/d.
+    up('sludgeRef', num(m.sludge_Q_m3_d));
+    up('sludgeRef', num(m.RAS_Q_m3_d));
+    up('sludgeRef', num(m.thickened_Q_m3_d));
   }
 
   if (!base) return Object.freeze(c);
