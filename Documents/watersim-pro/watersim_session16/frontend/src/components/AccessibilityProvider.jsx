@@ -222,3 +222,92 @@ export function useKeyboardShortcut(key, callback, { ctrl = false, meta = false,
 export function VisuallyHidden({ children, as: Tag = 'span' }) {
   return <Tag className="sr-only">{children}</Tag>;
 }
+
+// ── useReducedMotion ──────────────────────────────────────────────────────────
+/**
+ * Whether this user should be shown motion.
+ *
+ * Two inputs, OR'd — either one alone suppresses motion:
+ *   1. the OS `prefers-reduced-motion: reduce` media query, live-updated
+ *   2. a `ws.motion` localStorage override, surfaced as a small switch beside
+ *      the ⚡ Live button on the canvas
+ *
+ * The override is deliberately `auto | off` and NOT `on`: a user may always
+ * turn motion off, but nothing in the UI may turn it back on over the top of
+ * an OS accessibility preference.
+ *
+ * On the canvas this feeds the §6.1 gate
+ *   `const motion = live && !reducedMotion && !documentHidden;`
+ * and prevents loop elements from mounting at all. A reduced-motion user loses
+ * the tempo, never the information — levels, line weights, fill densities,
+ * blanket heights, disc angles, compliance chips and every readout are static
+ * encoders and all survive.
+ *
+ * Usage:
+ *   const reducedMotion = useReducedMotion();
+ */
+
+/** localStorage key for the user-facing motion override. */
+export const MOTION_STORAGE_KEY = 'ws.motion';
+/** Fired on `window` when the override changes, so same-tab hooks update
+ *  (the native `storage` event only fires in OTHER tabs). */
+export const MOTION_EVENT = 'ws:motionchange';
+
+const MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+function motionMediaQuery() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null;
+  try { return window.matchMedia(MOTION_QUERY); } catch { return null; }
+}
+
+/** Read the persisted override. Anything unrecognised means `auto`. */
+export function readMotionSetting() {
+  try {
+    return localStorage.getItem(MOTION_STORAGE_KEY) === 'off' ? 'off' : 'auto';
+  } catch {
+    return 'auto';   // private mode / blocked storage — fall back to the OS
+  }
+}
+
+/**
+ * Persist the override and notify every hook in this tab.
+ * @param {'auto'|'off'} value
+ */
+export function setMotionSetting(value) {
+  const next = value === 'off' ? 'off' : 'auto';
+  try { localStorage.setItem(MOTION_STORAGE_KEY, next); } catch { /* ignore */ }
+  try { window.dispatchEvent(new Event(MOTION_EVENT)); } catch { /* ignore */ }
+  return next;
+}
+
+function computeReducedMotion() {
+  if (readMotionSetting() === 'off') return true;
+  return !!motionMediaQuery()?.matches;
+}
+
+export function useReducedMotion() {
+  const [reduced, setReduced] = useState(computeReducedMotion);
+
+  useEffect(() => {
+    const update = () => setReduced(computeReducedMotion());
+    // Re-read once on mount: the OS preference or the stored override may have
+    // changed between the lazy initial state and this effect.
+    update();
+
+    const mq = motionMediaQuery();
+    if (mq?.addEventListener) mq.addEventListener('change', update);
+    else if (mq?.addListener) mq.addListener(update);   // Safari < 14
+
+    window.addEventListener(MOTION_EVENT, update);
+    window.addEventListener('storage', update);         // the same setting in another tab
+
+    return () => {
+      if (mq?.removeEventListener) mq.removeEventListener('change', update);
+      else if (mq?.removeListener) mq.removeListener(update);
+      window.removeEventListener(MOTION_EVENT, update);
+      window.removeEventListener('storage', update);
+    };
+  }, []);
+
+  return reduced;
+}

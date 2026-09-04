@@ -1,0 +1,151 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   WaterSim Pro — Canvas design tokens (spec §1)
+   ─────────────────────────────────────────────────────────────────────────────
+   Direction: "Datum" — a P&ID drafting sheet. Ink equipment, service-coded
+   lines, light theme ONLY. No dark surface is built (spec §1, §8 "out of
+   scope").
+
+   Every value the canvas paints comes from one of these custom properties.
+   HARD RULES that follow from §1.1:
+     · Equipment is NEVER coloured by category. `TYPE_COLORS.bg` is deleted.
+       Colour encodes SERVICE or STATE only.
+     · No animated value may be an inline hard-coded colour — animate the
+       variable, or animate `background-color` between two of these tokens.
+     · Every service is separated by DASH PATTERN as well as hue, so greyscale
+       print and colour-vision deficiency both survive.
+
+   Consumed by: canvas-motion.css, the symbol primitives, UnitOpNode,
+   StreamEdge. Imported once by CanvasPage (Phase H).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.ws-sheet {
+  /* ── Paper & structure ──────────────────────────────────────────────────── */
+  --ws-paper:        #F7F8FA;   /* canvas ground                              */
+  --ws-grid-minor:   #E6E9EF;   /* 8px dot grid                               */
+  --ws-grid-major:   #EDF0F4;   /* 80px line grid                             */
+  --ws-card:         #FFFFFF;   /* node face                                  */
+
+  /* ── Ink ────────────────────────────────────────────────────────────────── */
+  --ws-ink-900:      #0B1220;   /* labels, tags                               */
+  --ws-ink-700:      #1E293B;   /* equipment shell stroke                     */
+  --ws-ink-400:      #94A3B8;   /* internals, hairlines, units                */
+  --ws-ink-200:      #E2E8F0;   /* card hairline                              */
+
+  /* ── Brand — preserved, load-bearing ────────────────────────────────────── */
+  --ws-brand-900:    #1F4E79;   /* selection brackets, title rules            */
+  --ws-brand-600:    #2E75B6;   /* process water, connected terminals         */
+
+  /* ── Service (line class) — each ALSO has a distinct dash pattern ───────── */
+  --ws-svc-water:    #2E75B6;
+  --ws-svc-recycle:  #B45309;
+  --ws-svc-sludge:   #78350F;
+  --ws-svc-air:      #0891B2;
+  --ws-svc-chem:     #7C3AED;
+  --ws-svc-permeate: #0D9488;
+  --ws-svc-dead:     #94A3B8;
+
+  /* Dash patterns pair 1:1 with the hues above (spec §4.3). `water` and
+     `permeate` are solid; `recycle` is solid + a backward ISA triangle at
+     midspan, drawn as a marker, not a dash. */
+  --ws-dash-water:    none;
+  --ws-dash-recycle:  none;
+  --ws-dash-sludge:   10 4;
+  --ws-dash-air:      1 4;
+  --ws-dash-chem:     6 2 1 2;
+  --ws-dash-permeate: none;
+  --ws-dash-dead:     2 4;
+
+  /* ── State ──────────────────────────────────────────────────────────────── */
+  --ws-ok:           #15803D;
+  --ws-watch:        #D97706;
+  --ws-alarm:        #DC2626;   /* also OFF/CLOSED border — unchanged today    */
+  --ws-nomodel:      #64748B;   /* NO MODEL / UNLINKED only — never for OFF    */
+
+  /* ── Media ──────────────────────────────────────────────────────────────── */
+  --ws-media-sand:   #C9B79A;
+  --ws-media-carbon: #3A3A3C;
+  --ws-gas:          #F0C24B;
+
+  /* ── Type scale (spec §1.2) ─────────────────────────────────────────────────
+     Labels use Inter. EVERY number, tag and unit uses the mono stack with
+     tabular lining figures so digits never reflow when a readout ticks.
+     Nothing below 9px. Units are always demoted so magnitude dominates.      */
+  --ws-font-label:   'Inter', system-ui, -apple-system, sans-serif;
+  --ws-font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --ws-num-variant:  tabular-nums lining-nums;
+
+  /* Equipment tag  (P-101) — 9.5 / 700 / 0.06em, uppercase, mono, ink-400    */
+  --ws-fs-tag:       9.5px;
+  --ws-fw-tag:       700;
+  --ws-ls-tag:       0.06em;
+  /* Node label — 11 / 600 / -0.005em, Inter, ink-900                         */
+  --ws-fs-label:     11px;
+  --ws-fw-label:     600;
+  --ws-ls-label:     -0.005em;
+  /* Node readout — 10.5 / 500, mono, ink-700                                 */
+  --ws-fs-readout:   10.5px;
+  --ws-fw-readout:   500;
+  /* Unit suffix — 0.85em of parent, ink-400                                  */
+  --ws-fs-unit:      0.85em;
+  /* Edge flow tag — 9.5 / 600, mono, ink-700                                 */
+  --ws-fs-edge:      9.5px;
+  --ws-fw-edge:      600;
+  /* Status pill (pump/valve) — 9.5 / 700 / 0.04em — UNCHANGED from today     */
+  --ws-fs-pill:      9.5px;
+  --ws-fw-pill:      700;
+  --ws-ls-pill:      0.04em;
+  /* Violation chip — 9 / 600, mono, alarm                                    */
+  --ws-fs-chip:      9px;
+  --ws-fw-chip:      600;
+
+  /* ── Radii (spec §1.3) — no 8px-everywhere ──────────────────────────────── */
+  --ws-r-card:       4px;
+  --ws-r-frame:      2px;
+  --ws-r-chip:       2px;
+  --ws-r-handle:     1px;
+
+  /* ── SVG stroke weights — EXACTLY THREE. ────────────────────────────────────
+     This is what makes 26 separate drawings read as one set. Round caps and
+     joins throughout; `vector-effect: non-scaling-stroke` on every stroked
+     element; `shape-rendering: geometricPrecision`.                          */
+  --ws-sw-shell:     1.75;
+  --ws-sw-detail:    1.25;
+  --ws-sw-media:     0.75;
+
+  /* ── Card geometry (spec §2.1) — fixed for every type so ReactFlow never
+     re-measures and `contain` can work. 6+22+60+22+6 = 116; the symbol frame's
+     centreline lands on the card's vertical centre, which is why the Handles
+     stay at ReactFlow's default `top: 50%` and no saved edge re-anchors.     */
+  --ws-card-w:       168px;
+  --ws-card-h:       116px;
+  --ws-card-pad:     6px;
+  --ws-hdr-h:        22px;
+  --ws-ft-h:         22px;
+  --ws-frame-w:      144px;
+  --ws-frame-h:      60px;
+  --ws-band-h:       4px;
+  --ws-handle:       9px;
+
+  /* ── Elevation (spec §1.3) — no glow, no blur radius, anywhere ──────────── */
+  --ws-elev-rest:    none;
+  --ws-elev-hover:   0 1px 2px rgba(15, 23, 42, 0.06);
+  --ws-bracket:      8px;                       /* selected crop-mark length  */
+
+  /* ── Motion scale (spec §1.4) ───────────────────────────────────────────────
+     `ease-in-out` on a rotating machine is forbidden. ALL continuous loops are
+     `linear`, no exceptions. The alarm blink is 1.0s `steps(1,end)` EVERYWHERE
+     — severity is carried by colour and chip count, never by tempo.          */
+  --ws-ease-in:      cubic-bezier(0.2, 0, 0, 1);
+  --ws-ease-out:     cubic-bezier(0.4, 0, 1, 1);
+  --ws-ease-move:    cubic-bezier(0.22, 1, 0.36, 1);
+  --ws-ease-prime:   cubic-bezier(0.65, 0, 0.35, 1);
+  --ws-dur-in:       180ms;   /* state change in                              */
+  --ws-dur-out:      120ms;   /* state change out                             */
+  --ws-dur-move:     420ms;   /* position / level transition                  */
+  --ws-dur-disc:     220ms;   /* valve disc travel                            */
+  --ws-dur-prime:    600ms;   /* one-shot vessel prime                        */
+  --ws-dur-flash:    260ms;   /* one-shot flash / readout heartbeat           */
+  --ws-dur-tick:     240ms;   /* service-band per-tick heartbeat              */
+  --ws-dur-stamp:    700ms;   /* compliance stamp                             */
+  --ws-dur-alarm:    1s;      /* FIXED alarm cadence — canvas-wide            */
+}

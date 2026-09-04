@@ -1,0 +1,356 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   WaterSim Pro — Canvas motion (spec §5, §6, §7)
+   ─────────────────────────────────────────────────────────────────────────────
+   THE SINGLE PLACE `@keyframes` EXIST. Not per component, not injected per
+   node. Eleven keyframes total, each declared exactly ONCE:
+
+     ws-flow  ws-bubble  ws-spin  ws-rake  ws-drift  ws-prime
+     ws-throb ws-breathe ws-stamp ws-alarm ws-tick
+
+   ── Rules this file is built on ────────────────────────────────────────────
+   1. Animate ONLY `transform`, `opacity`, `stroke-dashoffset`,
+      `background-color` and custom properties. Never `box-shadow`, never an
+      SVG geometry attribute (x/y/width/height/r/cx/d — they do not transition
+      and they force layout), never `filter`, never `backdrop-filter`, never
+      `background-position`.
+   2. ZERO SMIL. No <animate>, <animateTransform>, <animateMotion> anywhere on
+      this canvas. SMIL is immune to `prefers-reduced-motion`; CSS is not.
+      That is the whole reason every technique here is CSS.
+   3. EVERY LOOP IS AUTHORED SO FRAME 100% IS VISUALLY IDENTICAL TO FRAME 0%.
+      `index.css` already collapses animations to `0.01ms` with
+      `iteration-count: 1` under `prefers-reduced-motion`, which SNAPS an
+      infinite animation to its 100% frame. If 100% != 0% that strands a rotor
+      at 359° or a rake mid-sweep. Rotations end at exactly 360°; the dash
+      offset ends at exactly one pattern period (-134px); the wave translates
+      exactly one wave period (-40px); bubbles end at opacity 0.
+   4. All continuous loops are `linear`. `ease-in-out` on a rotating machine is
+      forbidden. The alarm blink is 1.0s `steps(1, end)`, fixed everywhere.
+   5. Durations are never built as strings in JS. A component writes ONE custom
+      property inline — style={{ '--ws-spin': '0.72s' }} — and the `animation`
+      shorthand is a constant here. React rewrites one variable; the compositor
+      retimes in place.
+
+   Imported once by CanvasPage (Phase H), alongside canvas-tokens.css.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. KEYFRAMES — each declared exactly once
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Edge pulse (catalogue #1). Dash pattern is `14 120`; one full period is
+   14 + 120 = 134px, so ending at -134 makes 100% identical to 0%.
+   Recycle lines run backwards via `animation-direction: reverse`. */
+@keyframes ws-flow {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -134px; }
+}
+
+/* Rising bubbles (catalogue #2, #15). Ends at opacity 0, so the reduced-motion
+   snap-to-100% leaves an invisible bubble rather than a stranded one.
+   Columns are staggered with STATIC negative `animation-delay` — zero JS. */
+@keyframes ws-bubble {
+  from { transform: translateY(0);      opacity: var(--ws-bubble-o, 0.55); }
+  to   { transform: translateY(-34px);  opacity: 0; }
+}
+
+/* The one rotation in the system: pump impeller, blower lobes, digester
+   mixer, clarifier rake arm (catalogue #3, #4, #6, #15). Exactly 360°. */
+@keyframes ws-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Bar-screen rake carriage (catalogue #12): climbs the rack, tips into the
+   skip, fades, returns to the bottom. Rest pose (0%) == end pose (100%).
+   The dropped screenings blob shares --ws-rake with a fractional
+   `animation-delay`, so it stays synchronised with no JS timing. */
+@keyframes ws-rake {
+  0%   { transform: translate(0, 0);      opacity: 1; }
+  55%  { transform: translate(0, -30px);  opacity: 1; }
+  64%  { transform: translate(6px, -32px); opacity: 1; }
+  72%  { transform: translate(6px, -32px); opacity: 0; }
+  73%  { transform: translate(0, 0);      opacity: 0; }
+  88%  { transform: translate(0, 0);      opacity: 0; }
+  100% { transform: translate(0, 0);      opacity: 1; }
+}
+
+/* Surface ripple (catalogue #9). The wave <path> is authored two periods wide
+   inside the shell clipPath and translates exactly ONE period (40px), so the
+   loop is seamless and 100% == 0%. */
+@keyframes ws-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-40px); }
+}
+
+/* One-shot vessel prime on live entry (catalogue #10). NOT a physics claim —
+   a transition into live view, and the ⓘ copy says so. Re-armed by React
+   MOUNTING the liquid group on `live`; a paused completed one-shot could
+   never re-arm. Staggered head-works-first by --ws-x. */
+@keyframes ws-prime {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* Blocked-discharge throb (catalogue #4). Lives on its own outer <g> so it
+   never fights the impeller's rotation for one `transform`. */
+@keyframes ws-throb {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+/* UV lamp breathe (catalogue #13) — a powered indicator, fixed 1.8s, NOT a
+   rate. Backed by a <radialGradient>; there is no filter and no blur here or
+   anywhere else on this canvas. */
+@keyframes ws-breathe {
+  0%, 100% { opacity: var(--ws-glow-lo, 0.35); }
+  50%      { opacity: var(--ws-glow-hi, 0.60); }
+}
+
+/* Compliance stamp (catalogue #18) — one-shot, fires only on a TRANSITION to
+   compliant, then completely still. */
+@keyframes ws-stamp {
+  from { transform: scale(1.35); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+/* Alarm blink (catalogue #19). EXACTLY 1.0s, `steps(1, end)`, everywhere.
+   Severity is carried by colour and chip count, never by tempo — operators
+   cannot compare blink rates across a screen. */
+@keyframes ws-alarm {
+  0%   { opacity: 1; }
+  50%  { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Service-band heartbeat (catalogue #20) — a 240ms inward ink-darken on every
+   node whose metrics ACTUALLY changed this tick. The cheapest animation for
+   the thing that happens most often, and it animates `background-color`, not
+   `box-shadow`. */
+@keyframes ws-tick {
+  0%   { background-color: var(--ws-band, var(--ws-svc-water)); }
+  35%  { background-color: var(--ws-ink-700); }
+  100% { background-color: var(--ws-band, var(--ws-svc-water)); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. THE LIVE GATE (spec §6.3a)
+   ═══════════════════════════════════════════════════════════════════════════
+   Two cooperating layers.
+
+   (a) PLAY-STATE — for loops that should RESUME rather than restart.
+       Toggling live mutates one className on one DOM node. Nothing
+       re-renders, no animation restarts, and re-entering live resumes at the
+       same phase instead of jumping.
+
+   (b) EXISTENCE — for elements meaningless without values (edge pulses,
+       bubbles, droplets, air pulses, the liquid group). Those are simply not
+       MOUNTED when `!live`. That costs zero layers when idle and it is what
+       re-arms the one-shot prime and stamp. That layer lives in JSX, driven
+       by `live` from liveStore — not here.
+
+   NOTE: the `animation` shorthands below are deliberately NOT scoped under
+   `.ws-live`. Declaring them only inside `.ws-live` would DELETE the
+   animation when live is turned off, which resets phase and contradicts (a).
+   The shorthand is unconditional; `.ws-anim` is what pauses it.             */
+
+.ws-sheet .ws-anim          { animation-play-state: paused; }
+.ws-sheet.ws-live .ws-anim  { animation-play-state: running; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3. TRANSFORM ORIGIN HELPERS (spec §3.1)
+   ═══════════════════════════════════════════════════════════════════════════
+   "Every rotor and every level group MUST carry both `transform-box: fill-box`
+   and an explicit `transform-origin` fallback. Omitting `transform-box` makes
+   the rotor orbit the viewBox origin. This is the single easiest way to ship a
+   broken symbol."
+
+   The primitives ALSO set these inline, so a symbol is correct even in a test
+   renderer that never loads this stylesheet.                                */
+
+.ws-sheet .ws-origin-c {
+  transform-box: fill-box;
+  transform-origin: center;   /* modern keyword                              */
+  transform-origin: 50% 50%;  /* explicit fallback — wins, same result       */
+}
+.ws-sheet .ws-origin-b {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transform-origin: 50% 100%;
+}
+/* Asymmetric rotors (an impeller whose vanes are not centred on their own
+   bounding box) opt into view-box coordinates and name the pivot in user
+   units via --ws-origin, e.g. style={{ '--ws-origin': '36px 30px' }}. */
+.ws-sheet .ws-origin-v {
+  transform-box: view-box;
+  transform-origin: var(--ws-origin, 50% 50%);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4. ANIMATION SHORTHANDS — the constants the JS custom properties retime
+   ═══════════════════════════════════════════════════════════════════════════
+   Because retiming causes a PHASE JUMP (progress is a fraction of the new
+   duration), every rate that feeds these variables is bucketed with 15%
+   hysteresis in liveStore.js — invisible on a repeating dash pattern, and the
+   clarifier rake (one visible arm) is bucketed to only four steps.          */
+
+/* Rotor: pump impeller, blower lobes, digester mixer. */
+.ws-sheet .ws-rotor {
+  animation: ws-spin var(--ws-spin, 1.2s) linear infinite;
+}
+/* The second Roots lobe counter-rotates — one class, no second keyframe. */
+.ws-sheet .ws-rotor--rev { animation-direction: reverse; }
+
+/* Clarifier / grit / thickener rake ARM. Uses ws-spin (it is a rotation);
+   the name `ws-rake` is reserved on the CLASS for the arm because its
+   reduced-motion rest pose is "parked at 45°" (spec §6.5). The bar-screen
+   carriage below uses the ws-rake KEYFRAMES under a different class. */
+.ws-sheet .ws-rake {
+  animation: ws-spin var(--ws-rake-dur, 20s) linear infinite;
+}
+
+/* Bar-screen rake carriage — climbs, tips, returns. */
+.ws-sheet .ws-rake-travel {
+  animation: ws-rake var(--ws-rake-dur, 6s) linear infinite;
+}
+
+/* Rising bubbles. Stagger is a static negative delay set inline per circle. */
+.ws-sheet .ws-bubble {
+  animation: ws-bubble var(--ws-bubble-dur, 2.4s) linear infinite;
+}
+
+/* Surface ripple. */
+.ws-sheet .ws-wave {
+  animation: ws-drift var(--ws-drift, 3.2s) linear infinite;
+}
+
+/* Falling dosing droplet. */
+.ws-sheet .ws-droplet {
+  animation: ws-bubble var(--ws-droplet-dur, 2s) linear infinite;
+}
+
+/* Edge pulse. `stroke-dasharray` is authored on the element so the period and
+   the -134px offset always agree. */
+.ws-sheet .ws-pulse {
+  stroke-dasharray: 14 120;
+  animation: ws-flow var(--ws-flow, 2.2s) linear infinite;
+}
+.ws-sheet .ws-pulse--rev { animation-direction: reverse; }
+
+/* Blocked-discharge throb and the UV breathe — both loops, both linear. */
+.ws-sheet .ws-throb   { animation: ws-throb   var(--ws-throb, 1.1s)   linear infinite; }
+.ws-sheet .ws-breathe { animation: ws-breathe var(--ws-breathe, 1.8s) linear infinite; }
+
+/* Alarm ring. The ring is a pre-composed `box-shadow` on an ::after element;
+   we animate its OPACITY, never the shadow itself. */
+.ws-sheet .ws-alarm {
+  animation: ws-alarm var(--ws-dur-alarm, 1s) steps(1, end) infinite;
+}
+
+/* ── One-shots. These deliberately do NOT carry `.ws-anim`: they are gated by
+   EXISTENCE (React mounts them), not by play-state. A paused completed
+   one-shot can never re-arm. ──────────────────────────────────────────────── */
+
+.ws-sheet .ws-prime {
+  animation: ws-prime var(--ws-dur-prime, 600ms) var(--ws-ease-prime, cubic-bezier(0.65, 0, 0.35, 1)) both;
+  animation-delay: calc(var(--ws-x, 0) * 1ms);   /* head-works first */
+}
+.ws-sheet .ws-stamp {
+  animation: ws-stamp var(--ws-dur-stamp, 700ms) var(--ws-ease-in, cubic-bezier(0.2, 0, 0, 1)) both;
+}
+.ws-sheet .ws-tick {
+  animation: ws-tick var(--ws-dur-tick, 240ms) var(--ws-ease-in, cubic-bezier(0.2, 0, 0, 1)) 1;
+}
+
+/* ── State transitions (NOT loops). Permitted outside live view: these are
+   state changes, and a teleporting valve disc is worse UX than a moving one.
+   Levels, blankets, needles and freeboard are `transform` on a group — never
+   the `height` attribute. ────────────────────────────────────────────────── */
+
+.ws-sheet .ws-fill,
+.ws-sheet .ws-blanket,
+.ws-sheet .ws-freeboard {
+  transition: transform var(--ws-dur-move, 420ms) var(--ws-ease-move, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.ws-sheet .ws-disc {
+  transition: transform var(--ws-dur-disc, 220ms) var(--ws-ease-in, cubic-bezier(0.2, 0, 0, 1));
+}
+.ws-sheet .ws-needle {
+  transition: transform 500ms var(--ws-ease-move, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5. PERFORMANCE (spec §7)
+   ═══════════════════════════════════════════════════════════════════════════
+   At most FOUR animated elements per node, all transform/opacity, all inside
+   the 144x60 symbol frame, which carries `contain: layout paint style`.
+   `will-change` goes on rotor and bubble groups ONLY (<=3 per node) — never
+   on the card, or we manufacture 30 useless compositor layers.              */
+
+.ws-sheet .ws-rotor,
+.ws-sheet .ws-bubble { will-change: transform; }
+
+.ws-sheet .ws-frame  { contain: layout paint style; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6. KILLING REACTFLOW'S FAKE DASHES (spec §4.5)
+   ═══════════════════════════════════════════════════════════════════════════
+   Every edge created by `onConnect` and every seeded edge carries
+   `animated: true`, and ReactFlow v11's own stylesheet runs
+   `dashdraw 0.5s linear infinite` on all of them at a CONSTANT FAKE SPEED.
+   Without this override a fake dash runs underneath the real, value-driven
+   pulse — the single most likely "why does it look wrong" bug. Deliberately
+   global (not scoped to .ws-sheet) so it also covers already-saved edges.   */
+
+.react-flow__edge.animated .react-flow__edge-path { animation: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   7. LEVEL OF DETAIL (spec §6.4)
+   ═══════════════════════════════════════════════════════════════════════════
+   Below zoom 0.40 the pane gets `.ws-lod-far` (written via a ref by a
+   zero-child component, so nothing re-renders). All node motion stops and
+   symbols collapse to shell + band + tag BY CSS ALONE. Edge pulses are gated
+   off below 0.35, where a 14px dash is sub-pixel anyway.
+
+   The worst case for element count is the best case for animation count, and
+   the two never coincide.                                                    */
+
+.ws-lod-far .ws-anim   { animation: none !important; }
+.ws-lod-far .ws-detail,
+.ws-lod-far .ws-media,
+.ws-lod-far .ws-internals,
+.ws-lod-far .ws-pulse  { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   8. REDUCED MOTION (spec §6.5)
+   ═══════════════════════════════════════════════════════════════════════════
+   Layer 3 of four. `index.css` already neutralises animation and transition
+   with a `*` selector; because this design uses ZERO SMIL that covers the
+   whole catalogue for free. But that rule snaps loops to their 100% frame, so
+   we restate `animation: none` here AND force the correct REST POSE:
+
+     rotors parked at 12°   ·   rakes parked at 45°   ·   flat surfaces
+
+   A reduced-motion user loses the tempo, never the information. Level, line
+   weight, fill density, blanket height, disc angle, clogging band, lamp
+   count, compliance stamp, violation chips and every mono readout are static
+   encoders and all survive — which is why `.ws-fill`, `.ws-blanket` and
+   `.ws-disc` transforms are NOT reset below.                                 */
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-sheet .ws-anim,
+  .ws-sheet .ws-prime,
+  .ws-sheet .ws-stamp,
+  .ws-sheet .ws-tick {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ws-sheet .ws-rotor       { transform: rotate(12deg); }
+  .ws-sheet .ws-rake        { transform: rotate(45deg); }
+  .ws-sheet .ws-rake-travel { transform: none; }   /* parked at the bottom    */
+  .ws-sheet .ws-wave        { transform: none; }   /* flat surface            */
+  .ws-sheet .ws-bubble,
+  .ws-sheet .ws-droplet,
+  .ws-sheet .ws-pulse       { display: none; }
+  .ws-sheet .ws-throb       { transform: none; }
+  .ws-sheet .ws-breathe     { opacity: var(--ws-glow-lo, 0.35); }
+}
