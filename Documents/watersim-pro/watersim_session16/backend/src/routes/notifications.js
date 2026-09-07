@@ -13,6 +13,7 @@
  *   DELETE /notifications/subscriptions/:id  — remove                          (manager+)
  *   GET    /notifications/outbox             — recent deliveries and failures  (manager+)
  *   POST   /notifications/outbox/:id/retry   — retry a failed/dead row now     (manager+)
+ *   GET    /notifications/whatsapp/templates — the WhatsApp Business Account's templates and their approval (manager+)
  */
 'use strict';
 
@@ -24,6 +25,7 @@ const { ROLES } = require('../auth/roles');
 const { auditLog } = require('../utils/audit');
 const { emit, EVENT_TYPES, CHANNELS } = require('../notifications');
 const worker = require('../notifications/worker');
+const whatsapp = require('../notifications/adapters/whatsapp');
 
 const router = express.Router();
 router.use(authenticate);
@@ -77,7 +79,8 @@ router.put('/me/channels', [
   body('email.address').optional({ nullable: true }).isEmail().normalizeEmail({ gmail_remove_dots: false }),
   body('whatsapp').optional().isObject(),
   body('whatsapp.enabled').optional().isBoolean().toBoolean(),
-  body('whatsapp.address').optional({ nullable: true }).matches(E164).withMessage('WhatsApp number must be E.164, e.g. +919876543210'),
+  // A bare local number ("98765 43210") becomes E.164 with WHATSAPP_DEFAULT_COUNTRY_CODE.
+  body('whatsapp.address').optional({ nullable: true }).customSanitizer((v) => whatsapp.toE164(v) || v).matches(E164).withMessage('WhatsApp number must be E.164 (+919876543210) or a 10-digit local number'),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
   try {
@@ -217,7 +220,7 @@ router.get('/outbox', requireCapability('notify.policy'), [
     let where = 'o.organisation_id = $1';
     if (req.query.state) { params.push(req.query.state); where += ` AND o.state = $${params.length}`; }
     const { rows } = await query(
-      `SELECT o.id, o.channel, o.address, o.event_type, o.subject, o.state, o.attempts, o.next_attempt_at, o.sent_at, o.last_error, o.created_at,
+      `SELECT o.id, o.channel, o.address, o.event_type, o.subject, o.state, o.attempts, o.next_attempt_at, o.sent_at, o.last_error, o.created_at, o.payload,
               u.first_name || ' ' || u.last_name AS user_name
          FROM notification_outbox o LEFT JOIN users u ON u.id = o.user_id
         WHERE ${where} ORDER BY o.created_at DESC LIMIT ${req.query.limit ?? 100}`,
@@ -230,6 +233,7 @@ router.get('/outbox', requireCapability('notify.policy'), [
       outbox: rows.map((o) => ({
         id: o.id, channel: o.channel, address: o.address, eventType: o.event_type, subject: o.subject, state: o.state,
         attempts: o.attempts, nextAttemptAt: o.next_attempt_at, sentAt: o.sent_at, lastError: o.last_error, createdAt: o.created_at, userName: o.user_name,
+        providerId: o.payload?.providerId || null, delivery: o.payload?.delivery || null, kind: o.payload?.kind || null,
       })),
     });
   } catch (err) { next(err); }
@@ -245,6 +249,17 @@ router.post('/outbox/:id/retry', requireCapability('notify.policy'), [param('id'
     auditLog(req, 'notification.retry', 'notification', req.params.id, { state: row.state });
     res.json(row);
   } catch (err) { next(err); }
+});
+
+// ── GET /notifications/whatsapp/templates ────────────────────────────────────
+// The templates on the WhatsApp Business Account with Meta's review status, so
+// a manager can see that `watersim_alert` is APPROVED before relying on it.
+router.get('/whatsapp/templates', requireCapability('notify.policy'), async (req, res) => {
+  try {
+    res.json({ provider: whatsapp.provider(), ...(await whatsapp.listTemplates({ force: req.query.refresh === 'true' })) });
+  } catch (err) {
+    res.status(502).json({ error: err.message, provider: whatsapp.provider() });
+  }
 });
 
 module.exports = router;

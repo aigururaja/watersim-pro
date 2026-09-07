@@ -28,6 +28,7 @@ const tagRoutes          = require('./routes/tags');
 const auditRoutes        = require('./routes/audit');
 const taskRoutes         = require('./routes/tasks');
 const notificationRoutes = require('./routes/notifications');
+const webhookRoutes      = require('./routes/webhooks');
 const liveRoutes         = require('./routes/live');
 const twinRoutes         = require('./routes/twin');
 const assetRoutes        = require('./routes/assets');
@@ -104,7 +105,11 @@ app.use(cors({
 // ── General middleware ────────────────────────────────────────────────────────
 app.use(requestId);          // correlation id — before logging so morgan sees it
 app.use(compression());
-app.use(express.json({ limit: '5mb' }));
+// Inbound webhooks are signed over the raw body; it is kept for that path only.
+app.use(express.json({
+  limit: '5mb',
+  verify: (req, _res, buf) => { if (req.url && req.url.startsWith(`${API}/webhooks`)) req.rawBody = buf; },
+}));
 app.use(metricsMiddleware);  // http_request_duration histogram
 
 // Access logs carry the request id; written at 'info' so they survive the
@@ -137,6 +142,12 @@ const authLimiter = rateLimit({
   skip:            () => process.env.NODE_ENV === 'test',
   keyGenerator:    (req) => req.ip,
 });
+
+// ── Inbound webhooks (Meta WhatsApp) ─────────────────────────────────────────
+// No session, and outside the API limiter: a burst of delivery statuses must
+// never be answered with 429 (Meta retries, then disables the subscription).
+// Signature-checked when WHATSAPP_APP_SECRET is set.
+app.use(`${API}/webhooks`, webhookRoutes);
 
 app.use(API, globalLimiter);
 

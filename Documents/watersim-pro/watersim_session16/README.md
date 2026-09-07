@@ -233,10 +233,19 @@ and to the audit trail. Managers approve or reject completed work and
 acknowledge critical alarms' tasks. Notifications are policy-driven
 (`/api/v1/notifications/subscriptions`: role or user × event type × minimum
 severity → channels), queued in `notification_outbox` and sent by an
-in-process worker over SMTP (`SMTP_*`) and Twilio WhatsApp (`TWILIO_*`), with
-retries, dead-lettering and a manager-side retry; `NOTIFICATIONS_DRY_RUN=true`
-logs instead of sending. The Tasks board is at `/tasks`; personal channels
-and the organisation's policy are under Settings → Notifications.
+in-process worker over SMTP (`SMTP_*`; a Gmail app password is enough) and
+WhatsApp through Meta's Cloud API (`WHATSAPP_*` — the enterprise CRM's
+business account and its variable names; Twilio stays selectable with
+`WHATSAPP_PROVIDER=twilio`), with retries, dead-lettering and a manager-side
+retry; `NOTIFICATIONS_DRY_RUN=true` logs instead of sending. Meta's delivery
+receipts and people's replies arrive on `POST /api/v1/webhooks/whatsapp`
+(verify token, optional signature); outside a person's 24-hour reply window
+only an approved template is delivered, mapped per event in
+`WHATSAPP_TEMPLATES` (two body parameters: subject, details) and listed with
+its approval under Settings → Notifications. `scripts/notify-live-test.js`
+sends one real test email and WhatsApp from the command line. The Tasks board
+is at `/tasks`; personal channels and the organisation's policy are under
+Settings → Notifications.
 
 On every authenticated request the user's **current** role and active flag are
 re-read from the database (cached `ROLE_CACHE_TTL_MS`, default 30 s) and

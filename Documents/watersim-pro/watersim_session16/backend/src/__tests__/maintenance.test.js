@@ -387,3 +387,157 @@ describe('notifications', () => {
     expect(rows.rows.some((x) => x.user_id === ids.engineer2 && x.channel === 'email')).toBe(true);
   });
 });
+
+// ── WhatsApp through Meta's Cloud API, and its webhook ───────────────────────
+describe('WhatsApp via Meta Cloud API', () => {
+  const request = require('supertest');
+  const app = require('../server');
+  const META = { WHATSAPP_PROVIDER: 'meta', WHATSAPP_PHONE_NUMBER_ID: '1234567890', WHATSAPP_ACCESS_TOKEN: 'EAAtest', WHATSAPP_VERIFY_TOKEN: 'verify-me' };
+  let calls;
+  const accept = () => whatsapp.setFetch(async (url, opts) => {
+    calls.push({ url, opts, body: JSON.parse(opts.body) });
+    return { ok: true, status: 200, json: async () => ({ messages: [{ id: `wamid.${Date.now()}.${calls.length}` }] }) };
+  });
+  beforeAll(() => { delete process.env.NOTIFICATIONS_DRY_RUN; Object.assign(process.env, META); });
+  afterAll(() => {
+    for (const k of Object.keys(META)) delete process.env[k];
+    for (const k of ['WHATSAPP_TEMPLATES', 'WHATSAPP_APP_SECRET', 'WHATSAPP_BUSINESS_ACCOUNT_ID']) delete process.env[k];
+    whatsapp.setFetch(null);
+    process.env.NOTIFICATIONS_DRY_RUN = 'true';
+  });
+  beforeEach(() => { calls = []; accept(); });
+
+  const queueRow = async (eventType = 'notification.test') => (await query(
+    `INSERT INTO notification_outbox (organisation_id, user_id, channel, address, event_type, template, subject, body)
+     VALUES ($1, $2, 'whatsapp', '+919876543210', $3, $3, 'Test subject', $4) RETURNING id`,
+    [orgId, ids.operator, eventType, 'Test subject\n\nline one\nline two\n\nOrg · sent by WaterSim Pro']
+  )).rows[0].id;
+  const rowOf = async (id) => (await query('SELECT state, last_error, payload FROM notification_outbox WHERE id = $1', [id])).rows[0];
+
+  test('free text goes to the Graph API with the bearer token and a digits-only recipient', async () => {
+    delete process.env.WHATSAPP_TEMPLATES;
+    const id = await queueRow();
+    expect((await worker.drain({ onlyId: id })).sent).toBe(1);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('https://graph.facebook.com/v21.0/1234567890/messages');
+    expect(calls[0].opts.headers.Authorization).toBe('Bearer EAAtest');
+    expect(calls[0].body).toMatchObject({ messaging_product: 'whatsapp', to: '919876543210', type: 'text' });
+    const row = await rowOf(id);
+    expect(row.state).toBe('sent');
+    expect(row.payload).toMatchObject({ providerId: expect.stringMatching(/^wamid\./), provider: 'meta', kind: 'text' });
+  });
+
+  test('a mapped event goes out as the template with two body parameters, and the outbox says so', async () => {
+    process.env.WHATSAPP_TEMPLATES = '{"*":"watersim_alert","alarm.":"watersim_alarm"}';
+    const id = await queueRow('alarm.raised');
+    expect((await worker.drain({ onlyId: id })).sent).toBe(1);
+    expect(calls[0].body.type).toBe('template');
+    expect(calls[0].body.template.name).toBe('watersim_alarm');
+    expect(calls[0].body.template.components[0].parameters.map((p) => p.text)).toEqual(['Test subject', 'line one · line two']);
+    const box = await manager.agent.get('/api/v1/notifications/outbox?limit=10');
+    const mine = box.body.outbox.find((o) => o.id === id);
+    expect(mine).toMatchObject({ kind: 'template', providerId: expect.stringMatching(/^wamid\./), delivery: null });
+    expect(box.body.providers.whatsapp).toMatchObject({ ok: true, provider: 'meta', reason: expect.stringMatching(/watersim_alert/) });
+    delete process.env.WHATSAPP_TEMPLATES;
+  });
+
+  test("Meta's refusals: outside the 24-hour window is dead with the hint; throttling retries", async () => {
+    whatsapp.setFetch(async () => ({ ok: false, status: 400, json: async () => ({ error: { code: 131047, message: 'Re-engagement message' } }) }));
+    const id = await queueRow();
+    expect((await worker.drain({ onlyId: id })).dead).toBe(1);
+    const dead = await rowOf(id);
+    expect(dead.state).toBe('dead');
+    expect(dead.last_error).toMatch(/131047.*24 h/);
+    whatsapp.setFetch(async () => ({ ok: false, status: 400, json: async () => ({ error: { code: 130429, message: 'Rate limit hit' } }) }));
+    const id2 = await queueRow();
+    expect((await worker.drain({ onlyId: id2 })).failed).toBe(1);
+    expect((await rowOf(id2)).state).toBe('failed');
+  });
+
+  test('the webhook: handshake, delivery statuses onto the row, a failure kills it, a reply verifies the number', async () => {
+    const hook = '/api/v1/webhooks/whatsapp';
+    const ok = await request(app).get(hook).query({ 'hub.mode': 'subscribe', 'hub.verify_token': 'verify-me', 'hub.challenge': '4242' });
+    expect(ok.status).toBe(200);
+    expect(ok.text).toBe('4242');
+    expect((await request(app).get(hook).query({ 'hub.mode': 'subscribe', 'hub.verify_token': 'wrong', 'hub.challenge': '1' })).status).toBe(403);
+
+    const id = await queueRow();
+    await worker.drain({ onlyId: id });
+    const wamid = (await rowOf(id)).payload.providerId;
+    const status = (wid, s, extra = {}) => ({ object: 'whatsapp_business_account', entry: [{ id: 'WABA', changes: [{ field: 'messages', value: {
+      messaging_product: 'whatsapp', statuses: [{ id: wid, status: s, timestamp: '1757000000', recipient_id: '919876543210', ...extra }] } }] }] });
+
+    let r = await request(app).post(hook).send(status(wamid, 'delivered'));
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ status: 'ok', statuses: 1, matched: 1 });
+    expect((await rowOf(id)).payload.delivery).toMatchObject({ status: 'delivered', at: '2025-09-04T15:33:20.000Z', error: null });
+    await request(app).post(hook).send(status(wamid, 'sent')); // arrives late — must not regress
+    expect((await rowOf(id)).payload.delivery.status).toBe('delivered');
+    await request(app).post(hook).send(status(wamid, 'read'));
+    expect((await rowOf(id)).payload.delivery.status).toBe('read');
+    expect((await rowOf(id)).state).toBe('sent');
+    r = await request(app).post(hook).send(status('wamid.unknown', 'read'));
+    expect(r.status).toBe(200);
+    expect(r.body.matched).toBe(0);
+
+    // A failure after acceptance kills the row with Meta's reason, ready for a retry.
+    const id2 = await queueRow();
+    await worker.drain({ onlyId: id2 });
+    const wamid2 = (await rowOf(id2)).payload.providerId;
+    await request(app).post(hook).send(status(wamid2, 'failed', { errors: [{ code: 131026, title: 'Message undeliverable', error_data: { details: 'Not on WhatsApp' } }] }));
+    const failed = await rowOf(id2);
+    expect(failed.state).toBe('dead');
+    expect(failed.last_error).toBe('Delivery failed — 131026: Message undeliverable — Not on WhatsApp');
+    expect(failed.payload.delivery.status).toBe('failed');
+    const box = await manager.agent.get('/api/v1/notifications/outbox?state=dead');
+    expect(box.body.outbox.find((o) => o.id === id2).delivery.status).toBe('failed');
+
+    // The operator replies from the phone: the channel is verified.
+    expect((await operator.agent.get('/api/v1/notifications/me')).body.whatsapp.verified).toBe(false);
+    r = await request(app).post(hook).send({ object: 'whatsapp_business_account', entry: [{ changes: [{ value: {
+      messaging_product: 'whatsapp', messages: [{ from: '919876543210', id: 'wamid.in1', timestamp: '1757000002', type: 'text', text: { body: 'hi' } }] } }] }] });
+    expect(r.body).toMatchObject({ messages: 1, verified: 1 });
+    expect((await operator.agent.get('/api/v1/notifications/me')).body.whatsapp.verified).toBe(true);
+    expect((await request(app).post(hook).send({ object: 'page', entry: [] })).body.status).toBe('ignored');
+
+    // With an app secret, an unsigned document is refused and a signed one accepted.
+    process.env.WHATSAPP_APP_SECRET = 'app-secret';
+    const doc = JSON.stringify(status(wamid, 'read'));
+    expect((await request(app).post(hook).set('Content-Type', 'application/json').send(doc)).status).toBe(401);
+    const sig = `sha256=${require('crypto').createHmac('sha256', 'app-secret').update(doc).digest('hex')}`;
+    expect((await request(app).post(hook).set('Content-Type', 'application/json').set('X-Hub-Signature-256', sig).send(doc)).status).toBe(200);
+    delete process.env.WHATSAPP_APP_SECRET;
+  });
+
+  test('a bare local number is stored as E.164 with the default country code', async () => {
+    const put = await operator.agent.put('/api/v1/notifications/me/channels').send({ whatsapp: { enabled: true, address: '98765 43210' } });
+    expect(put.status).toBe(200);
+    expect(put.body.whatsapp.address).toBe('+919876543210');
+    expect((await operator.agent.put('/api/v1/notifications/me/channels').send({ whatsapp: { enabled: true, address: '9876' } })).status).toBe(422);
+  });
+
+  test('the template catalogue: manager only, needs the WABA id, then lists approval and mapping', async () => {
+    expect((await engineer.agent.get('/api/v1/notifications/whatsapp/templates')).status).toBe(403);
+    let r = await manager.agent.get('/api/v1/notifications/whatsapp/templates');
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: false, provider: 'meta', reason: expect.stringMatching(/WHATSAPP_BUSINESS_ACCOUNT_ID/) });
+    process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = 'WABA1';
+    process.env.WHATSAPP_TEMPLATES = '{"*":"watersim_alert"}';
+    whatsapp.setFetch(async (url) => { calls.push({ url }); return { ok: true, status: 200, json: async () => ({ data: [
+      { id: '1', name: 'watersim_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', components: [{ type: 'BODY', text: '*{{1}}*\n{{2}}' }] },
+      { id: '2', name: 'hello_world', status: 'PENDING', category: 'UTILITY', language: 'en_US', components: [{ type: 'HEADER', format: 'TEXT', text: 'Hello' }, { type: 'BODY', text: 'Welcome' }] },
+    ], paging: { cursors: { after: 'x' } } }) }; });
+    r = await manager.agent.get('/api/v1/notifications/whatsapp/templates?refresh=true');
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, provider: 'meta', cached: false });
+    expect(calls[0].url).toMatch(/\/v21\.0\/WABA1\/message_templates\?/);
+    expect(r.body.templates.find((t) => t.name === 'watersim_alert')).toMatchObject({ status: 'APPROVED', params: 2, mappedTo: ['*'] });
+    expect(r.body.templates.find((t) => t.name === 'hello_world')).toMatchObject({ status: 'PENDING', params: 0, mappedTo: [] });
+    whatsapp.setFetch(async () => ({ ok: false, status: 400, json: async () => ({ error: { code: 190, message: 'Invalid OAuth access token' } }) }));
+    r = await manager.agent.get('/api/v1/notifications/whatsapp/templates?refresh=true');
+    expect(r.status).toBe(502);
+    expect(r.body.error).toMatch(/system-user token/);
+    delete process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+    delete process.env.WHATSAPP_TEMPLATES;
+  });
+});

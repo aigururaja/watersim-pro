@@ -23,24 +23,33 @@ const ADAPTERS = { email, whatsapp, webhook };
 const INTERVAL_MS = Math.max(1000, parseInt(process.env.NOTIFICATIONS_WORKER_INTERVAL_MS || '5000', 10) || 5000);
 const MAX_ATTEMPTS = Math.max(1, parseInt(process.env.NOTIFICATIONS_MAX_ATTEMPTS || '8', 10) || 8);
 const BATCH = 25;
+const DUE_SLACK_MS = 1000;
 
 let timer = null;
 let running = false;
 
 const backoffMs = (attempt) => Math.min(3600_000, 30_000 * 2 ** Math.max(0, attempt - 1));
+const asObject = (p) => (p && typeof p === 'object' ? p : (() => { try { return JSON.parse(p || '{}'); } catch { return {}; } })());
 
-/** Claim due rows (or one specific row) and mark them 'sending'. */
+/**
+ * Claim due rows (or one specific row) and mark them 'sending'.
+ * "Due" is judged against this process's clock with a second of slack rather
+ * than the database's NOW(): SQLite's default timestamp and the JS clock can
+ * differ by a millisecond, which left a row inserted and drained in the same
+ * instant (the settings page's "send test", a retry) unclaimed.
+ */
 async function claim({ onlyId = null, limit = BATCH } = {}) {
+  const due = new Date(Date.now() + DUE_SLACK_MS);
   const { rows } = await query(
-    `UPDATE notification_outbox o SET state = 'sending', attempts = o.attempts + 1
+    `UPDATE notification_outbox AS o SET state = 'sending', attempts = o.attempts + 1
       WHERE o.id IN (
         SELECT id FROM notification_outbox
-         WHERE state IN ('pending', 'failed') AND next_attempt_at <= NOW() ${onlyId ? 'AND id = $2' : ''}
+         WHERE state IN ('pending', 'failed') AND next_attempt_at <= $2 ${onlyId ? 'AND id = $3' : ''}
          ORDER BY created_at
          LIMIT $1
          FOR UPDATE SKIP LOCKED)
       RETURNING *`,
-    onlyId ? [limit, onlyId] : [limit]
+    onlyId ? [limit, due, onlyId] : [limit, due]
   );
   return rows;
 }
@@ -52,10 +61,16 @@ async function deliver(row) {
     return 'dead';
   }
   try {
-    const { providerId } = await adapter.send({ address: row.address, subject: row.subject, body: row.body, payload: row.payload, id: row.id, endpointId: row.endpoint_id || null });
+    const result = await adapter.send({
+      address: row.address, subject: row.subject, body: row.body, payload: row.payload,
+      eventType: row.event_type, template: row.template, id: row.id, endpointId: row.endpoint_id || null,
+    });
+    const { providerId, provider, kind, waTemplate } = result || {};
+    // Merged here, not in SQL, so the statement reads the same on Postgres and SQLite.
+    const payload = { ...asObject(row.payload), providerId, ...(provider ? { provider } : {}), ...(kind ? { kind } : {}), ...(waTemplate ? { waTemplate } : {}) };
     await query(
-      `UPDATE notification_outbox SET state = 'sent', sent_at = NOW(), last_error = NULL, payload = payload || $2::jsonb WHERE id = $1`,
-      [row.id, JSON.stringify({ providerId })]
+      `UPDATE notification_outbox SET state = 'sent', sent_at = NOW(), last_error = NULL, payload = $2::jsonb WHERE id = $1`,
+      [row.id, JSON.stringify(payload)]
     );
     return 'sent';
   } catch (err) {

@@ -8,8 +8,15 @@
  *                  and admins (capability notify.policy).
  *   Outbox         recent deliveries with state and error; retry from here.
  *
- * Provider status (SMTP, Twilio, dry-run) comes from the API so the page
- * says plainly why a message is dead instead of leaving people to guess.
+ *   Templates      (managers, Meta) the WhatsApp Business Account's message
+ *                  templates with Meta's approval status and which events
+ *                  they are mapped to — outside a 24-hour reply window Meta
+ *                  delivers nothing else.
+ *
+ * Provider status (SMTP, WhatsApp via Meta's Cloud API or Twilio, dry-run)
+ * comes from the API so the page says plainly why a message is dead instead
+ * of leaving people to guess; a WhatsApp row also shows Meta's delivery
+ * receipt (delivered / read / failed) once the webhook has reported it.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Mail, MessageCircle, Send, Loader2, Plus, Trash2, RefreshCw, RotateCcw, AlertTriangle, CheckCircle2 } from 'lucide-react';
@@ -23,7 +30,7 @@ function ProviderBanner({ providers }) {
   if (!providers) return null;
   const items = [
     { key: 'email', label: 'Email (SMTP)', s: providers.email },
-    { key: 'whatsapp', label: 'WhatsApp (Twilio)', s: providers.whatsapp },
+    { key: 'whatsapp', label: providers.whatsapp?.provider === 'twilio' ? 'WhatsApp (Twilio)' : 'WhatsApp (Meta Cloud API)', s: providers.whatsapp },
   ];
   return (
     <div className="flex flex-wrap gap-2 text-xs" aria-label="Provider status">
@@ -50,6 +57,23 @@ function StatePill({ state }) {
   return <span data-state={state} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${cls}`}>{state}</span>;
 }
 
+function DeliveryPill({ d }) {
+  if (!d?.status) return null;
+  const cls = d.status === 'read' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+    : d.status === 'delivered' ? 'text-sky-700 bg-sky-50 border-sky-200'
+      : d.status === 'failed' ? 'text-red-700 bg-red-50 border-red-200'
+        : 'text-gray-600 bg-gray-50 border-gray-200';
+  return <span data-delivery={d.status} title={d.at ? `Meta reported ${d.status} at ${new Date(d.at).toLocaleString()}` : ''} className={`ml-1 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${cls}`}>{d.status}</span>;
+}
+
+const TEMPLATE_STATUS = {
+  APPROVED: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+  PENDING: 'text-amber-700 bg-amber-50 border-amber-200',
+  REJECTED: 'text-red-700 bg-red-50 border-red-200',
+  PAUSED: 'text-red-700 bg-red-50 border-red-200',
+  DISABLED: 'text-red-700 bg-red-50 border-red-200',
+};
+
 export default function NotificationsTab({ showToast }) {
   const { can } = useAuth();
   const canPolicy = typeof can === 'function' && can('notify.policy');
@@ -61,6 +85,7 @@ export default function NotificationsTab({ showToast }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
   const [testResult, setTestResult] = useState(null);
+  const [templates, setTemplates] = useState(null);
   const [form, setForm] = useState({ email: { enabled: true, address: '' }, whatsapp: { enabled: false, address: '' } });
   const [newSub, setNewSub] = useState({ target: 'role:engineer', eventType: 'alarm.raised', minSeverity: 'warning', channels: ['email'] });
 
@@ -140,6 +165,16 @@ export default function NotificationsTab({ showToast }) {
     finally { setBusy(null); }
   };
 
+  const checkTemplates = async () => {
+    setBusy('templates');
+    try {
+      const { data } = await api.get('/notifications/whatsapp/templates?refresh=true');
+      setTemplates(data);
+    } catch (err) {
+      setTemplates({ error: err.response?.data?.error || 'Could not read the templates from Meta' });
+    } finally { setBusy(null); }
+  };
+
   const toggleChannel = (c) => setNewSub((n) => ({ ...n, channels: n.channels.includes(c) ? n.channels.filter((x) => x !== c) : [...n.channels, c] }));
 
   return (
@@ -166,8 +201,13 @@ export default function NotificationsTab({ showToast }) {
               <input type="checkbox" checked={form.whatsapp.enabled} onChange={(e) => setForm((f) => ({ ...f, whatsapp: { ...f.whatsapp, enabled: e.target.checked } }))} className="accent-brand-600" />
               <MessageCircle className="w-4 h-4 text-gray-500" /> WhatsApp
             </label>
-            <input className="input py-1.5 text-sm w-full font-mono" placeholder="+91 98765 43210 (E.164)" value={form.whatsapp.address}
+            <input className="input py-1.5 text-sm w-full font-mono" placeholder="+91 98765 43210 or 98765 43210" value={form.whatsapp.address}
               onChange={(e) => setForm((f) => ({ ...f, whatsapp: { ...f.whatsapp, address: e.target.value.replace(/\s+/g, '') } }))} aria-label="WhatsApp number" />
+            <div className="text-xs text-gray-500" data-testid="whatsapp-verified">
+              {me?.whatsapp?.verified
+                ? 'Verified — this number has replied to the plant’s WhatsApp number.'
+                : 'Send “hi” to the plant’s WhatsApp number once from this phone: that verifies the number and opens a 24-hour window for plain-text messages.'}
+            </div>
             <button onClick={() => sendTest('whatsapp')} disabled={!!busy || !me?.whatsapp?.address} className="btn-secondary text-xs disabled:opacity-50" aria-label="Send test WhatsApp">
               {busy === 'test:whatsapp' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send test
             </button>
@@ -283,7 +323,7 @@ export default function NotificationsTab({ showToast }) {
                     <td className="px-3 py-2"><span className="font-mono">{o.address}</span>{o.userName ? <span className="text-gray-400"> · {o.userName}</span> : null}<span className="text-gray-400"> · {o.channel}</span></td>
                     <td className="px-3 py-2 font-mono">{o.eventType}</td>
                     <td className="px-3 py-2 truncate max-w-[18rem]" title={o.subject}>{o.subject}</td>
-                    <td className="px-3 py-2"><StatePill state={o.state} />{o.lastError && <div className="text-[10px] text-red-600 mt-0.5 max-w-[16rem] truncate" title={o.lastError}>{o.lastError}</div>}</td>
+                    <td className="px-3 py-2"><StatePill state={o.state} /><DeliveryPill d={o.delivery} />{o.lastError && <div className="text-[10px] text-red-600 mt-0.5 max-w-[16rem] truncate" title={o.lastError}>{o.lastError}</div>}</td>
                     <td className="px-3 py-2 text-right">
                       {(o.state === 'dead' || o.state === 'failed') && (
                         <button onClick={() => retry(o)} disabled={!!busy} className="btn-secondary text-[11px] py-0.5 px-2 disabled:opacity-50" aria-label={`Retry ${o.subject}`}>
@@ -297,6 +337,46 @@ export default function NotificationsTab({ showToast }) {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {/* ── WhatsApp templates (Meta) ── */}
+      {canPolicy && me?.providers?.whatsapp?.provider !== 'twilio' && (
+        <section aria-label="WhatsApp templates" className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">WhatsApp templates</h3>
+            <button onClick={checkTemplates} disabled={busy === 'templates'} className="btn-secondary text-xs disabled:opacity-50" aria-label="Check Meta templates">
+              {busy === 'templates' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Check Meta templates
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            Outside a 24-hour reply window Meta delivers only approved templates. WaterSim fills two parameters — the subject and the details —
+            so a template mapped in <span className="font-mono">WHATSAPP_TEMPLATES</span> must take exactly two.
+          </p>
+          {templates?.error && <div role="alert" className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{templates.error}</div>}
+          {templates && !templates.error && !templates.ok && <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{templates.reason}</div>}
+          {templates?.ok && (
+            <div className="overflow-x-auto card">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+                  <tr><th className="text-left px-3 py-2">Template</th><th className="text-left px-3 py-2">Meta status</th><th className="text-left px-3 py-2">Language</th><th className="text-left px-3 py-2">Category</th><th className="text-left px-3 py-2">Params</th><th className="text-left px-3 py-2">Used for</th></tr>
+                </thead>
+                <tbody>
+                  {templates.templates.map((t) => (
+                    <tr key={t.id || t.name} className="border-t border-gray-100" data-template={t.name}>
+                      <td className="px-3 py-2 font-mono">{t.name}</td>
+                      <td className="px-3 py-2"><span data-status={t.status} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${TEMPLATE_STATUS[t.status] || 'text-gray-600 bg-gray-50 border-gray-200'}`}>{t.status}</span></td>
+                      <td className="px-3 py-2">{t.language}</td>
+                      <td className="px-3 py-2">{t.category}</td>
+                      <td className={`px-3 py-2 ${t.mappedTo?.length && t.params !== 2 ? 'text-red-600 font-semibold' : ''}`} title={t.mappedTo?.length && t.params !== 2 ? 'WaterSim sends two parameters; Meta will refuse this template' : ''}>{t.params}</td>
+                      <td className="px-3 py-2 font-mono">{t.mappedTo?.length ? t.mappedTo.join(', ') : <span className="text-gray-400">—</span>}</td>
+                    </tr>
+                  ))}
+                  {!templates.templates.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">No templates on this WhatsApp Business Account yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
     </div>

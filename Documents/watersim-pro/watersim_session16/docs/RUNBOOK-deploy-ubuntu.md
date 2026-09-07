@@ -253,12 +253,24 @@ ALARM_QUALITY_SWEEP_MS=5000
 NOTIFICATIONS_DRY_RUN=false
 NOTIFICATIONS_WORKER_INTERVAL_MS=5000
 NOTIFICATIONS_MAX_ATTEMPTS=8
-SMTP_HOST=
+# Email: a Gmail account with an app password is enough (§8.1)
+SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM="WaterSim Pro <no-reply@${DOMAIN}>"
+# WhatsApp through Meta's Cloud API — the CRM's business account (§8.1)
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_BUSINESS_ACCOUNT_ID=
+WHATSAPP_API_VERSION=v21.0
+WHATSAPP_DEFAULT_COUNTRY_CODE=91
+WHATSAPP_TEMPLATES={"*":"watersim_alert"}
+WHATSAPP_TEMPLATE_LANG=en_US
+WHATSAPP_VERIFY_TOKEN=$(openssl rand -hex 16)
+WHATSAPP_APP_SECRET=
+# Twilio instead: WHATSAPP_PROVIDER=twilio and the three TWILIO_* values
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_WHATSAPP_FROM=+14155238886
@@ -282,6 +294,56 @@ sudo chmod 640 /etc/watersim/backend.env
 `/tmp` (the same trick `k8s/backend.yaml` uses). Leave `PLC_ALLOW_LOCAL_HOSTS`
 and `WEBHOOK_ALLOW_LOCAL_HOSTS` off unless the server sits on an isolated OT
 network — both open an SSRF surface.
+
+### 8.1 WhatsApp (Meta Cloud API) and Gmail
+
+WaterSim sends WhatsApp through the WhatsApp Business Account the enterprise
+CRM already uses, so nothing new is registered with Meta. From the CRM's
+`.env` copy `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN` (a permanent
+system-user token with `whatsapp_business_messaging` and
+`whatsapp_business_management`) and `WHATSAPP_BUSINESS_ACCOUNT_ID` into
+`/etc/watersim/backend.env`. Then, in the Meta App Dashboard → WhatsApp →
+Configuration:
+
+1. **Webhook.** Callback URL `https://${DOMAIN}/api/v1/webhooks/whatsapp`,
+   verify token = `WHATSAPP_VERIFY_TOKEN`, subscribed to the **messages**
+   field. Meta calls the URL once to verify (the backend echoes the
+   challenge) and from then on posts delivery receipts — sent → delivered →
+   read, or failed with a reason — which appear against each message under
+   Settings → Notifications → Recent deliveries. A Meta app has one callback
+   URL: if the CRM owns it, leave it there; messages still send, only the
+   receipts stay with the CRM.
+2. **App secret** (App settings → Basic) into `WHATSAPP_APP_SECRET`, so every
+   webhook body is checked against its `X-Hub-Signature-256`.
+3. **Template.** Meta delivers plain text only to a person who wrote to the
+   number in the last 24 hours; every alarm outside that window needs an
+   approved template. Create one UTILITY template named `watersim_alert`
+   (language en_US) whose body is `*{{1}}*` on the first line and `{{2}}` on
+   the second (sample values: "Alarm: TSS high" / "TSS 50 exceeded max 30 ·
+   Flowsheet: ITC STP"). When Meta shows it APPROVED, set
+   `WHATSAPP_TEMPLATES={"*":"watersim_alert"}` and restart. Per-event
+   templates use the event type as the key (`"alarm.":"watersim_alarm"`);
+   every template must take exactly two body parameters. Settings →
+   Notifications → "Check Meta templates" lists the account's templates with
+   their status.
+4. **Each person.** Settings → Notifications → WhatsApp number (a 10-digit
+   Indian number is accepted and stored as +91…), then send "hi" once to the
+   plant's WhatsApp number from that phone: that verifies the number and
+   opens the 24-hour window, so "Send test" works before the template is
+   approved.
+
+**Email.** A Gmail account sends with an app password (Google account →
+Security → 2-Step Verification → App passwords): `SMTP_USER` is the address,
+`SMTP_PASS` the 16-character app password; `SMTP_HOST` may stay empty for
+Gmail. Gmail rewrites the sender to the account itself, so `SMTP_FROM` only
+matters on a domain of your own (with SPF/DKIM, or it lands in spam).
+
+One real message per channel from the server, without a browser (the §9
+helper loads the environment file):
+
+```bash
+node scripts/notify-live-test.js --email you@example.com --phone +919876543210 --pick-template
+```
 
 ## 9. Migrate, seed, and a helper for one-off commands
 
