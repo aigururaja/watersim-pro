@@ -12,7 +12,7 @@
 'use strict';
 
 const { createTestUser, loginAs, makeProject, makeFlowsheet } = require('./helpers');
-const { query } = require('../db/pool');
+const { query, isSqlite } = require('../db/pool');
 const historian = require('../historian');
 const { readHistory, historyToCsv, chooseBucket } = require('../historian/query');
 const { buildPeriodPayload } = require('../reports/periodReport');
@@ -66,6 +66,12 @@ afterAll(async () => {
 
 describe('write path', () => {
   test('samples land in the month partition for their timestamp', async () => {
+    if (isSqlite) {
+      // One plain table on SQLite — what matters is that every sample landed.
+      const { rows } = await query(`SELECT COUNT(*)::int AS n FROM tag_samples WHERE tag_id = $1`, [tagA.id]);
+      expect(rows[0].n).toBe(31);
+      return;
+    }
     const { rows } = await query(
       `SELECT tableoid::regclass AS part, COUNT(*)::int AS n FROM tag_samples WHERE tag_id = $1 GROUP BY 1`, [tagA.id]
     );
@@ -76,6 +82,7 @@ describe('write path', () => {
 
   test('ensurePartitions is idempotent and covers next month', async () => {
     expect(await historian.ensurePartitions()).toBe(0);
+    if (isSqlite) return; // nothing to create: no partitions
     const next = new Date(); next.setUTCMonth(next.getUTCMonth() + 1);
     const name = `tag_samples_y${next.getUTCFullYear()}m${String(next.getUTCMonth() + 1).padStart(2, '0')}`;
     const { rows } = await query('SELECT to_regclass($1) AS r', [name]);
@@ -261,8 +268,12 @@ describe('retention', () => {
   test('names only partitions whose month ended before the cutoff', async () => {
     const now = Date.UTC(2030, 5, 15); // June 2030
     const all = await historian._listExpiredPartitions(0, now);
-    // Every existing partition is before 2030 → all named; none named with a huge retention.
-    expect(all.length).toBeGreaterThanOrEqual(1);
+    if (isSqlite) {
+      expect(all).toEqual([]); // one plain table; SQLite retention deletes rows by ts instead
+    } else {
+      // Every existing partition is before 2030 → all named; none named with a huge retention.
+      expect(all.length).toBeGreaterThanOrEqual(1);
+    }
     expect(await historian._listExpiredPartitions(100_000, now)).toEqual([]);
     // Retention on the real clock with the configured days drops nothing from this test's data.
     const out = await historian.applyRetention();

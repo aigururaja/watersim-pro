@@ -28,7 +28,7 @@
 const express = require('express');
 const { body, query: qv, validationResult } = require('express-validator');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { pool } = require('../db/pool');
+const { withTransaction } = require('../db/pool');
 const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
 const plant = require('../plants/itcStp');
@@ -265,36 +265,34 @@ router.post(
     const projectName = req.body.name || `${plant.IDENTITY.name} — Monitoring & Control`;
     const flowsheetName = req.body.flowsheetName || 'ITC STP — Full plant';
 
-    const client = await pool.connect();
     try {
-      await client.query('BEGIN');
+      const { project, flowsheet } = await withTransaction(async (client) => {
+        const { rows: [project] } = await client.query(
+          `INSERT INTO projects (organisation_id, created_by, name, description, project_type, tags)
+           VALUES ($1,$2,$3,$4,'wastewater',ARRAY['itc','stp','sbr','reuse'])
+           RETURNING id, name`,
+          [
+            orgId(req), userId(req), projectName,
+            `${plant.IDENTITY.objective}. Client ${plant.IDENTITY.client}, contractor `
+              + `${plant.IDENTITY.contractor}, sub-contractor ${plant.IDENTITY.subContractor}. `
+              + `Design flow ${plant.IDENTITY.designFlowKld} KLD. Generated from `
+              + `${plant.IDENTITY.sourceDocument}.`,
+          ]
+        );
 
-      const { rows: [project] } = await client.query(
-        `INSERT INTO projects (organisation_id, created_by, name, description, project_type, tags)
-         VALUES ($1,$2,$3,$4,'wastewater',ARRAY['itc','stp','sbr','reuse'])
-         RETURNING id, name`,
-        [
-          orgId(req), userId(req), projectName,
-          `${plant.IDENTITY.objective}. Client ${plant.IDENTITY.client}, contractor `
-            + `${plant.IDENTITY.contractor}, sub-contractor ${plant.IDENTITY.subContractor}. `
-            + `Design flow ${plant.IDENTITY.designFlowKld} KLD. Generated from `
-            + `${plant.IDENTITY.sourceDocument}.`,
-        ]
-      );
-
-      const { rows: [flowsheet] } = await client.query(
-        `INSERT INTO flowsheets (project_id, created_by, name, description, canvas_data)
-         VALUES ($1,$2,$3,$4,$5)
-         RETURNING id, name`,
-        [
-          project.id, userId(req), flowsheetName,
-          'Every unit operation, valve group, instrument and return line from the '
-            + 'proposal schematic, with the control narrative\'s cycle times on the reactors.',
-          JSON.stringify(canvasData),
-        ]
-      );
-
-      await client.query('COMMIT');
+        const { rows: [flowsheet] } = await client.query(
+          `INSERT INTO flowsheets (project_id, created_by, name, description, canvas_data)
+           VALUES ($1,$2,$3,$4,$5)
+           RETURNING id, name`,
+          [
+            project.id, userId(req), flowsheetName,
+            'Every unit operation, valve group, instrument and return line from the '
+              + 'proposal schematic, with the control narrative\'s cycle times on the reactors.',
+            JSON.stringify(canvasData),
+          ]
+        );
+        return { project, flowsheet };
+      });
 
       auditLog(req, 'plant.instantiate', 'flowsheet', flowsheet.id, {
         plant: plant.PLANT_ID,
@@ -314,10 +312,7 @@ router.post(
         canvasUrl: `/projects/${project.id}/flowsheets/${flowsheet.id}`,
       });
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
       next(err);
-    } finally {
-      client.release();
     }
   }
 );

@@ -19,23 +19,24 @@ Internet ──► nginx :80/:443 (TLS via certbot)
                │                                  user watersim, /opt/watersim/app/backend
                │                                    ├─ Python venv /opt/watersim/venv
                │                                    │    PDF/Excel reports, PLC bridge
-               │                                    └─ PostgreSQL 16  127.0.0.1:5432
+               │                                    └─ SQLite file /opt/watersim/data/watersim.db
                └─ /metrics is NOT proxied (scrape 127.0.0.1:4000/metrics locally)
 ```
 
 One process does everything the compose stack spreads over five containers:
 the API, the WebSocket server, the PLC poller, the historian roll-ups, the
 alarm sweep, the notification worker and the digital-twin loop all run inside
-`src/server.js`. There is nothing else to schedule except backups and TLS
-renewal.
+`src/server.js`, and the database is a single SQLite file it opens itself
+(`node:sqlite`, built into Node 22). There is nothing else to schedule except
+backups and TLS renewal, and no database server to run.
 
 How this differs from the container runbook:
 
 | | Docker / k8s | This runbook |
 |---|---|---|
 | Frontend | nginx container serves the image's `dist` | host nginx serves `/var/www/watersim` |
-| Backend | `ghcr.io/…/watersim-backend` image | `node` from NodeSource, managed by systemd |
-| Database | `postgres:16-alpine`, no TLS | Ubuntu's `postgresql-16` on loopback, `sslmode=disable` (see §5) |
+| Backend | `ghcr.io/…/watersim-backend` image | `node` 22, managed by systemd |
+| Database | `postgres:16-alpine` container | one SQLite file under `/opt/watersim/data` (PostgreSQL still works: Appendix A) |
 | Python | baked into the backend image | a venv at `/opt/watersim/venv`, pointed to by `PYTHON_BIN` |
 | TLS | `scripts/init-tls.sh` + certbot sidecar | `certbot` package + its systemd timer |
 | Config | `.env.prod` read by compose | `/etc/watersim/backend.env` read by systemd |
@@ -44,11 +45,11 @@ How this differs from the container runbook:
 
 | | Minimum | Recommended |
 |---|---|---|
-| OS | Ubuntu 22.04 LTS | Ubuntu 24.04 LTS (ships PostgreSQL 16 and Python 3.12) |
-| vCPU | 2 | 4 — each simulation run is a worker thread; keep `SIMULATION_MAX_CONCURRENT` ≤ vCPUs |
-| RAM | 4 GB | 8 GB — the Vite build transiently needs ~2 GB on top of the running stack |
-| Disk | 40 GB SSD | 80 GB — the historian writes ~1 GB/day of raw samples at a 2 s poll over 340 tags |
-| Swap | 2 GB | 2 GB — so a build cannot OOM-kill Postgres |
+| OS | Ubuntu 22.04 LTS | Ubuntu 24.04 LTS (ships Python 3.12) |
+| vCPU | 1 | 2 — each simulation run is a worker thread; keep `SIMULATION_MAX_CONCURRENT` ≤ vCPUs |
+| RAM | 2 GB | 4 GB. Build the frontend elsewhere if the box has less than 4 GB: the Vite build transiently needs ~2 GB |
+| Disk | 20 GB SSD | 40 GB — the historian writes ~1 GB/day of raw samples at a 2 s poll over 340 tags |
+| Swap | 1 GB | 2 GB |
 
 Inbound ports: **22, 80, 443** only. The backend listens on `0.0.0.0:4000`
 (hardcoded in `src/server.js`); the firewall in §11 keeps it off the internet.
@@ -56,9 +57,9 @@ Inbound ports: **22, 80, 443** only. The backend listens on `0.0.0.0:4000`
 A **DNS A record for your domain must already point at this server** before
 §12 — Let's Encrypt validates over HTTP on port 80.
 
-Runtime versions used below. The repo's CI and Dockerfiles pin Node 20 and the
-dev machines run Node 24; `package.json` declares `>=18`. Node 20 left LTS
-support in April 2026, so install **Node 22 LTS**.
+Node: the SQLite driver uses `node:sqlite`, which needs **Node 22.13 or
+newer** (Node 22 LTS or 24). The repo's CI still pins 20 for the Postgres path;
+`package.json` declares `>=18`. Install Node 22 LTS.
 
 ## 3. Base packages
 
@@ -71,78 +72,55 @@ sudo apt-get install -y ca-certificates curl git gnupg nginx ufw rsync \
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
 node --version && npm --version            # v22.x, npm 10.x
-
-# PostgreSQL 16
-# Ubuntu 24.04: the distro package IS 16
-sudo apt-get install -y postgresql postgresql-contrib
-# Ubuntu 22.04 ships 14 — use the PGDG repo instead of the line above:
-#   sudo install -d /usr/share/postgresql-common/pgdg
-#   sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
-#     https://www.postgresql.org/media/keys/ACCC4CF8.asc
-#   echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-#     https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-#     | sudo tee /etc/apt/sources.list.d/pgdg.list
-#   sudo apt-get update && sudo apt-get install -y postgresql-16
-psql --version                              # 16.x
 ```
+
+On a server that already runs another Node app on the distro's `/usr/bin/node`,
+do not replace it: unpack the official Node 22 tarball into a private
+directory instead (`curl -fsSL https://nodejs.org/dist/v22.x.y/node-v22.x.y-linux-x64.tar.xz | sudo tar -xJ --strip-components=1 -C /opt/watersim/node`)
+and use `/opt/watersim/node/bin/node` everywhere this runbook says `node`.
+
+No database package is needed. (For PostgreSQL instead, see Appendix A.)
 
 ## 4. Service user and directories
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/watersim --shell /usr/sbin/nologin watersim
-sudo install -d -o root -g root -m 755 /var/www/watersim         # frontend build
-sudo install -d -o root -g watersim -m 750 /etc/watersim         # env file
-sudo install -d -o postgres -g postgres -m 750 /var/backups/watersim
+sudo install -d -o watersim -g watersim -m 700 /opt/watersim/data      # the SQLite file
+sudo install -d -o root -g root -m 755 /var/www/watersim               # frontend build
+sudo install -d -o root -g watersim -m 750 /etc/watersim               # env file
+sudo install -d -o watersim -g watersim -m 750 /var/backups/watersim   # backups
 ```
 
-`watersim` owns the checkout and the venv, runs the API, and can read (not
-write) `/etc/watersim/backend.env`. It has no login shell; every command
-below that must run as it uses `sudo -u watersim -H …`, which needs no shell.
+`watersim` owns the checkout, the venv and the database, runs the API, and
+can read (not write) `/etc/watersim/backend.env`. It has no login shell; every
+command below that must run as it uses `sudo -u watersim -H …`, which needs
+no shell.
 
-## 5. PostgreSQL
+## 5. The database
 
-```bash
-DB_PASS="$(openssl rand -hex 24)"          # hex only — safe inside a URL
-echo "$DB_PASS"                            # keep this for §8
+The backend opens `DATABASE_URL=sqlite:<path>` on start, creates the file if
+it is missing, and keeps it in WAL mode (`watersim.db`, `watersim.db-wal`,
+`watersim.db-shm` side by side — back up all three or, better, use the
+`VACUUM INTO` copy in §14). Everything the application needs — NOW(),
+UUID defaults, `REGEXP` for the phone-number check — is registered by the
+driver at open, so the file must always be written through the application;
+another tool can read it freely.
 
-sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-CREATE ROLE watersim LOGIN PASSWORD '${DB_PASS}';
-CREATE DATABASE watersim_prod OWNER watersim;
-\c watersim_prod
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-SQL
-```
+Rules that follow from one process owning one file:
 
-The first migration creates both extensions itself, and on PostgreSQL 13+
-they are "trusted" so the database owner may do that. Creating them here as
-`postgres` removes the doubt.
+- **One backend process per file.** systemd's `Restart=always` gives you that.
+  Never run a second copy (a dev server, a one-off script that keeps running)
+  against the production file at the same time.
+- The directory, not just the file, must be writable by `watersim`: WAL mode
+  creates the `-wal` and `-shm` files next to it.
+- Do not open the production file as `root` while the service runs: the
+  side files it creates would then belong to root and the service loses write
+  access. Use `sudo -u watersim -H watersim-node …` for one-off commands (§9).
 
-Ubuntu's PostgreSQL listens on `127.0.0.1` only and accepts password auth from
-loopback out of the box (`host all all 127.0.0.1/32 scram-sha-256` in
-`pg_hba.conf`) — nothing to change.
-
-**Why `sslmode=disable` in the URL.** `backend/src/db/pool.js` turns on TLS
-with certificate verification whenever `NODE_ENV=production`. Ubuntu's
-PostgreSQL has `ssl = on` with a self-signed "snakeoil" certificate, which
-verification rejects, and turning verification off still costs a TLS
-handshake per connection to `127.0.0.1`. Appending `?sslmode=disable` to
-`DATABASE_URL` overrides the pool's setting (the connection string wins) and
-is the right call for a loopback database. Use TLS again if you ever move the
-database to another host.
-
-Optional tuning for a 4–8 GB box, in
-`/etc/postgresql/16/main/conf.d/watersim.conf` (create it; `conf.d` is
-included by default):
-
-```ini
-shared_buffers = 1GB
-effective_cache_size = 3GB
-work_mem = 16MB
-maintenance_work_mem = 256MB
-```
-
-then `sudo systemctl restart postgresql`.
+Migrations (`src/db/migrations_sqlite/`, the same ids as the Postgres set) and
+the seed run through the same helper. A rollback on SQLite is "stop the
+service, restore the last backup" — the `down` scripts exist but cannot drop
+columns.
 
 ## 6. Python virtual environment
 
@@ -176,7 +154,9 @@ optional — PDF and Excel export fail without reportlab/matplotlib/openpyxl.
 ## 7. Code, frontend build, backend dependencies
 
 ```bash
-sudo -u watersim -H git clone <your-repo-url> /opt/watersim/app
+sudo -u watersim -H git clone <your-repo-url> /opt/watersim/repo
+# The application lives in a subdirectory of the repository; keep a stable path to it:
+sudo ln -sfn /opt/watersim/repo/Documents/watersim-pro/watersim_session16 /opt/watersim/app
 cd /opt/watersim/app
 ```
 
@@ -205,6 +185,11 @@ sudo -u watersim -H npm ci --workspace=backend --omit=dev --ignore-scripts
 sudo -u watersim -H /opt/watersim/venv/bin/pip install -r backend/requirements-plc.txt
 ```
 
+On a small server, build the frontend on your workstation instead (same two
+`VITE_` variables), pack `frontend/dist` and upload it:
+`tar -czf dist.tgz -C frontend/dist . && scp dist.tgz server:/tmp/` then
+`sudo tar -xzf /tmp/dist.tgz -C /var/www/watersim`.
+
 Do not leave a `backend/.env` from a dev checkout on the server. `dotenv`
 loads it from the working directory; it cannot override variables systemd
 already set, but it can silently supply ones you forgot.
@@ -228,12 +213,8 @@ LOG_LEVEL=info
 CORS_ORIGIN=https://${DOMAIN}
 APP_URL=https://${DOMAIN}
 
-# ── Database — loopback, no TLS (see §5) ─────────────────────────────────────
-DATABASE_URL=postgres://watersim:${DB_PASS}@127.0.0.1:5432/watersim_prod?sslmode=disable
-DB_POOL_MIN=2
-DB_POOL_MAX=20
-DB_IDLE_TIMEOUT_MS=30000
-DB_CONNECTION_TIMEOUT_MS=5000
+# ── Database — one SQLite file, owned by the service user (see §5) ───────────
+DATABASE_URL=sqlite:/opt/watersim/data/watersim.db
 
 # ── JWT (≥ 32 chars, enforced at boot) ───────────────────────────────────────
 JWT_SECRET=${JWT}
@@ -249,7 +230,7 @@ RATE_LIMIT_MAX=300
 AUTH_RATE_LIMIT_MAX=10
 
 # ── Simulation engine (worker threads — keep ≤ vCPUs) ────────────────────────
-SIMULATION_MAX_CONCURRENT=4
+SIMULATION_MAX_CONCURRENT=2
 SIMULATION_TIMEOUT_MS=60000
 
 # ── Python (reports + PLC bridge) ────────────────────────────────────────────
@@ -305,8 +286,8 @@ network — both open an SSRF surface.
 ## 9. Migrate, seed, and a helper for one-off commands
 
 Every one-off command (migrations, seeds, `sync-cmms-assets.js`) must run as
-`watersim`, inside `backend/`, with the production environment loaded. Save
-this helper once:
+`watersim`, inside `backend/`, with the production environment loaded — never
+as root (§5). Save this helper once:
 
 ```bash
 sudo tee /usr/local/bin/watersim-node >/dev/null <<'EOS'
@@ -315,8 +296,9 @@ sudo tee /usr/local/bin/watersim-node >/dev/null <<'EOS'
 # Usage: sudo -u watersim -H watersim-node src/db/migrate.js status
 set -euo pipefail
 set -a; . /etc/watersim/backend.env; set +a
+export PATH=/opt/watersim/node/bin:$PATH          # private Node 22, if you installed one
 cd /opt/watersim/app/backend
-exec node "$@"
+exec node --disable-warning=ExperimentalWarning "$@"
 EOS
 sudo chmod 755 /usr/local/bin/watersim-node
 ```
@@ -329,11 +311,11 @@ sudo -u watersim -H watersim-node src/db/migrate.js status   # nothing pending
 ```
 
 Seeding is optional. It creates the demo organisation, three users and the
-ITC STP flowsheet with its permit template and alarm rules. The seed users
-have **published passwords** (`admin@watersim.dev` / `Admin1234!`, printed by
-the seed), so on a client-facing server either skip the seed and create the
-first admin through the app, or seed and change every password before the
-box is reachable:
+ITC STP flowsheet with its permit template, tag registry and alarm rules. The
+seed users have **published passwords** (`admin@watersim.dev` / `Admin1234!`,
+printed by the seed), so on a client-facing server either skip the seed and
+create the first admin through the app, or seed and change every password
+before the box is reachable:
 
 ```bash
 sudo -u watersim -H watersim-node src/seeds/index.js
@@ -346,7 +328,7 @@ sudo tee /etc/systemd/system/watersim-backend.service >/dev/null <<'UNIT'
 [Unit]
 Description=WaterSim Pro API (Node.js)
 Documentation=file:///opt/watersim/app/docs/RUNBOOK-deploy-ubuntu.md
-After=network-online.target postgresql.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -355,10 +337,12 @@ User=watersim
 Group=watersim
 WorkingDirectory=/opt/watersim/app/backend
 EnvironmentFile=/etc/watersim/backend.env
+# node:sqlite still prints an "experimental" banner on Node 22
+Environment=NODE_OPTIONS=--disable-warning=ExperimentalWarning
 ExecStart=/usr/bin/node src/server.js
 Restart=always
 RestartSec=5
-# server.js drains on SIGTERM (WS close frames, HTTP, pg pool) and force-exits after 10 s
+# server.js drains on SIGTERM (WS close frames, HTTP, database) and force-exits after 10 s
 KillSignal=SIGTERM
 TimeoutStopSec=20
 LimitNOFILE=65536
@@ -366,7 +350,7 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=watersim-backend
 
-# Hardening — the process writes nothing to disk except matplotlib's cache in /tmp
+# Hardening — the process writes only its database (/opt) and matplotlib's cache (/tmp)
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
@@ -384,6 +368,9 @@ sudo systemctl enable --now watersim-backend
 sudo systemctl status watersim-backend --no-pager
 curl -fsS http://127.0.0.1:4000/health      # {"status":"healthy","db":"connected",…}
 ```
+
+With a private Node install, set `ExecStart=/opt/watersim/node/bin/node src/server.js`
+and add `Environment=PATH=/opt/watersim/node/bin:/usr/local/bin:/usr/bin:/bin`.
 
 Logs are JSON lines in the journal:
 
@@ -439,6 +426,12 @@ The `certbot` package installs `certbot.timer`, which runs `certbot renew`
 twice a day with the same webroot and deploy hook. Check it with
 `systemctl list-timers certbot.timer` and rehearse with
 `sudo certbot renew --dry-run`.
+
+On a server whose nginx already hosts other sites with `certbot --nginx`, do
+the same as those sites: drop the site file below (HTTP block only) into
+`/etc/nginx/sites-enabled/<domain>.conf`, reload, then
+`sudo certbot --nginx -d "$DOMAIN" --redirect` lets certbot add the TLS
+listeners itself.
 
 ### 12.2 Final site
 
@@ -545,7 +538,8 @@ curl -fsS https://$DOMAIN/health | python3 -m json.tool     # status healthy, db
 curl -o /dev/null -sw '%{http_code}\n' https://$DOMAIN/api/v1/plant   # 401 = route mounted
 curl -o /dev/null -sw '%{http_code}\n' https://$DOMAIN/some/spa/route # 200 = SPA fallback
 curl -sI https://$DOMAIN/ | grep -i strict-transport                   # HSTS present
-sudo ss -ltnp | grep -E ':(80|443|4000|5432)\b'   # 5432 on 127.0.0.1; 4000 on 0.0.0.0 but blocked by ufw (§11)
+sudo ss -ltnp | grep -E ':(80|443|4000)\b'   # 4000 on 0.0.0.0 but blocked by ufw (§11)
+sudo ls -l /opt/watersim/data/                # watersim.db(-wal,-shm) owned by watersim
 ```
 
 Then in a browser: log in, open a flowsheet, and confirm in the developer
@@ -556,31 +550,42 @@ read "available" rather than "stub".
 
 ## 14. Backups
 
-PostgreSQL is the only state. `scripts/backup.sh` in the repo is written for
-compose; this is its bare-metal twin, run as the `postgres` user (peer auth,
-no password needed):
+The SQLite file is the only state. Copying it while the service writes is not
+safe (WAL); `VACUUM INTO` produces a consistent single-file copy without
+stopping anything, and the service user can do it through the same Node the
+service runs on:
 
 ```bash
 sudo tee /usr/local/bin/watersim-backup >/dev/null <<'EOS'
 #!/usr/bin/env bash
-# Nightly pg_dump (custom format) of watersim_prod, pruned after RETENTION_DAYS.
+# Consistent copy of the SQLite database (VACUUM INTO), gzipped, pruned after RETENTION_DAYS.
+# Run as the service user:  sudo -u watersim -H /usr/local/bin/watersim-backup
 set -euo pipefail
 DIR=/var/backups/watersim
 KEEP="${RETENTION_DAYS:-14}"
 TS="$(date +%Y%m%d-%H%M%S)"
-OUT="$DIR/watersim-$TS.dump"
-pg_dump --format=custom -d watersim_prod > "$OUT.partial"
+OUT="$DIR/watersim-$TS.db"
+set -a; . /etc/watersim/backend.env; set +a
+SRC="${DATABASE_URL#sqlite:}"
+export PATH=/opt/watersim/node/bin:$PATH
+rm -f "$OUT.partial"
+node --disable-warning=ExperimentalWarning -e '
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(process.argv[1], { readOnly: true });
+  db.exec("VACUUM INTO " + "\x27" + process.argv[2].replace(/\x27/g, "\x27\x27") + "\x27");
+  db.close();
+' "$SRC" "$OUT.partial"
 mv "$OUT.partial" "$OUT"
-[[ -s "$OUT" ]] || { echo "empty dump: $OUT" >&2; exit 1; }
-find "$DIR" -name 'watersim-*.dump' -mtime +"$KEEP" -print -delete
-echo "$(date '+%F %T') wrote $(du -h "$OUT" | cut -f1) $OUT"
+gzip -f "$OUT"
+find "$DIR" -name 'watersim-*.db.gz' -mtime +"$KEEP" -print -delete
+echo "$(date '+%F %T') wrote $(du -h "$OUT.gz" | cut -f1) $OUT.gz"
 EOS
 sudo chmod 755 /usr/local/bin/watersim-backup
 
-sudo -u postgres /usr/local/bin/watersim-backup            # run once now
-( sudo -u postgres crontab -l 2>/dev/null; \
-  echo '30 2 * * * /usr/local/bin/watersim-backup >> /var/backups/watersim/backup.log 2>&1' ) \
-  | sudo -u postgres crontab -
+sudo -u watersim -H /usr/local/bin/watersim-backup        # run once now
+( sudo crontab -l 2>/dev/null; \
+  echo '30 2 * * * sudo -u watersim -H /usr/local/bin/watersim-backup >> /var/backups/watersim/backup.log 2>&1' ) \
+  | sudo crontab -
 ```
 
 Copy `/var/backups/watersim/` off the machine from the same cron (`rclone`,
@@ -591,16 +596,13 @@ survive the disk.
 
 ```bash
 sudo systemctl stop watersim-backend
-sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
-  WHERE datname = 'watersim_prod' AND pid <> pg_backend_pid();"
-sudo -u postgres dropdb watersim_prod
-sudo -u postgres createdb -O watersim watersim_prod
-sudo -u postgres pg_restore -d watersim_prod --no-owner --role=watersim --exit-on-error \
-  /var/backups/watersim/watersim-YYYYMMDD-HHMMSS.dump
+sudo -u watersim -H bash -c 'gunzip -c /var/backups/watersim/watersim-YYYYMMDD-HHMMSS.db.gz > /opt/watersim/data/watersim.db.restore'
+sudo -u watersim -H rm -f /opt/watersim/data/watersim.db /opt/watersim/data/watersim.db-wal /opt/watersim/data/watersim.db-shm
+sudo -u watersim -H mv /opt/watersim/data/watersim.db.restore /opt/watersim/data/watersim.db
 sudo systemctl start watersim-backend
 ```
 
-Rehearse this once on a fresh database before you need it.
+Rehearse this once before you need it.
 
 ## 15. Updating to a new version
 
@@ -613,22 +615,25 @@ sudo tee /usr/local/bin/watersim-update >/dev/null <<'EOS'
 # Update WaterSim Pro from git. Usage: sudo DOMAIN=app.example.com watersim-update [git-ref]
 set -euo pipefail
 : "${DOMAIN:?set DOMAIN=<public hostname>}"
+REPO=/opt/watersim/repo
 APP=/opt/watersim/app
 REF="${1:-}"
-cd "$APP"
+export PATH=/opt/watersim/node/bin:$PATH
 
 # git runs as the checkout's owner — root would trip git's "dubious ownership" check
-sudo -u watersim -H git fetch --all --tags
-if [[ -n "$REF" ]]; then sudo -u watersim -H git checkout --detach "$REF"
-else                    sudo -u watersim -H git pull --ff-only; fi
-echo "deploying $(sudo -u watersim -H git rev-parse --short HEAD)"
+sudo -u watersim -H git -C "$REPO" fetch --all --tags
+if [[ -n "$REF" ]]; then sudo -u watersim -H git -C "$REPO" checkout --detach "$REF"
+else                    sudo -u watersim -H git -C "$REPO" pull --ff-only; fi
+echo "deploying $(sudo -u watersim -H git -C "$REPO" rev-parse --short HEAD)"
 
+cd "$APP"
 sudo -u watersim -H npm ci --workspace=frontend --ignore-scripts
 sudo -u watersim -H env VITE_API_BASE=/api/v1 VITE_WS_URL="wss://$DOMAIN" \
   npm run build --workspace=frontend
 sudo -u watersim -H npm ci --workspace=backend --omit=dev --ignore-scripts
 sudo -u watersim -H /opt/watersim/venv/bin/pip install -q -r backend/requirements-plc.txt
 
+sudo -u watersim -H /usr/local/bin/watersim-backup
 sudo -u watersim -H /usr/local/bin/watersim-node src/db/migrate.js up
 rsync -a --delete frontend/dist/ /var/www/watersim/
 systemctl restart watersim-backend
@@ -646,26 +651,25 @@ sudo chmod 755 /usr/local/bin/watersim-update
 ```
 
 ```bash
-sudo -u postgres /usr/local/bin/watersim-backup         # always back up first
 sudo DOMAIN=app.example.com watersim-update             # latest on the current branch
 sudo DOMAIN=app.example.com watersim-update v1.4.0      # or a tag / commit
 ```
 
-Migrations run while the old process is still serving; they are additive and
-the compose flow does the same.
+The script backs up before migrating. Migrations run while the old process is
+still serving; they are additive.
 
-**Rollback:** `sudo DOMAIN=… watersim-update <previous-commit>`. Migrations
-are forward-only — rolling back past a schema change needs
-`sudo -u watersim -H watersim-node src/db/migrate.js down` first (one
-migration per call), or a restore from §14.
+**Rollback:** `sudo DOMAIN=… watersim-update <previous-commit>`, then restore
+the backup taken just before the migration (§14) if the schema changed.
 
 ## 16. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
-| Boot log: `The server does not support SSL connections` or `self signed certificate` | `DATABASE_URL` lacks `?sslmode=disable` (§5) |
 | Boot exits: `JWT_SECRET must be at least 32 characters` / `Missing required env var … CORS_ORIGIN` | fix `/etc/watersim/backend.env`; `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN` are mandatory in production |
-| `/health` returns 503 `degraded` | Postgres down or wrong credentials: `sudo -u postgres psql -c '\du'`, `journalctl -u postgresql` |
+| `/health` returns 503 `degraded`; log says `attempt to write a readonly database` or `unable to open database file` | `/opt/watersim/data` (the directory, not just the file) is not writable by `watersim`, or a root-owned `-wal`/`-shm` file is sitting next to it (§5). `chown -R watersim:watersim /opt/watersim/data` |
+| `database is locked` in the log | a second process has the file open for writing — a dev server, a stray one-off script, or a backup made by copying instead of `VACUUM INTO`. One backend per file |
+| `no such function: uuid_generate_v4` / `REGEXP` | the file was written through something other than the application (sqlite3 CLI); the driver registers those functions at open. Write only through `watersim-node` or the service |
+| `ExperimentalWarning: SQLite is an experimental feature` in the journal | harmless on Node 22; `NODE_OPTIONS=--disable-warning=ExperimentalWarning` in the unit silences it |
 | Saving a large flowsheet → 413 | `client_max_body_size` missing from the nginx site (§12.2) |
 | WebSocket never reaches 101; console shows `wss://…/ws/ws/…` | frontend was built with `VITE_WS_URL` ending in `/ws`; rebuild with the bare origin (§7) |
 | WebSocket 400/502 | nginx `/ws/` location lacks the `Upgrade`/`Connection` headers |
@@ -676,4 +680,40 @@ migration per call), or a restore from §14.
 | Browser shows the old UI after an update | `index.html` cached; the `expires -1` rule in §12.2 prevents it going forward, hard-refresh once |
 | `npm ci` fails with lockfile errors | run it from `/opt/watersim/app` (repo root) with `--workspace=…`, never inside `backend/` or `frontend/` |
 | `certbot renew --dry-run` fails | port 80 blocked, or the HTTP server block lost its `/.well-known/acme-challenge/` location |
-| Disk filling up | historian raw partitions: lower `HISTORIAN_RAW_RETENTION_DAYS`; check `du -sh /var/lib/postgresql /var/backups/watersim` |
+| Disk filling up | historian raw samples: lower `HISTORIAN_RAW_RETENTION_DAYS`; check `du -sh /opt/watersim/data /var/backups/watersim` |
+
+---
+
+## Appendix A — Using PostgreSQL instead
+
+The backend still speaks PostgreSQL: point `DATABASE_URL` at a `postgres://`
+URL (or set `DB_CLIENT=pg`) and `src/db/pool.js` selects the `pg` driver and
+`src/db/migrations/`. The docker-compose and Kubernetes deployments do this.
+On a bare Ubuntu server:
+
+```bash
+sudo apt-get install -y postgresql postgresql-contrib     # 24.04 ships 16; 22.04 needs the PGDG repo for 16
+DB_PASS="$(openssl rand -hex 24)"
+sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
+CREATE ROLE watersim LOGIN PASSWORD '${DB_PASS}';
+CREATE DATABASE watersim_prod OWNER watersim;
+\c watersim_prod
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+SQL
+```
+
+Then in `/etc/watersim/backend.env`:
+
+```
+DATABASE_URL=postgres://watersim:<DB_PASS>@127.0.0.1:5432/watersim_prod?sslmode=disable
+```
+
+**Why `sslmode=disable`.** `backend/src/db/pg.js` turns on TLS with
+certificate verification whenever `NODE_ENV=production`. Ubuntu's PostgreSQL
+has `ssl = on` with a self-signed "snakeoil" certificate, which verification
+rejects. The connection string wins over the pool default, so this is the
+right setting for a loopback database; use TLS again if the database moves to
+another host. Add `After=postgresql.service` to the unit, run the migrations
+and seed exactly as in §9, and back up with `pg_dump --format=custom` as the
+`postgres` user instead of §14's script.

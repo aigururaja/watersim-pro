@@ -1,12 +1,14 @@
 /**
  * Jest global setup: give the suite a database of its own and migrate it.
  *
- * The suite wants a separate database (`watersim_test`, or TEST_DATABASE_URL),
- * so a running app's poller, twin loop and jobs never collide with what the
- * tests assert on. It is created here if the role may CREATE DATABASE, and
- * migrated on every run. When the role may not create it, the dev database
- * is used with a loud warning: create the test database once as a superuser
- * (`CREATE DATABASE watersim_test OWNER watersim;`) and the warning goes away.
+ * SQLite (the default): the `_test` sibling file of the dev database is
+ * deleted and migrated from scratch on every run, so each suite starts from a
+ * known schema and a running app's poller, twin loop and jobs never collide
+ * with what the tests assert on.
+ *
+ * Postgres: `watersim_test` (or TEST_DATABASE_URL) is created if the role may
+ * CREATE DATABASE, and migrated on every run. When the role may not create
+ * it, the dev database is used with a loud warning.
  *
  * The URL chosen here reaches every test file through TEST_DATABASE_URL.
  */
@@ -15,8 +17,8 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { spawnSync } = require('child_process');
 const path = require('path');
-const { Client } = require('pg');
-const { testDbUrl, adminDbUrl } = require('./testDbUrl');
+const fs = require('fs');
+const { testDbUrl, adminDbUrl, isSqliteUrl, sqliteFile } = require('./testDbUrl');
 
 function migrate(url) {
   const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'src', 'db', 'migrate.js'), 'up'], {
@@ -27,7 +29,8 @@ function migrate(url) {
   if (/Running \d+ pending/.test(r.stdout)) process.stdout.write(`[test-db] ${r.stdout.trim().split('\n').pop()}\n`);
 }
 
-async function databaseExists(url) {
+async function ensurePostgresDb(url) {
+  const { Client } = require('pg');
   const name = new URL(url).pathname.replace(/^\//, '');
   const admin = new Client({ connectionString: adminDbUrl(url) });
   await admin.connect();
@@ -43,13 +46,24 @@ async function databaseExists(url) {
 }
 
 module.exports = async function ensureTestDb() {
-  if (process.env.TEST_DATABASE_URL) { migrate(process.env.TEST_DATABASE_URL); return; }
-  const devUrl = process.env.DATABASE_URL;
-  const url = testDbUrl(devUrl);
-  if (!devUrl || !url) return;
+  const url = testDbUrl();
+  if (!url) return;
 
+  if (isSqliteUrl(url)) {
+    const file = sqliteFile(url);
+    if (file !== ':memory:') {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      for (const suffix of ['', '-wal', '-shm']) fs.rmSync(file + suffix, { force: true });
+    }
+    migrate(url);
+    process.env.TEST_DATABASE_URL = url;
+    return;
+  }
+
+  if (process.env.TEST_DATABASE_URL) { migrate(url); return; }
+  const devUrl = process.env.DATABASE_URL;
   try {
-    await databaseExists(url);
+    await ensurePostgresDb(url);
     migrate(url);
     process.env.TEST_DATABASE_URL = url;
   } catch (err) {

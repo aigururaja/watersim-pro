@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, param, query: qv, validationResult } = require('express-validator');
-const { query, withTransaction } = require('../db/pool');
+const { query, withTransaction, isSqlite } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
@@ -229,7 +229,9 @@ router.put('/:id/unit-costs', requireRole('engineer'), [
   try {
     const r = await query(
       `UPDATE projects
-         SET settings = jsonb_set(COALESCE(settings, '{}'::jsonb), '{unitCosts}', $1::jsonb)
+         SET settings = ${isSqlite
+           ? "json_set(COALESCE(settings, '{}'), '$.unitCosts', json($1))"
+           : "jsonb_set(COALESCE(settings, '{}'::jsonb), '{unitCosts}', $1::jsonb)"}
        WHERE id = $2 AND organisation_id = $3 AND status != 'deleted'
        RETURNING settings`,
       [JSON.stringify(sanitized), req.params.id, orgId(req)]

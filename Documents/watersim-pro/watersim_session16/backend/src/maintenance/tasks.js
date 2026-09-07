@@ -27,7 +27,7 @@
  */
 'use strict';
 
-const { query, withTransaction } = require('../db/pool');
+const { query, withTransaction, isSqlite } = require('../db/pool');
 const { can, rank } = require('../auth/roles');
 const { auditLog, auditSystem } = require('../utils/audit');
 const { broadcastToRoom, broadcastToOrg } = require('../collab/wsServer');
@@ -200,10 +200,10 @@ async function createTask(input, { actor = null, source = 'user', req = null } =
       `INSERT INTO maintenance_tasks
          (organisation_id, flowsheet_id, tag_id, source_event_id, source_rule_id, title, description,
           priority, severity, state, requires_approval, requires_ack, assigned_role, assigned_to, assigned_at,
-          due_at, created_by, created_source)
+          due_at, created_by, created_source${isSqlite ? ', number' : ''})
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
                CASE WHEN $14::uuid IS NULL THEN NULL ELSE NOW() END,
-               $15,$16,$17)
+               $15,$16,$17${isSqlite ? ', (SELECT COALESCE(MAX(number), 0) + 1 FROM maintenance_tasks)' : ''})
        ON CONFLICT (source_event_id) WHERE source_event_id IS NOT NULL DO NOTHING
        RETURNING *`,
       [orgId, flowsheetId, tagId, sourceEventId, sourceRuleId, String(title).slice(0, 200), description,

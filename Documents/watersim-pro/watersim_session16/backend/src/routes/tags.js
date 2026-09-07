@@ -130,9 +130,11 @@ router.get(
 async function bindingStates(tagIds) {
   if (!tagIds.length) return new Map();
   const { rows } = await query(
-    `SELECT DISTINCT ON (tag_id) tag_id, id, quality, last_value, last_read_at
-       FROM plc_bindings WHERE tag_id = ANY($1::uuid[])
-      ORDER BY tag_id, updated_at DESC`,
+    `SELECT tag_id, id, quality, last_value, last_read_at
+       FROM (SELECT tag_id, id, quality, last_value, last_read_at,
+                    ROW_NUMBER() OVER (PARTITION BY tag_id ORDER BY updated_at DESC) AS rn
+               FROM plc_bindings WHERE tag_id = ANY($1::uuid[])) b
+      WHERE rn = 1`,
     [tagIds]
   );
   return new Map(rows.map((b) => [b.tag_id, { id: b.id, quality: b.quality, value: b.last_value, at: b.last_read_at }]));

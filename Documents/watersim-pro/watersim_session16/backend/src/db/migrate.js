@@ -14,9 +14,9 @@
 require('dotenv').config();
 const path  = require('path');
 const fs    = require('fs');
-const { getClient } = require('./pool');
+const { getClient, isSqlite } = require('./pool');
 
-const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
+const MIGRATIONS_DIR = path.join(__dirname, isSqlite ? 'migrations_sqlite' : 'migrations');
 
 function loadMigrations() {
   if (!fs.existsSync(MIGRATIONS_DIR)) {

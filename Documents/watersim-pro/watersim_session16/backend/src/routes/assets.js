@@ -19,7 +19,7 @@
 
 const express = require('express');
 const { param, query: qv, validationResult } = require('express-validator');
-const { query } = require('../db/pool');
+const { query, isSqlite } = require('../db/pool');
 const { serviceOrUser } = require('../middleware/serviceAuth');
 const { readHistory } = require('../historian/query');
 const { readCounters } = require('../twin/counters');
@@ -51,9 +51,15 @@ const LOOP_SELECT = `
          COUNT(*) FILTER (WHERE t.signal_type = 'AI')::int AS analog,
          COUNT(b.id)::int AS bound,
          MAX(b.last_read_at) AS last_read_at,
-         ARRAY_AGG(DISTINCT t.id::text) AS tag_ids
+         ${isSqlite ? 'json_group_array(DISTINCT t.id)' : 'ARRAY_AGG(DISTINCT t.id::text)'} AS tag_ids
     FROM tags t
     LEFT JOIN plc_bindings b ON b.tag_id = t.id AND b.enabled = TRUE`;
+
+/** tag_ids is a text[] on Postgres and JSON text (json_group_array) on SQLite. */
+function tagIdList(r) {
+  if (Array.isArray(r.tag_ids)) return r.tag_ids;
+  try { return JSON.parse(r.tag_ids || '[]'); } catch { return []; }
+}
 
 function fmtLoop(r) {
   return {
@@ -62,7 +68,7 @@ function fmtLoop(r) {
     units: r.units ? Number(r.units) : 0,
     subAssets: r.units ? Array.from({ length: Number(r.units) }, (_, i) => `${r.loop_tag}/${i + 1}`) : [],
     points: r.points, analogPoints: r.analog, boundPoints: r.bound, lastReadAt: r.last_read_at,
-    watersim: { flowsheetId: r.flowsheet_id, nodeId: r.node_id, tagIds: r.tag_ids },
+    watersim: { flowsheetId: r.flowsheet_id, nodeId: r.node_id, tagIds: tagIdList(r) },
   };
 }
 

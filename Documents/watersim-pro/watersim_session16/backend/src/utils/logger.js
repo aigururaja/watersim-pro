@@ -2,9 +2,15 @@ const { createLogger, format, transports } = require('winston');
 const config = require('../config');
 const { combine, timestamp, errors, json, colorize, printf } = format;
 
+// Dev lines carry their metadata (error messages, ids) — without it a logged
+// "Unhandled error" says nothing about what failed.
 const devFormat = combine(
   colorize(), timestamp({ format: 'HH:mm:ss' }), errors({ stack: true }),
-  printf(({ level, message, timestamp, stack }) => `${timestamp} ${level}: ${stack || message}`)
+  printf(({ level, message, timestamp, stack, ...meta }) => {
+    const rest = Object.fromEntries(Object.entries(meta).filter(([k]) => typeof k === 'string' && k !== 'splat'));
+    const tail = Object.keys(rest).length ? ` ${JSON.stringify(rest)}` : '';
+    return `${timestamp} ${level}: ${stack || message}${tail}`;
+  })
 );
 const prodFormat = combine(timestamp(), errors({ stack: true }), json());
 

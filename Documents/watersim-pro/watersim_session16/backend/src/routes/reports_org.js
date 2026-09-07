@@ -170,7 +170,7 @@ router.get('/',
 
       // Count uses the same parameterised filters (never string interpolation);
       // it is built BEFORE the cursor is applied so total stays accurate.
-      const countSql    = `SELECT COUNT(*) FROM (${sql}) _c`;
+      const countSql    = `SELECT COUNT(*) AS count FROM (${sql}) _c`;
       const countParams = [...params];
 
       // Composite keyset cursor: (completed_at, id) row comparison matches

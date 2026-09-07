@@ -57,7 +57,7 @@ own. The canvas editor draws the same machines and pipes as the Live plant (the
 
 ## Stack
 - **Frontend:** React 18 + Vite + Tailwind CSS + React Router + TanStack Query + Zustand
-- **Backend:** Node.js + Express + PostgreSQL
+- **Backend:** Node.js + Express + SQLite (the built-in `node:sqlite`; PostgreSQL still works behind a `postgres://` `DATABASE_URL`)
 - **Auth:** JWT (access token) + httpOnly cookie (refresh token) + RBAC
 - **Repo layout:** npm workspaces monorepo — a **single root `package-lock.json`** covers both
   workspaces (`backend`, `frontend`); there are no per-workspace lockfiles.
@@ -65,9 +65,9 @@ own. The canvas editor draws the same machines and pipes as the Live plant (the
 ## Quick Start
 
 ### Prerequisites
-- Node.js >= 18
-- PostgreSQL >= 14
+- Node.js >= 22.13 (`node:sqlite`); Node 24 works
 - npm >= 9
+- PostgreSQL >= 14 only if you point `DATABASE_URL` at Postgres
 
 ### Setup
 ```bash
@@ -76,19 +76,17 @@ npm install
 
 # 2. Configure environment
 cp backend/.env.example backend/.env
-# Edit backend/.env with your DB credentials and JWT secret
+# Edit backend/.env: JWT secret; DATABASE_URL defaults to sqlite:./data/watersim.db
 # (set PORT=3001 for local dev — the frontend dev proxy expects it)
 
-# 3. Create database
-createdb watersim_dev
-
-# 4. Apply versioned migrations (backend/src/db/migrations/*.js)
+# 3. Apply versioned migrations — creates backend/data/watersim.db on first run
+#    (backend/src/db/migrations_sqlite/*.js; the Postgres set is migrations/)
 npm run db:migrate
 
-# 5. Seed demo data (optional)
+# 4. Seed demo data (optional)
 npm run db:seed
 
-# 6. Start dev servers (both frontend + backend)
+# 5. Start dev servers (both frontend + backend)
 npm run dev
 ```
 
@@ -117,8 +115,9 @@ watersim/
 │   └── src/
 │       ├── config/        # Environment config
 │       ├── controllers/   # Route handlers
-│       ├── db/            # PostgreSQL pool, query helpers,
-│       │   └── migrations/  # versioned JS migrations (npm run db:migrate)
+│       ├── db/            # one query API; sqlite.js (node:sqlite) or pg.js behind pool.js
+│       │   ├── migrations_sqlite/  # versioned JS migrations, SQLite (npm run db:migrate)
+│       │   └── migrations/         # the same ids for PostgreSQL
 │       ├── middleware/    # Auth, RBAC, error handling
 │       ├── models/        # DB query functions
 │       ├── plants/        # Real plant definitions
@@ -183,7 +182,7 @@ window into CSV, Excel or PDF. Retention is set per level with
 whole. Alarm rules are one limit each (`kind` high / low / range) so a
 critical HIGH and a warning LOW can share a target, and a `quality` rule
 raises the comms-loss alarm when a bound point has had no good sample for
-`stale_after_s` seconds. Requires Postgres 14 or newer.
+`stale_after_s` seconds.
 
 ## CMMS boundary
 Another system reaches WaterSim Pro with a scoped API key (Settings →
@@ -260,7 +259,7 @@ backups and the restore drill.
   CronJob in `k8s/backup-cronjob.yaml`).
 - **Ubuntu server, no Docker:** `docs/RUNBOOK-deploy-ubuntu.md` — Node under systemd,
   nginx serving the Vite build and proxying `/api/`, `/ws/`, `/health` to
-  `127.0.0.1:4000`, PostgreSQL on loopback, Python in a venv, certbot for TLS.
+  `127.0.0.1:4000`, one SQLite file for the database, Python in a venv, certbot for TLS.
 
 All Docker builds (dev and prod) use the **repo root as build context** because of the
 single workspace lockfile — e.g. `docker build -f backend/Dockerfile.prod .`

@@ -28,7 +28,7 @@
 'use strict';
 
 const express = require('express');
-const { query } = require('../db/pool');
+const { query, isSqlite } = require('../db/pool');
 const { authenticate, requireCapability } = require('../middleware/auth');
 const { buildSnapshot } = require('./live');
 
@@ -92,7 +92,9 @@ async function alarmsFor(snap, org) {
       [org]
     ),
     query(
-      `SELECT AVG(EXTRACT(EPOCH FROM (acknowledged_at - triggered_at))) / 60 AS mtta_min, COUNT(*)::int AS n
+      `SELECT AVG(${isSqlite
+                     ? '(unixepoch(acknowledged_at) - unixepoch(triggered_at))'
+                     : 'EXTRACT(EPOCH FROM (acknowledged_at - triggered_at))'}) / 60 AS mtta_min, COUNT(*)::int AS n
          FROM alarm_events
         WHERE organisation_id = $1 AND acknowledged_at IS NOT NULL AND triggered_at > NOW() - INTERVAL '7 days'`,
       [org]
@@ -352,7 +354,9 @@ async function systemFor(org) {
   const [samples, jobs, partitions] = await Promise.all([
     query(`SELECT COUNT(*)::int AS n FROM tag_samples s JOIN tags t ON t.id = s.tag_id WHERE t.organisation_id = $1 AND s.ts > NOW() - INTERVAL '1 hour'`, [org]).catch(() => ({ rows: [{ n: null }] })),
     query(`SELECT name, watermark, last_run_at, last_error, rows_affected FROM historian_jobs ORDER BY name`).catch(() => ({ rows: [] })),
-    query(`SELECT COUNT(*)::int AS n FROM pg_inherits WHERE inhparent = 'tag_samples'::regclass`).catch(() => ({ rows: [{ n: null }] })),
+    isSqlite
+      ? Promise.resolve({ rows: [{ n: null }] }) // one plain table, no partitions
+      : query(`SELECT COUNT(*)::int AS n FROM pg_inherits WHERE inhparent = 'tag_samples'::regclass`).catch(() => ({ rows: [{ n: null }] })),
   ]);
   return {
     uptimeS: Math.round(process.uptime()),

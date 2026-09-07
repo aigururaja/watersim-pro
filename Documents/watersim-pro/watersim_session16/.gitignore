@@ -55,3 +55,6 @@ logs/
 
 # Microsoft Office lock files
 ~$*
+
+# SQLite database files (backend/data/)
+backend/data/

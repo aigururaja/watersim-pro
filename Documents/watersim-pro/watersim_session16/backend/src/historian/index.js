@@ -27,7 +27,7 @@
  */
 'use strict';
 
-const { query } = require('../db/pool');
+const { query, withTransaction, isSqlite } = require('../db/pool');
 const logger = require('../utils/logger');
 
 const envInt = (name, dflt, min = 1) => {
@@ -49,6 +49,24 @@ const ROLLUP_OVERLAP_MS    = 2 * 60_000;
 // The origin every bucket is aligned to (a whole minute, hour and day).
 const ORIGIN = '2000-01-01T00:00:00Z';
 
+/**
+ * date_bin(interval, col, origin) on either engine. `secs` and `origin` are
+ * parameter placeholders ($n); the SQLite form floors (col - origin) to a
+ * multiple of `secs` seconds and formats it back to the stored ISO shape.
+ */
+function dateBinSql(col, secs, origin) {
+  return isSqlite
+    ? `strftime('%Y-%m-%dT%H:%M:%fZ', unixepoch(${origin}) + CAST((unixepoch(${col}) - unixepoch(${origin})) / ${secs} AS INTEGER) * ${secs}, 'unixepoch')`
+    : `date_bin(make_interval(secs => ${secs}), ${col}, ${origin}::timestamptz)`;
+}
+
+/** The newest value in a group — (ARRAY_AGG(x ORDER BY t DESC) FILTER (…))[1] — on either engine. */
+function lastInGroupSql(expr, orderCol, filter) {
+  return isSqlite
+    ? `json_extract(json_group_array(${expr} ORDER BY ${orderCol} DESC) FILTER (WHERE ${filter}), '$[0]')`
+    : `(ARRAY_AGG(${expr} ORDER BY ${orderCol} DESC) FILTER (WHERE ${filter}))[1]`;
+}
+
 let timer = null;
 let running = false;
 let lastRetentionAt = 0;
@@ -56,6 +74,7 @@ let lastRetentionAt = 0;
 // ── Partitions ───────────────────────────────────────────────────────────────
 
 async function ensurePartitions() {
+  if (isSqlite) return 0; // one plain table on SQLite; retention is a DELETE (applyRetention)
   const { rows } = await query('SELECT ensure_tag_sample_partitions(1, 2) AS created');
   const created = rows[0]?.created ?? 0;
   if (created > 0) logger.info('Historian: partitions created', { created });
@@ -80,6 +99,25 @@ async function recordSamples(samples) {
   const tss = rows.map((s) => new Date(s.ts || Date.now()).toISOString());
   const values = rows.map((s) => (Number.isFinite(Number(s.value)) && s.value !== null ? Number(s.value) : null));
   const qualities = rows.map((s) => (['good', 'bad', 'stale'].includes(s.quality) ? s.quality : 'good'));
+
+  if (isSqlite) {
+    // One INSERT per sample inside one transaction: a poll of a few hundred
+    // tags is a single fsync, and SQLite has no UNNEST.
+    try {
+      await withTransaction(async (c) => {
+        for (let i = 0; i < rows.length; i++) {
+          await c.query(
+            'INSERT INTO tag_samples (tag_id, ts, value, quality) VALUES ($1, $2, $3, $4)',
+            [tagIds[i], tss[i], values[i], qualities[i]]
+          );
+        }
+      });
+      return rows.length;
+    } catch (err) {
+      logger.warn('Historian: sample insert failed', { err: err.message, n: rows.length });
+      return 0;
+    }
+  }
 
   const sql = `INSERT INTO tag_samples (tag_id, ts, value, quality)
                SELECT * FROM UNNEST($1::uuid[], $2::timestamptz[], $3::float8[], $4::text[])`;
@@ -133,12 +171,11 @@ async function rollup1m(from, to) {
   const r = await query(
     `INSERT INTO tag_samples_1m (tag_id, bucket, avg, min, max, last, count, good)
      SELECT tag_id,
-            date_bin('1 minute', ts, $3::timestamptz)                         AS bucket,
+            ${dateBinSql('ts', '$4', '$3')}                                    AS bucket,
             AVG(value)  FILTER (WHERE quality = 'good' AND value IS NOT NULL)  AS avg,
             MIN(value)  FILTER (WHERE quality = 'good' AND value IS NOT NULL)  AS min,
             MAX(value)  FILTER (WHERE quality = 'good' AND value IS NOT NULL)  AS max,
-            (ARRAY_AGG(value ORDER BY ts DESC)
-               FILTER (WHERE quality = 'good' AND value IS NOT NULL))[1]       AS last,
+            ${lastInGroupSql('value', 'ts', "quality = 'good' AND value IS NOT NULL")} AS last,
             COUNT(*)::int                                                       AS count,
             COUNT(*) FILTER (WHERE quality = 'good' AND value IS NOT NULL)::int AS good
        FROM tag_samples
@@ -147,7 +184,7 @@ async function rollup1m(from, to) {
      ON CONFLICT (tag_id, bucket) DO UPDATE SET
        avg = EXCLUDED.avg, min = EXCLUDED.min, max = EXCLUDED.max, last = EXCLUDED.last,
        count = EXCLUDED.count, good = EXCLUDED.good`,
-    [from, to, ORIGIN]
+    [from, to, ORIGIN, 60]
   );
   return r.rowCount;
 }
@@ -157,11 +194,11 @@ async function rollup1h(from, to) {
   const r = await query(
     `INSERT INTO tag_samples_1h (tag_id, bucket, avg, min, max, last, count, good)
      SELECT tag_id,
-            date_bin('1 hour', bucket, $3::timestamptz)                          AS bucket,
+            ${dateBinSql('bucket', '$4', '$3')}                                  AS bucket,
             CASE WHEN SUM(good) > 0 THEN SUM(avg * good) / SUM(good) END        AS avg,
             MIN(min)                                                             AS min,
             MAX(max)                                                             AS max,
-            (ARRAY_AGG(last ORDER BY bucket DESC) FILTER (WHERE last IS NOT NULL))[1] AS last,
+            ${lastInGroupSql('last', 'bucket', 'last IS NOT NULL')}              AS last,
             SUM(count)::int                                                      AS count,
             SUM(good)::int                                                       AS good
        FROM tag_samples_1m
@@ -170,7 +207,7 @@ async function rollup1h(from, to) {
      ON CONFLICT (tag_id, bucket) DO UPDATE SET
        avg = EXCLUDED.avg, min = EXCLUDED.min, max = EXCLUDED.max, last = EXCLUDED.last,
        count = EXCLUDED.count, good = EXCLUDED.good`,
-    [from, to, ORIGIN]
+    [from, to, ORIGIN, 3600]
   );
   return r.rowCount;
 }
@@ -225,6 +262,7 @@ async function rollup(now = Date.now()) {
 
 /** Partitions whose whole range ended more than `days` ago. */
 async function listExpiredPartitions(days, now = Date.now()) {
+  if (isSqlite) return [];
   const { rows } = await query(
     `SELECT c.relname AS name
        FROM pg_inherits i
@@ -250,11 +288,16 @@ async function applyRetention(now = Date.now()) {
       await query(`DROP TABLE IF EXISTS "${name}"`);
       out.droppedPartitions.push(name);
     }
+    if (isSqlite) {
+      // No partitions to drop: raw rows past retention are deleted by ts (indexed).
+      const raw = await query(`DELETE FROM tag_samples WHERE ts < $1`, [new Date(now - RAW_RETENTION_DAYS * 86400_000)]);
+      out.raw = raw.rowCount;
+    }
     const m1 = await query(`DELETE FROM tag_samples_1m WHERE bucket < $1`, [new Date(now - M1_RETENTION_DAYS * 86400_000)]);
     const h1 = await query(`DELETE FROM tag_samples_1h WHERE bucket < $1`, [new Date(now - H1_RETENTION_DAYS * 86400_000)]);
     out.m1 = m1.rowCount; out.h1 = h1.rowCount;
-    await setWatermark('retention', new Date(now), out.droppedPartitions.length + out.m1 + out.h1);
-    if (out.droppedPartitions.length || out.m1 || out.h1) logger.info('Historian: retention applied', out);
+    await setWatermark('retention', new Date(now), out.droppedPartitions.length + (out.raw || 0) + out.m1 + out.h1);
+    if (out.droppedPartitions.length || out.raw || out.m1 || out.h1) logger.info('Historian: retention applied', out);
   } catch (err) {
     logger.warn('Historian: retention failed', { err: err.message });
     await setWatermark('retention', null, 0, err.message).catch(() => {});
@@ -326,6 +369,8 @@ module.exports = {
   startHistorian,
   stopHistorian,
   ORIGIN,
+  dateBinSql,
+  lastInGroupSql,
   RETENTION: { RAW_RETENTION_DAYS, M1_RETENTION_DAYS, H1_RETENTION_DAYS },
   _listExpiredPartitions: listExpiredPartitions,
 };

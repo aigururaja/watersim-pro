@@ -268,12 +268,13 @@ describe('equipment counters', () => {
     // here are dense enough to be believed.
     const xs = [[0, 0], [1, 1], [6, 1], [11, 1], [16, 1], [21, 1], [26, 1], [31, 1], [32, 0], [40, 1], [45, 1], [50, 1]];
     const xa = [[0, 0], [45, 1]];
-    await query(`INSERT INTO tag_samples (tag_id, ts, value, quality) SELECT * FROM UNNEST($1::uuid[], $2::timestamptz[], $3::float8[], $4::text[])`, [
-      [...xs.map(() => xsTag.id), ...xa.map(() => xaTag.id)],
-      [...xs, ...xa].map(([m]) => at(m).toISOString()),
-      [...xs, ...xa].map(([, v]) => v),
-      [...xs, ...xa].map(() => 'good'),
-    ]);
+    const samples = [
+      ...xs.map(([m, v]) => [xsTag.id, at(m).toISOString(), v]),
+      ...xa.map(([m, v]) => [xaTag.id, at(m).toISOString(), v]),
+    ];
+    for (const [tagId, ts, value] of samples) {
+      await query(`INSERT INTO tag_samples (tag_id, ts, value, quality) VALUES ($1, $2, $3, 'good')`, [tagId, ts, value]);
+    }
     await query(`UPDATE historian_jobs SET watermark = $1 WHERE name = 'counters'`, [new Date(t0 - 60_000)]);
     const out = await runCounters(t0 + 3600_000);
     expect(out.tags).toBeGreaterThanOrEqual(2);

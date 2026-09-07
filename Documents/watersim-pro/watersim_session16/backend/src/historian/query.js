@@ -22,7 +22,15 @@
 'use strict';
 
 const { query } = require('../db/pool');
-const { ORIGIN } = require('./index');
+const { ORIGIN, dateBinSql, lastInGroupSql } = require('./index');
+
+/** '15 minutes' | '6 hours' | '1 day' | '90 seconds' → seconds (what date_bin is given). */
+function intervalSeconds(interval) {
+  const m = String(interval).trim().match(/^(\d+(?:\.\d+)?)\s*(second|minute|hour|day|week)s?$/i);
+  if (!m) throw new Error(`Unsupported interval: ${interval}`);
+  const unit = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800 }[m[2].toLowerCase()];
+  return Math.max(1, Math.round(Number(m[1]) * unit));
+}
 
 const BUCKET_S = { raw: 0, '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '6h': 21600, '1d': 86400 };
 const BUCKETS = Object.keys(BUCKET_S);
@@ -67,17 +75,17 @@ const toPoint = (r) => [
 async function binRaw(tagIds, from, to, interval) {
   const { rows } = await query(
     `SELECT tag_id,
-            date_bin($4::interval, ts, $5::timestamptz) AS bucket,
+            ${dateBinSql('ts', '$4', '$5')} AS bucket,
             AVG(value) FILTER (WHERE quality = 'good' AND value IS NOT NULL) AS avg,
             MIN(value) FILTER (WHERE quality = 'good' AND value IS NOT NULL) AS min,
             MAX(value) FILTER (WHERE quality = 'good' AND value IS NOT NULL) AS max,
-            (ARRAY_AGG(value ORDER BY ts DESC) FILTER (WHERE quality = 'good' AND value IS NOT NULL))[1] AS last,
+            ${lastInGroupSql('value', 'ts', "quality = 'good' AND value IS NOT NULL")} AS last,
             COUNT(*)::int AS count
        FROM tag_samples
       WHERE tag_id = ANY($1::uuid[]) AND ts >= $2 AND ts < $3
       GROUP BY tag_id, 2
       ORDER BY 2`,
-    [tagIds, from, to, interval, ORIGIN]
+    [tagIds, from, to, intervalSeconds(interval), ORIGIN]
   );
   return rows;
 }
@@ -96,16 +104,16 @@ async function readRollup(table, tagIds, from, to, rebin) {
   }
   const { rows } = await query(
     `SELECT tag_id,
-            date_bin($4::interval, bucket, $5::timestamptz) AS bucket,
+            ${dateBinSql('bucket', '$4', '$5')} AS bucket,
             CASE WHEN SUM(good) > 0 THEN SUM(avg * good) / SUM(good) END AS avg,
             MIN(min) AS min, MAX(max) AS max,
-            (ARRAY_AGG(last ORDER BY bucket DESC) FILTER (WHERE last IS NOT NULL))[1] AS last,
+            ${lastInGroupSql('last', 'bucket', 'last IS NOT NULL')} AS last,
             SUM(count)::int AS count
        FROM ${table}
       WHERE tag_id = ANY($1::uuid[]) AND bucket >= $2 AND bucket < $3
       GROUP BY tag_id, 2
       ORDER BY 2`,
-    [tagIds, from, to, rebin, ORIGIN]
+    [tagIds, from, to, intervalSeconds(rebin), ORIGIN]
   );
   return rows;
 }

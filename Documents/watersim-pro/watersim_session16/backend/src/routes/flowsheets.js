@@ -149,11 +149,11 @@ router.delete('/:id', requireRole('engineer'), [param('id').isUUID()], async (re
   if (vErr(req, res)) return;
   try {
     const result = await query(
-      `DELETE FROM flowsheets f USING projects p
-       WHERE f.id = $1 AND f.project_id = $2
-         AND f.project_id = p.id AND p.organisation_id = $3
-         AND f.is_snapshot = false
-       RETURNING f.id`,
+      `DELETE FROM flowsheets
+       WHERE id = $1 AND project_id = $2
+         AND project_id IN (SELECT id FROM projects WHERE id = $2 AND organisation_id = $3)
+         AND is_snapshot = false
+       RETURNING id`,
       [req.params.id, req.params.projectId, orgId(req)]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Flowsheet not found or is a read-only snapshot' });

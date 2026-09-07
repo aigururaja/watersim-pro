@@ -16,7 +16,7 @@
  */
 'use strict';
 
-const { query } = require('../db/pool');
+const { query, isSqlite } = require('../db/pool');
 const { broadcastToRoom, broadcastToOrg } = require('../collab/wsServer');
 const { render, EVENT_TYPES, SEVERITY_RANK } = require('./templates');
 const { queueWebhooks } = require('./webhooks');
@@ -158,15 +158,29 @@ async function emit(eventType, { orgId, severity = 'info', flowsheetId = null, p
     }
     if (!rows.length) return { recipients: recipients.size, queued: 0 };
 
-    const r = await query(
-      `INSERT INTO notification_outbox
-         (organisation_id, user_id, channel, address, event_type, template, subject, body, payload, dedupe_key)
-       SELECT $1, u, c, a, $2, $2, $3, CASE WHEN c = 'email' THEN $4 ELSE $5 END, $6::jsonb, d
-         FROM UNNEST($7::uuid[], $8::text[], $9::text[], $10::text[]) AS x(u, c, a, d)
-       ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
-      [orgId, eventType, msg.subject, msg.html, msg.text, JSON.stringify({ ...payload, severity, flowsheetId }),
-       rows.map((x) => x.userId), rows.map((x) => x.channel), rows.map((x) => x.address), rows.map((x) => x.dedupeKey)]
-    );
+    const payloadJson = JSON.stringify({ ...payload, severity, flowsheetId });
+    const r = isSqlite
+      // One JSON array of {u, c, a, d} objects, unrolled with json_each.
+      ? await query(
+          `INSERT INTO notification_outbox
+             (organisation_id, user_id, channel, address, event_type, template, subject, body, payload, dedupe_key)
+           SELECT $1, x.value ->> '$.u', x.value ->> '$.c', x.value ->> '$.a', $2, $2, $3,
+                  CASE WHEN x.value ->> '$.c' = 'email' THEN $4 ELSE $5 END, $6, x.value ->> '$.d'
+             FROM json_each($7) AS x
+            WHERE TRUE
+           ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
+          [orgId, eventType, msg.subject, msg.html, msg.text, payloadJson,
+           JSON.stringify(rows.map((x) => ({ u: x.userId, c: x.channel, a: x.address, d: x.dedupeKey })))]
+        )
+      : await query(
+          `INSERT INTO notification_outbox
+             (organisation_id, user_id, channel, address, event_type, template, subject, body, payload, dedupe_key)
+           SELECT $1, u, c, a, $2, $2, $3, CASE WHEN c = 'email' THEN $4 ELSE $5 END, $6::jsonb, d
+             FROM UNNEST($7::uuid[], $8::text[], $9::text[], $10::text[]) AS x(u, c, a, d)
+           ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
+          [orgId, eventType, msg.subject, msg.html, msg.text, payloadJson,
+           rows.map((x) => x.userId), rows.map((x) => x.channel), rows.map((x) => x.address), rows.map((x) => x.dedupeKey)]
+        );
     return { recipients: recipients.size, queued: r.rowCount };
   } catch (err) {
     logger.warn('Notification emit failed', { eventType, err: err.message });
