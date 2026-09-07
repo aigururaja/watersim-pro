@@ -33,7 +33,7 @@ const zTone = (z, limit) => (z == null ? 'text-gray-400' : Math.abs(z) > limit ?
 
 function TwinList({ twins, selected, onSelect }) {
   return (
-    <aside className="card p-2 w-full md:w-72 flex-shrink-0 space-y-1" aria-label="Twins">
+    <aside className="card p-2 w-full lg:w-72 flex-shrink-0 space-y-1" aria-label="Twins">
       {twins.map((t) => (
         <button key={t.flowsheetId} onClick={() => onSelect(t.flowsheetId)}
           className={`w-full text-left px-3 py-2 rounded-lg text-sm ${selected === t.flowsheetId ? 'bg-brand-50 border border-brand-200' : 'hover:bg-gray-50 border border-transparent'}`}
@@ -217,7 +217,9 @@ export default function TwinPage() {
 
         {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</div>}
 
-        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-start">
+        {/* Side by side from lg only: at tablet width the fixed list left the
+            detail column too narrow for its controls (what-if select). */}
+        <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start">
           <TwinList twins={twins} selected={flowsheetId} onSelect={(id) => navigate(`/twin/${id}`)} />
 
           <div className="flex-1 min-w-0 space-y-4">
