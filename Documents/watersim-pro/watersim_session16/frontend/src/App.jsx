@@ -18,7 +18,6 @@ const AdminPage      = lazy(() => import('./pages/AdminPage'));
 const ReportsPage    = lazy(() => import('./pages/ReportsPage'));
 const ComparisonPage = lazy(() => import('./pages/ComparisonPage'));
 const AlarmsPage     = lazy(() => import('./pages/AlarmsPage'));
-const PlantPage      = lazy(() => import('./pages/PlantPage'));
 const AuditPage      = lazy(() => import('./pages/AuditPage'));
 const TrendsPage     = lazy(() => import('./pages/TrendsPage'));
 const TasksPage      = lazy(() => import('./pages/TasksPage'));
@@ -108,7 +107,6 @@ function AppRoutes() {
 
         {/* The plant definition: process areas, I/O schedule, control narrative,
             costing, and the review of everywhere the proposal disagrees with itself */}
-        <Route path="/plant" element={<ProtectedRoute><ErrorBoundary scope="Plant"><PlantPage /></ErrorBoundary></ProtectedRoute>} />
 
         {/* Simulations -> redirects to Reports */}
         <Route path="/simulations" element={<Navigate to="/reports" replace />} />

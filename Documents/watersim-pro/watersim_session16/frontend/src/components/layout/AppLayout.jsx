@@ -17,7 +17,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   Droplets, LayoutDashboard, FolderOpen, FileText, Settings,
-  LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck, Bell, Factory,
+  LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck, Bell,
   Activity, Boxes, Wrench, ScrollText, Gauge, LineChart, ClipboardList, Monitor,
 } from 'lucide-react';
 import { OnboardingTrigger } from '../OnboardingWizard';
@@ -36,7 +36,6 @@ export const SURFACES = [
     items: [
       { icon: Monitor,         label: 'Live plant', path: '/live' },
       { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-      { icon: Factory,         label: 'Plant',     path: '/plant' },
       { icon: FolderOpen,      label: 'Projects',  path: '/monitoring/projects' },
       { icon: Bell,            label: 'Alarms',    path: '/alarms' },
       { icon: LineChart,       label: 'Trends',    path: '/trends' },
