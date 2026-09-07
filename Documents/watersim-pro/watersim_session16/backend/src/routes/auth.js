@@ -8,11 +8,14 @@ const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 router.use(cookieParser());
 
+// Failed sign-ins and registrations only: a successful login never eats into
+// the budget, so a team behind one office IP is not locked out by using the app.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
   message: { error: 'Too many auth attempts, please try again later' },
   skip: () => process.env.NODE_ENV === 'test',
   keyGenerator: (req) => req.ip,
