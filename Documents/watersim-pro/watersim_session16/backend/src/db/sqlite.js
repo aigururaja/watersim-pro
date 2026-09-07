@@ -13,7 +13,7 @@
  *        ILIKE                → LIKE                    (case-insensitive for ASCII)
  *        FOR UPDATE [SKIP LOCKED] → (removed; one process, one writer)
  *        ARRAY[a, b]          → json_array(a, b)
- *        DEFAULT NOW()        → DEFAULT (strftime(…, 'now'))
+ *        DEFAULT NOW()        → DEFAULT (NOW())        (the registered function)
  *        UPDATE t SET …       → UPDATE t SET updated_at = now, … when t has an
  *                               updated_at column and the statement does not
  *                               set it (what the Postgres trigger did).
@@ -27,9 +27,14 @@
  *   4. Mapping constraint failures to the Postgres SQLSTATE codes the routes
  *      test for (23505 unique, 23503 foreign key, 23514 check, 23502 not null).
  *
- * Timestamps are stored as ISO-8601 UTC text with millisecond precision
- * ("2026-09-07T10:00:00.000Z"); NOW(), the DEFAULT expression and every bound
- * Date produce the same shape, so string comparison orders correctly.
+ * Timestamps are stored as ISO-8601 UTC text. A bound Date is written with
+ * millisecond precision ("2026-09-07T10:00:00.000Z"); NOW() and the column
+ * DEFAULTs write the same millisecond plus a three-digit sequence
+ * ("2026-09-07T10:00:00.000017Z"), strictly monotonic within the process and
+ * never ahead of wall time (see nowIso), so string comparison orders every
+ * mix of the two correctly and rows written in one burst never tie. A
+ * database created before DEFAULT (NOW()) is brought in line by
+ * scripts/sqlite-rebuild-defaults.js.
  *
  * Concurrency: node:sqlite is synchronous on one connection. A transaction
  * holds an async mutex for its whole duration and runs its callback inside an
@@ -55,8 +60,28 @@ const { DatabaseSync } = process.getBuiltinModule
   : require('node:sqlite');
 const logger = require('../utils/logger');
 
-const NOW_EXPR = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
-const nowIso   = () => new Date().toISOString();
+// One clock for every timestamp the database generates — NOW() in queries,
+// column DEFAULTs, the updated_at the driver adds — and a strictly monotonic
+// one. Date.now() has millisecond resolution, so a burst of inserts would
+// otherwise share a value and an ORDER BY on it would fall back to a random
+// UUID tiebreak (a coin flip in tests, a wrong "latest" in the app). Every
+// value is 27 characters, "2026-09-07T10:00:00.123000Z": the real millisecond
+// followed by a per-millisecond sequence in the microsecond digits. So the
+// clock never runs ahead of wall time — a JS Date bound as a parameter for
+// the same millisecond ("…123Z") still compares as later, because "0" sorts
+// before "Z" — and a thousand values per millisecond stay strictly ordered.
+// Both JS Date parsing and SQLite's date functions accept the extra digits.
+let lastMs = 0;
+let seq = 0;
+const nowIso = () => {
+  const t = Date.now();
+  if (t > lastMs) { lastMs = t; seq = 0; }
+  else if (seq < 999) { seq += 1; }
+  else { lastMs += 1; seq = 0; }            // >1000 in one ms: concede one ms of drift
+  const base = new Date(lastMs).toISOString();   // "…sss" + "Z"
+  return `${base.slice(0, -1)}${String(seq).padStart(3, '0')}Z`;
+};
+const NOW_EXPR = 'NOW()';
 
 // ── Location ─────────────────────────────────────────────────────────────────
 

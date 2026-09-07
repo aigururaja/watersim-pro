@@ -11,7 +11,7 @@
  */
 'use strict';
 
-const { ID, CREATED_AT, UPDATED_AT } = require('./_helpers');
+const { ID, CREATED_AT, UPDATED_AT, NOW } = require('./_helpers');
 
 exports.id = '001_initial_schema';
 
@@ -80,7 +80,7 @@ CREATE TABLE project_members (
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role       TEXT NOT NULL DEFAULT 'viewer'
              CHECK (role IN ('admin', 'manager', 'engineer', 'operator', 'viewer')),
-  added_at   TIMESTAMPTZ NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  added_at   TIMESTAMPTZ NOT NULL DEFAULT ${NOW},
   added_by   TEXT REFERENCES users(id),
   PRIMARY KEY (project_id, user_id)
 );

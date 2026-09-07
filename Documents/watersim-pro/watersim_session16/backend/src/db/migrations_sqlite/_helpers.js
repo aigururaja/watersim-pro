@@ -10,8 +10,14 @@
  */
 'use strict';
 
-/** ISO-8601 UTC with milliseconds — the same shape NOW() and bound Dates produce. */
-const NOW = "(strftime('%Y-%m-%dT%H:%M:%fZ','now'))";
+/**
+ * The driver's NOW(): ISO-8601 UTC with milliseconds, the same shape bound
+ * Dates produce, and strictly monotonic within the process — so a DEFAULT
+ * never ties with another row's and never runs ahead of a NOW() in a query.
+ * (An existing file with the older strftime('now') defaults is converted by
+ * scripts/sqlite-rebuild-defaults.js.)
+ */
+const NOW = '(NOW())';
 
 /** UUID v4 from the function the driver registers (crypto.randomUUID). */
 const UUID = '(uuid_generate_v4())';
