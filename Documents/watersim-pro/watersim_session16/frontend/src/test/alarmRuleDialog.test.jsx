@@ -270,7 +270,7 @@ describe('AlarmRuleDialog — editing', () => {
     expect(screen.getByLabelText('Maximum')).toHaveValue(10);
     expect(screen.getByLabelText('Minimum')).toHaveValue(null);
     expect(screen.getByLabelText(/Severity/)).toHaveValue('critical');
-    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /^Enabled$/ })).toBeChecked();
     expect(screen.getByRole('button', { name: /Save changes/ })).toBeInTheDocument();
   });
 

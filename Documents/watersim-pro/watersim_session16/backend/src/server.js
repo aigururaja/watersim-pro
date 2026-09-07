@@ -23,8 +23,23 @@ const plcRoutes          = require('./routes/plc');
 const plcBindingRoutes   = require('./routes/plcBindings');
 const alarmRoutes        = require('./routes/alarms');
 const alarmsOrgRoutes    = require('./routes/alarms_org');
+const plantRoutes        = require('./routes/plant');
+const tagRoutes          = require('./routes/tags');
+const auditRoutes        = require('./routes/audit');
+const taskRoutes         = require('./routes/tasks');
+const notificationRoutes = require('./routes/notifications');
+const liveRoutes         = require('./routes/live');
+const twinRoutes         = require('./routes/twin');
+const assetRoutes        = require('./routes/assets');
+const cmmsRoutes         = require('./routes/cmms');
+const integrationRoutes  = require('./routes/integrations');
+const dashboardRoutes    = require('./routes/dashboard');
 const { attachWsServer } = require('./collab/wsServer');
 const { startPoller, stopPoller } = require('./plc/poller');
+const { startHistorian, stopHistorian } = require('./historian');
+const { startQualitySweep, stopQualitySweep } = require('./alarms/qualitySweep');
+const { startNotificationWorker, stopNotificationWorker } = require('./notifications/worker');
+const { startTwin, stopTwin } = require('./twin');
 
 // ── Startup env validation ───────────────────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
@@ -140,6 +155,17 @@ app.use(`${API}/admin`,                                          adminRoutes);
 app.use(`${API}/reports`,                                        reportsOrgRoutes);
 app.use(`${API}/alarms`,                                         alarmsOrgRoutes);
 app.use(`${API}/plc`,                                            plcRoutes);
+app.use(`${API}/plant`,                                          plantRoutes);
+app.use(`${API}/tags`,                                           tagRoutes);
+app.use(`${API}/audit`,                                          auditRoutes);
+app.use(`${API}/tasks`,                                          taskRoutes);
+app.use(`${API}/notifications`,                                  notificationRoutes);
+app.use(`${API}/live`,                                           liveRoutes);
+app.use(`${API}/twin`,                                           twinRoutes);
+app.use(`${API}/assets`,                                         assetRoutes);
+app.use(`${API}/cmms`,                                           cmmsRoutes);
+app.use(`${API}/integrations`,                                   integrationRoutes);
+app.use(`${API}/dashboard`,                                      dashboardRoutes);
 
 // ── Metrics (unauthenticated, outside the /api rate limiter) ─────────────────
 // NOTE: /metrics must be network-restricted in production (cluster-internal
@@ -238,6 +264,19 @@ async function start() {
   // No-op under NODE_ENV=test (poller guards this itself).
   startPoller();
 
+  // ── Historian + comms-loss sweep (Phase 1) ─────────────────────────────────
+  // The historian rolls raw samples into minute/hour buckets and applies
+  // retention; the sweep raises the one alarm a value can never raise — the
+  // PLC going quiet. Both are no-ops under NODE_ENV=test.
+  startHistorian();
+  startQualitySweep();
+
+  // ── Notification outbox worker (Phase 2) ───────────────────────────────────
+  startNotificationWorker();
+
+  // ── Digital twin loop (Phase 4): solves beside the plant, on its cadence ───
+  startTwin();
+
   // ── Stale-run reaper ───────────────────────────────────────────────────────
   // Runs inserted as 'running' orphan forever if the process dies mid-run.
   // Every 5 minutes, mark anything stuck in 'running' for >15 min as failed.
@@ -269,6 +308,10 @@ async function start() {
 
     // Stop the PLC poller (clears its interval, disconnects cached clients).
     stopPoller().catch((err) => logger.warn('Error stopping PLC poller', { error: err.message }));
+    stopHistorian();
+    stopQualitySweep();
+    stopNotificationWorker();
+    stopTwin();
 
     // Close WebSocket clients with a going-away close frame, then the wss.
     try {

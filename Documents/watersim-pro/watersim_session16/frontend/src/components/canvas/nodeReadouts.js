@@ -73,6 +73,12 @@ const SERVICE_TOKEN = {
 
 const SERVICE_BY_OP = {
   blower: 'air',
+  // ── ITC STP equipment (Session 18) ────────────────────────────────────────
+  sbr_reactor: 'sludge',
+  sludge_centrifuge: 'sludge',
+  oil_grease_trap: 'recycle',
+  micron_filter: 'permeate',
+  water_softener: 'permeate',
   primary_clarifier: 'sludge',
   secondary_clarifier: 'sludge',
   thickener: 'sludge',
@@ -179,6 +185,49 @@ const READOUTS = {
   uf_membrane:    { pick: (s) => s.metrics.TSS_removal_pct, unit: '%', title: 'TSS removal (TSS_removal_pct — screen model)' },
   gac_adsorption: { pick: (s) => s.metrics.TSS_removal_pct, unit: '%', title: 'TSS removal (TSS_removal_pct — screen model)' },
 
+  // ── ITC STP equipment (Session 18) ────────────────────────────────────────
+  // Each picks the number an operator would look at first on that unit, and
+  // each names the metric it reads so the footer can be traced to the model.
+  equalisation_tank: {
+    pick: (s) => s.metrics.HRT_h, unit: 'h',
+    title: 'Retention time (HRT_h = volume_m3 / hourly flow) — never a level',
+  },
+  oil_grease_trap: {
+    pick: (s) => s.metrics.fog_removed_kg_d, unit: 'kg FOG/d',
+    title: 'Grease captured per day (fog_removed_kg_d)',
+  },
+  sbr_reactor: {
+    pick: (s) => s.metrics.capacity_utilisation_pct, unit: '%',
+    title: 'Feed against cycle capacity (capacity_utilisation_pct) — above 100 % the feed has no cycle slot',
+  },
+  multigrade_filter: {
+    pick: (s) => s.metrics.TSS_removal_pct, unit: '%',
+    title: 'TSS removal after loading derate (TSS_removal_pct)',
+  },
+  activated_carbon_filter: {
+    pick: (s) => s.metrics.TSS_removal_pct, unit: '%',
+    title: 'TSS removal after loading derate (TSS_removal_pct)',
+  },
+  micron_filter: {
+    pick: (s) => s.metrics.TSS_removal_pct, unit: '%',
+    title: 'TSS removal after loading derate (TSS_removal_pct)',
+  },
+  water_softener: {
+    pick: (s) => s.metrics.regenerations_per_day, unit: '/d',
+    title: 'Regenerations per day (regenerations_per_day) — above 2 the bed is undersized',
+  },
+  sludge_centrifuge: {
+    pick: (s) => s.metrics.thickened_TSS_g_L, unit: 'g/L',
+    title: 'Cake solids (thickened_TSS_g_L)',
+  },
+  instrument: {
+    pick: (s) => s.metrics.reading,
+    // The unit is the instrument's, not the type's — a flow meter and a pH
+    // analyser are the same node type reading different things.
+    unit: (s) => s.metrics.unit || '',
+    title: 'The transmitter reading (reading), taken from the stream the solver computed',
+  },
+
   // The ONE number a tank may legitimately print: a residence figure, never a
   // level. Null (no volume_m3 set) means print nothing.
   tank: {
@@ -208,7 +257,10 @@ export function nodeReadout(opType, snap, params) {
   if (raw == null) return null;
   const value = fmtValue(raw);
   if (value == null) return null;
-  return { value, unit: def.unit, title: def.title, raw };
+  // `unit` may be a function: one instrument node reads m³/d, another pH, and
+  // the unit belongs to the reading, not to the type.
+  const unit = typeof def.unit === 'function' ? (def.unit(s, params || EMPTY) || '') : def.unit;
+  return { value, unit, title: def.title, raw };
 }
 
 /**

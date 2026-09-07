@@ -1,34 +1,142 @@
-import { useState, useEffect } from 'react';
+/**
+ * WaterSim Pro — AppLayout
+ *
+ * The application shell. Since Phase 0 of the three-application plan the
+ * sidebar is organised into three SURFACES — Operations, Digital Twin,
+ * Maintenance — each gated by a capability from `auth/roles.js`, plus an
+ * Administration group for admins. A surface a role cannot see is not
+ * rendered at all (the server refuses its API regardless; this only decides
+ * what is drawn). The last surface a person opened is remembered per browser
+ * so the shell reopens where they left it.
+ *
+ * Pages that are not yet built by their phase point at the closest existing
+ * page, so nothing in the nav is a dead link during the rollout.
+ */
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   Droplets, LayoutDashboard, FolderOpen, FileText, Settings,
-  LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck, Bell,
+  LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck, Bell, Factory,
+  Activity, Boxes, Wrench, ScrollText, Gauge, LineChart, ClipboardList, Monitor,
 } from 'lucide-react';
 import { OnboardingTrigger } from '../OnboardingWizard';
 
-const baseNavItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-  { icon: FolderOpen,      label: 'Projects',  path: '/projects' },
-  { icon: FileText,        label: 'Reports',   path: '/reports' },
-  { icon: Bell,            label: 'Alarms',    path: '/alarms' },
-  { icon: Settings,        label: 'Settings',  path: '/settings' },
+// ── Surfaces ──────────────────────────────────────────────────────────────────
+//
+// `capability` gates the whole group. `items[].capability` (optional) gates a
+// single link. `home` is where a click on the surface heading goes.
+export const SURFACES = [
+  {
+    key: 'ops',
+    label: 'Operations',
+    icon: Activity,
+    capability: 'ops.view',
+    home: '/dashboard',
+    items: [
+      { icon: Monitor,         label: 'Live plant', path: '/live' },
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+      { icon: Factory,         label: 'Plant',     path: '/plant' },
+      { icon: FolderOpen,      label: 'Projects',  path: '/monitoring/projects' },
+      { icon: Bell,            label: 'Alarms',    path: '/alarms' },
+      { icon: LineChart,       label: 'Trends',    path: '/trends' },
+      { icon: FileText,        label: 'Reports',   path: '/reports' },
+    ],
+  },
+  {
+    key: 'twin',
+    label: 'Digital Twin',
+    icon: Boxes,
+    capability: 'twin.view',
+    home: '/twin',
+    items: [
+      { icon: Boxes,      label: 'Twin',      path: '/twin' },
+      { icon: FolderOpen, label: 'Projects',  path: '/projects' },
+      { icon: Gauge,      label: 'Scenarios', path: '/reports/compare' },
+    ],
+  },
+  {
+    key: 'maintenance',
+    label: 'Maintenance',
+    icon: Wrench,
+    capability: 'maintenance.view',
+    home: '/tasks',
+    items: [
+      { icon: ClipboardList, label: 'Tasks',  path: '/tasks' },
+      { icon: Bell,          label: 'Alarms', path: '/alarms' },
+    ],
+  },
 ];
 
-const adminNavItem = { icon: ShieldCheck, label: 'Admin', path: '/admin' };
+/** Administration: not a surface — a group that only some roles see. */
+const ADMIN_ITEMS = [
+  { icon: ShieldCheck, label: 'Admin', path: '/admin', roles: ['admin', 'engineer', 'manager'] },
+  { icon: ScrollText,  label: 'Audit', path: '/audit', capability: 'audit.read' },
+];
+
+const SETTINGS_ITEM = { icon: Settings, label: 'Settings', path: '/settings' };
+
+const SURFACE_KEY = 'ws.surface';
+const readSurface = () => { try { return localStorage.getItem(SURFACE_KEY); } catch { return null; } };
+const writeSurface = (k) => { try { localStorage.setItem(SURFACE_KEY, k); } catch { /* private mode */ } };
+
+/** Every surface that lists a link under this path, in nav order. */
+export function surfacesForPath(pathname, surfaces = SURFACES) {
+  return surfaces.filter(s => s.items.some(i => pathname.startsWith(i.path))).map(s => s.key);
+}
+
+/**
+ * Which surface owns a path. A path can live in more than one surface while
+ * placeholder links point at their nearest existing page (Alarms is both an
+ * Operations page and, until Phase 2, the Maintenance home): the surface the
+ * person chose keeps ownership if it is one of them; otherwise the first wins.
+ */
+export function surfaceForPath(pathname, surfaces = SURFACES, preferred = null) {
+  const owners = surfacesForPath(pathname, surfaces);
+  if (!owners.length) return null;
+  return preferred && owners.includes(preferred) ? preferred : owners[0];
+}
+
+/** Longest-prefix match so `/reports/compare` resolves to Scenarios, not Reports. */
+function activeItem(items, pathname) {
+  let best = null;
+  for (const it of items) {
+    if (pathname.startsWith(it.path) && (!best || it.path.length > best.path.length)) best = it;
+  }
+  return best;
+}
 
 // Module-scope so React keeps the same component identity across renders —
 // declaring this inside AppLayout remounted the whole sidebar on every render.
 function SidebarContent({
   mobile = false,
   collapsed,
-  navItems,
+  surfaces,
+  adminItems,
   user,
   pathname,
+  currentSurface,
+  onSelectSurface,
   onCloseDrawer,
   onLogout,
   onToggleCollapse,
 }) {
+  const expanded = !collapsed || mobile;
+  // The open surface's links are listed first so a path shared between two
+  // surfaces highlights the link in the one that is open.
+  const ordered = [...surfaces].sort((a, b) => (a.key === currentSurface ? -1 : b.key === currentSurface ? 1 : 0));
+  const allItems = [...ordered.flatMap(s => s.items), ...adminItems, SETTINGS_ITEM];
+  const current = activeItem(allItems, pathname);
+  const isActive = (item) => current && current.path === item.path && current.label === item.label;
+
+  const linkClass = (active, tone = 'default') => {
+    const on  = tone === 'admin' ? 'bg-amber-500/30 text-amber-100' : 'bg-white/20 text-white';
+    const off = tone === 'admin'
+      ? 'text-amber-200 hover:bg-amber-500/20 hover:text-amber-100'
+      : 'text-brand-100 hover:bg-white/10 hover:text-white';
+    return `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${active ? on : off}`;
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Logo */}
@@ -37,9 +145,7 @@ function SidebarContent({
           <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
             <Droplets className="w-5 h-5" />
           </div>
-          {(!collapsed || mobile) && (
-            <span className="font-bold text-base truncate">WaterSim Pro</span>
-          )}
+          {expanded && <span className="font-bold text-base truncate">WaterSim Pro</span>}
         </div>
         {mobile && (
           <button onClick={onCloseDrawer}
@@ -50,36 +156,82 @@ function SidebarContent({
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto" aria-label="Main navigation">
-        {navItems.map(({ icon: Icon, label, path }) => {
-          const active = pathname.startsWith(path);
-          const isAdmin = path === '/admin';
+      <nav className="flex-1 py-3 px-2 overflow-y-auto space-y-3" aria-label="Main navigation">
+        {surfaces.map((s) => {
+          const SIcon = s.icon;
+          const open = s.key === currentSurface;
           return (
-            <div key={path}>
-              {isAdmin && <div className="my-2 border-t border-brand-600 opacity-40" role="separator" />}
-              <Link
-                to={path}
-                aria-current={active ? 'page' : undefined}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                  ${active
-                    ? isAdmin
-                      ? 'bg-amber-500/30 text-amber-100'
-                      : 'bg-white/20 text-white'
-                    : isAdmin
-                      ? 'text-amber-200 hover:bg-amber-500/20 hover:text-amber-100'
-                      : 'text-brand-100 hover:bg-white/10 hover:text-white'}`}
+            <section key={s.key} data-surface={s.key} data-open={open ? 'true' : 'false'} aria-label={s.label}>
+              <button
+                type="button"
+                onClick={() => onSelectSurface(s.key)}
+                aria-expanded={open}
+                aria-controls={`surface-${s.key}${mobile ? '-m' : ''}`}
+                title={s.label}
+                className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wider transition-colors
+                  ${open ? 'text-white' : 'text-brand-200 hover:text-white hover:bg-white/10'}`}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-                {(!collapsed || mobile) && <span>{label}</span>}
-              </Link>
-            </div>
+                <SIcon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                {expanded && <span className="flex-1 text-left truncate">{s.label}</span>}
+                {expanded && (
+                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
+                )}
+              </button>
+              {(open || !expanded) && (
+                <div id={`surface-${s.key}${mobile ? '-m' : ''}`} className="mt-1 space-y-0.5">
+                  {s.items.map(({ icon: Icon, label, path, badge }) => {
+                    const active = isActive({ path, label });
+                    return (
+                      <Link
+                        key={`${s.key}:${label}`}
+                        to={path}
+                        aria-current={active ? 'page' : undefined}
+                        title={badge ? `${label} — arrives in ${badge}` : label}
+                        className={`${linkClass(active)} ${expanded ? 'pl-9' : ''}`}
+                      >
+                        <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+                        {expanded && <span className="flex-1 truncate">{label}</span>}
+                        {expanded && badge && (
+                          <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/10 text-brand-200">
+                            {badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           );
         })}
+
+        {/* Settings, then the admin group */}
+        <div className="pt-2 border-t border-brand-600/60 space-y-0.5">
+          <Link
+            to={SETTINGS_ITEM.path}
+            aria-current={isActive(SETTINGS_ITEM) ? 'page' : undefined}
+            className={linkClass(isActive(SETTINGS_ITEM))}
+          >
+            <Settings className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+            {expanded && <span>Settings</span>}
+          </Link>
+          {adminItems.map(({ icon: Icon, label, path }) => (
+            <Link
+              key={path}
+              to={path}
+              aria-current={isActive({ path, label }) ? 'page' : undefined}
+              className={linkClass(isActive({ path, label }), 'admin')}
+            >
+              <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+              {expanded && <span>{label}</span>}
+            </Link>
+          ))}
+        </div>
       </nav>
 
       {/* User + actions */}
       <div className="border-t border-brand-600 p-2 flex-shrink-0">
-        {(!collapsed || mobile) && user && (
+        {expanded && user && (
           <div className="flex items-center gap-3 px-3 py-2 mb-1">
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
               <User className="w-4 h-4" />
@@ -93,7 +245,7 @@ function SidebarContent({
         <button onClick={onLogout}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-brand-100 hover:bg-white/10 hover:text-white transition-colors">
           <LogOut className="w-5 h-5 flex-shrink-0" />
-          {(!collapsed || mobile) && <span>Sign out</span>}
+          {expanded && <span>Sign out</span>}
         </button>
         {!mobile && (
           <button onClick={onToggleCollapse}
@@ -110,20 +262,52 @@ function SidebarContent({
 }
 
 export default function AppLayout({ children, immersive = false, defaultCollapsed = false }) {
-  const { user, logout } = useAuth();
+  const { user, can, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => {
-    try { const v = localStorage.getItem('ws.navCollapsed'); if (v != null) return v === '1'; } catch {}
+    try { const v = localStorage.getItem('ws.navCollapsed'); if (v != null) return v === '1'; } catch { /* private mode */ }
     return defaultCollapsed;
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Build nav items — show Admin link for admin and engineer roles
-  const canAccessAdmin = ['admin', 'engineer'].includes(user?.role);
-  const navItems = canAccessAdmin
-    ? [...baseNavItems, adminNavItem]
-    : baseNavItems;
+  // Surfaces this role may see, with per-link capability gates applied.
+  const allow = (cap) => !cap || (typeof can === 'function' && can(cap));
+  const surfaces = useMemo(
+    () => SURFACES
+      .filter(s => allow(s.capability))
+      .map(s => ({ ...s, items: s.items.filter(i => allow(i.capability)) }))
+      .filter(s => s.items.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user?.role, can],
+  );
+  const adminItems = useMemo(
+    () => ADMIN_ITEMS.filter(i => (i.roles ? i.roles.includes(user?.role) : allow(i.capability))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user?.role, can],
+  );
+
+  // The open surface: the one that owns the current path; otherwise the one
+  // this browser last used; otherwise the first the role can see.
+  const [chosenSurface, setChosenSurface] = useState(readSurface);
+  const ownedBy = surfaceForPath(location.pathname, surfaces, chosenSurface);
+  const firstKey = surfaces[0]?.key || null;
+  const currentSurface = ownedBy
+    || (surfaces.some(s => s.key === chosenSurface) ? chosenSurface : firstKey);
+
+  useEffect(() => {
+    if (ownedBy && ownedBy !== chosenSurface) { setChosenSurface(ownedBy); writeSurface(ownedBy); }
+  }, [ownedBy, chosenSurface]);
+
+  const selectSurface = (key) => {
+    setChosenSurface(key);
+    writeSurface(key);
+    const s = surfaces.find(x => x.key === key);
+    // Opening a surface that does not list the current page takes you to its
+    // home; one that does (Alarms sits under Operations and Maintenance) stays.
+    const owners = surfacesForPath(location.pathname, surfaces);
+    if (s && !owners.includes(key)) navigate(s.home);
+  };
 
   // Close mobile drawer on route change
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
@@ -139,13 +323,30 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
 
   const sidebarProps = {
     collapsed,
-    navItems,
+    surfaces,
+    adminItems,
     user,
     pathname: location.pathname,
+    currentSurface,
+    onSelectSurface: selectSurface,
     onCloseDrawer: () => setDrawerOpen(false),
     onLogout: handleLogout,
-    onToggleCollapse: () => setCollapsed(c => { const n = !c; try { localStorage.setItem('ws.navCollapsed', n ? '1' : '0'); } catch {} return n; }),
+    onToggleCollapse: () => setCollapsed(c => { const n = !c; try { localStorage.setItem('ws.navCollapsed', n ? '1' : '0'); } catch { /* private mode */ } return n; }),
   };
+
+  // Header title: the active link's label, or the surface's, or the product's.
+  // The open surface's links come first so a shared path names its link there.
+  const surfaceMeta = surfaces.find(s => s.key === currentSurface);
+  const everyItem = [
+    ...(surfaceMeta?.items || []),
+    ...surfaces.filter(s => s.key !== currentSurface).flatMap(s => s.items),
+    ...adminItems, SETTINGS_ITEM,
+  ];
+  const active = activeItem(everyItem, location.pathname);
+  const title = active?.label || surfaceMeta?.label || 'WaterSim Pro';
+
+  // Mobile bottom bar: the open surface's links (max 5), plus Settings.
+  const bottomItems = [...(surfaceMeta?.items || []).slice(0, 4), SETTINGS_ITEM];
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
@@ -184,7 +385,10 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
           </button>
 
           <h1 className="text-base md:text-lg font-semibold text-gray-900 truncate flex-1">
-            {navItems.find(n => location.pathname.startsWith(n.path))?.label || 'WaterSim Pro'}
+            {surfaceMeta && active && active.label !== surfaceMeta.label && (
+              <span className="hidden sm:inline text-gray-400 font-normal">{surfaceMeta.label} / </span>
+            )}
+            {title}
           </h1>
 
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -207,16 +411,16 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
         </main>
       </div>
 
-      {/* Mobile bottom navigation bar — base items only (Admin accessible via hamburger) */}
+      {/* Mobile bottom navigation bar — the open surface's links (Admin via hamburger) */}
       <nav aria-label="Bottom navigation" className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 flex">
-        {baseNavItems.map(({ icon: Icon, label, path }) => {
-          const active = location.pathname.startsWith(path);
+        {bottomItems.map(({ icon: Icon, label, path }) => {
+          const isOn = active && active.path === path && active.label === label;
           return (
-            <Link key={path} to={path}
+            <Link key={`${label}:${path}`} to={path}
               aria-label={label}
-              aria-current={active ? 'page' : undefined}
+              aria-current={isOn ? 'page' : undefined}
               className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors
-                ${active ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
+                ${isOn ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
             >
               <Icon className="w-5 h-5" aria-hidden="true" />
               <span>{label}</span>

@@ -15,7 +15,7 @@
 
 const path = require('path');
 const express = require('express');
-const { param, query: qv, validationResult } = require('express-validator');
+const { body, param, query: qv, validationResult } = require('express-validator');
 const { query } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { auditLog } = require('../utils/audit');
@@ -328,6 +328,34 @@ router.post('/events/:id/ack', requireRole('operator'), [
     });
     res.json(r.rows[0]);
   } catch (err) { next(err); }
+});
+
+// ── POST /alarms/events/:id/task — raise a maintenance task by hand (operator+)
+//
+// The same path the evaluator takes under a rule's policy, taken by a person.
+// One task per event: a second call answers 200 with the existing task.
+router.post('/events/:id/task', requireRole('operator'), [
+  param('id').isUUID(),
+  body('title').optional().isString().trim().isLength({ min: 3, max: 200 }),
+  body('priority').optional().isIn(['low', 'medium', 'high', 'urgent']),
+  body('assignedTo').optional({ nullable: true }).isUUID(),
+  body('assignedRole').optional({ nullable: true }).isIn(['operator', 'engineer', 'manager']),
+], async (req, res, next) => {
+  if (vErr(req, res)) return;
+  try {
+    const ev = await query(`SELECT * FROM alarm_events WHERE id = $1 AND organisation_id = $2`, [req.params.id, orgId(req)]);
+    if (!ev.rows[0]) return res.status(404).json({ error: 'Alarm event not found' });
+    const rule = (await query(`SELECT * FROM alarm_rules WHERE id = $1`, [ev.rows[0].rule_id])).rows[0] || null;
+    const { createTaskFromEvent } = require('../maintenance/tasks');
+    const { task, created } = await createTaskFromEvent(ev.rows[0], rule, {
+      actor: { id: req.user.sub || req.user.id, role: req.user.role }, source: 'user', req,
+      overrides: { title: req.body.title, priority: req.body.priority, assignedTo: req.body.assignedTo, assignedRole: req.body.assignedRole },
+    });
+    res.status(created ? 201 : 200).json(task);
+  } catch (err) {
+    if (err.isOperational && err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
 });
 
 module.exports = router;

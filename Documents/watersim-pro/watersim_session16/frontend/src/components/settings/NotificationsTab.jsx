@@ -1,0 +1,304 @@
+/**
+ * NotificationsTab — the Settings panel for Phase 2 notifications.
+ *
+ *   My channels    email on/off (login address by default), WhatsApp number,
+ *                  "send test" per channel with the delivery result shown.
+ *   Policy         who hears what: (role | user) × event type × minimum
+ *                  severity → channels. Read by everyone, edited by managers
+ *                  and admins (capability notify.policy).
+ *   Outbox         recent deliveries with state and error; retry from here.
+ *
+ * Provider status (SMTP, Twilio, dry-run) comes from the API so the page
+ * says plainly why a message is dead instead of leaving people to guess.
+ */
+import { useState, useEffect, useCallback } from 'react';
+import { Mail, MessageCircle, Send, Loader2, Plus, Trash2, RefreshCw, RotateCcw, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+
+const SEVERITIES = ['info', 'warning', 'critical'];
+const ROLES = ['viewer', 'operator', 'engineer', 'manager', 'admin'];
+
+function ProviderBanner({ providers }) {
+  if (!providers) return null;
+  const items = [
+    { key: 'email', label: 'Email (SMTP)', s: providers.email },
+    { key: 'whatsapp', label: 'WhatsApp (Twilio)', s: providers.whatsapp },
+  ];
+  return (
+    <div className="flex flex-wrap gap-2 text-xs" aria-label="Provider status">
+      {providers.dryRun && (
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+          <AlertTriangle className="w-3.5 h-3.5" /> Dry run: messages are logged, not sent
+        </span>
+      )}
+      {items.map((p) => (
+        <span key={p.key} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border ${p.s?.ok ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+          {p.s?.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+          {p.label}: {p.s?.ok ? (p.s.reason || 'configured') : (p.s?.reason || 'not configured')}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function StatePill({ state }) {
+  const cls = state === 'sent' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+    : state === 'dead' ? 'text-red-700 bg-red-50 border-red-200'
+      : state === 'failed' ? 'text-amber-700 bg-amber-50 border-amber-200'
+        : 'text-gray-600 bg-gray-50 border-gray-200';
+  return <span data-state={state} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${cls}`}>{state}</span>;
+}
+
+export default function NotificationsTab({ showToast }) {
+  const { can } = useAuth();
+  const canPolicy = typeof can === 'function' && can('notify.policy');
+
+  const [me, setMe] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [subs, setSubs] = useState([]);
+  const [outbox, setOutbox] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [testResult, setTestResult] = useState(null);
+  const [form, setForm] = useState({ email: { enabled: true, address: '' }, whatsapp: { enabled: false, address: '' } });
+  const [newSub, setNewSub] = useState({ target: 'role:engineer', eventType: 'alarm.raised', minSeverity: 'warning', channels: ['email'] });
+
+  const load = useCallback(async () => {
+    try {
+      const [m, e, s] = await Promise.all([api.get('/notifications/me'), api.get('/notifications/events'), api.get('/notifications/subscriptions')]);
+      setMe(m.data);
+      setForm({ email: { enabled: m.data.email.enabled, address: m.data.email.address || '' }, whatsapp: { enabled: m.data.whatsapp.enabled, address: m.data.whatsapp.address || '' } });
+      setEvents(e.data.events || []);
+      setSubs(s.data.subscriptions || []);
+      setError(null);
+      if (canPolicy) {
+        const o = await api.get('/notifications/outbox?limit=50');
+        setOutbox(o.data);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not load notification settings');
+    }
+  }, [canPolicy]);
+  useEffect(() => { load(); }, [load]);
+
+  const saveChannels = async () => {
+    setBusy('save');
+    try {
+      const body = {
+        email: { enabled: form.email.enabled },
+        ...(form.whatsapp.address || !form.whatsapp.enabled ? { whatsapp: { enabled: form.whatsapp.enabled, ...(form.whatsapp.address ? { address: form.whatsapp.address.trim() } : {}) } } : {}),
+      };
+      const { data } = await api.put('/notifications/me/channels', body);
+      setMe(data);
+      showToast?.('Notification channels saved');
+    } catch (err) {
+      showToast?.(err.response?.data?.details?.[0]?.msg || err.response?.data?.error || 'Could not save', false);
+    } finally { setBusy(null); }
+  };
+
+  const sendTest = async (channel) => {
+    setBusy(`test:${channel}`);
+    setTestResult(null);
+    try {
+      const { data } = await api.post('/notifications/test', { channel });
+      setTestResult(data);
+      showToast?.(data.state === 'sent' ? `Test ${channel} sent to ${data.address}` : `Test ${channel}: ${data.state}${data.last_error ? ` — ${data.last_error}` : ''}`, data.state === 'sent');
+    } catch (err) {
+      showToast?.(err.response?.data?.error || 'Test failed', false);
+    } finally { setBusy(null); }
+  };
+
+  const addSub = async () => {
+    setBusy('sub');
+    try {
+      const [kind, value] = newSub.target.split(':');
+      await api.post('/notifications/subscriptions', {
+        ...(kind === 'role' ? { role: value } : { userId: value }),
+        eventType: newSub.eventType, minSeverity: newSub.minSeverity, channels: newSub.channels,
+      });
+      showToast?.('Policy row added');
+      await load();
+    } catch (err) {
+      showToast?.(err.response?.data?.details?.[0]?.msg || err.response?.data?.error || 'Could not add', false);
+    } finally { setBusy(null); }
+  };
+
+  const toggleSub = async (s, patch) => {
+    try { await api.patch(`/notifications/subscriptions/${s.id}`, patch); await load(); }
+    catch (err) { showToast?.(err.response?.data?.error || 'Could not update', false); }
+  };
+  const removeSub = async (s) => {
+    if (!window.confirm('Remove this policy row?')) return;
+    try { await api.delete(`/notifications/subscriptions/${s.id}`); await load(); }
+    catch (err) { showToast?.(err.response?.data?.error || 'Could not remove', false); }
+  };
+  const retry = async (row) => {
+    setBusy(`retry:${row.id}`);
+    try { const { data } = await api.post(`/notifications/outbox/${row.id}/retry`); showToast?.(`Retried: ${data.state}`, data.state === 'sent'); await load(); }
+    catch (err) { showToast?.(err.response?.data?.error || 'Retry failed', false); }
+    finally { setBusy(null); }
+  };
+
+  const toggleChannel = (c) => setNewSub((n) => ({ ...n, channels: n.channels.includes(c) ? n.channels.filter((x) => x !== c) : [...n.channels, c] }));
+
+  return (
+    <div className="space-y-6">
+      {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</div>}
+      <ProviderBanner providers={me?.providers} />
+
+      {/* ── My channels ── */}
+      <section aria-label="My channels" className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-900">My channels</h3>
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="card p-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+              <input type="checkbox" checked={form.email.enabled} onChange={(e) => setForm((f) => ({ ...f, email: { ...f.email, enabled: e.target.checked } }))} className="accent-brand-600" />
+              <Mail className="w-4 h-4 text-gray-500" /> Email
+            </label>
+            <div className="text-xs text-gray-500">Sent to <span className="font-mono">{form.email.address || 'your login address'}</span>.</div>
+            <button onClick={() => sendTest('email')} disabled={!!busy} className="btn-secondary text-xs disabled:opacity-50" aria-label="Send test email">
+              {busy === 'test:email' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send test
+            </button>
+          </div>
+          <div className="card p-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+              <input type="checkbox" checked={form.whatsapp.enabled} onChange={(e) => setForm((f) => ({ ...f, whatsapp: { ...f.whatsapp, enabled: e.target.checked } }))} className="accent-brand-600" />
+              <MessageCircle className="w-4 h-4 text-gray-500" /> WhatsApp
+            </label>
+            <input className="input py-1.5 text-sm w-full font-mono" placeholder="+91 98765 43210 (E.164)" value={form.whatsapp.address}
+              onChange={(e) => setForm((f) => ({ ...f, whatsapp: { ...f.whatsapp, address: e.target.value.replace(/\s+/g, '') } }))} aria-label="WhatsApp number" />
+            <button onClick={() => sendTest('whatsapp')} disabled={!!busy || !me?.whatsapp?.address} className="btn-secondary text-xs disabled:opacity-50" aria-label="Send test WhatsApp">
+              {busy === 'test:whatsapp' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send test
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={saveChannels} disabled={busy === 'save'} className="btn-primary text-sm disabled:opacity-50" aria-label="Save channels">
+            {busy === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Save channels
+          </button>
+          {testResult && (
+            <span className="text-xs text-gray-600 inline-flex items-center gap-2" data-testid="test-result">
+              <StatePill state={testResult.state} /> {testResult.channel} → {testResult.address}{testResult.last_error ? ` · ${testResult.last_error}` : ''}
+            </span>
+          )}
+        </div>
+        {me?.subscriptions?.length > 0 && (
+          <div className="text-xs text-gray-500">
+            You currently hear about: {me.subscriptions.map((s) => `${s.eventType} (${s.minSeverity}+)`).join(', ')}.
+          </div>
+        )}
+      </section>
+
+      {/* ── Policy ── */}
+      <section aria-label="Notification policy" className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-900">Who hears what</h3>
+          <button onClick={load} className="btn-secondary text-xs" aria-label="Reload policy"><RefreshCw className="w-3.5 h-3.5" /></button>
+        </div>
+        <div className="overflow-x-auto card">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+              <tr><th className="text-left px-3 py-2">Who</th><th className="text-left px-3 py-2">Event</th><th className="text-left px-3 py-2">From severity</th><th className="text-left px-3 py-2">Channels</th><th className="px-3 py-2">On</th>{canPolicy && <th className="px-3 py-2" />}</tr>
+            </thead>
+            <tbody>
+              {subs.map((s) => (
+                <tr key={s.id} className="border-t border-gray-100" data-sub={s.id}>
+                  <td className="px-3 py-2 capitalize">{s.role ? `every ${s.role}` : s.userName || 'a user'}</td>
+                  <td className="px-3 py-2 font-mono">{s.eventType}</td>
+                  <td className="px-3 py-2">
+                    {canPolicy ? (
+                      <select className="input py-0.5 text-xs" value={s.minSeverity} onChange={(e) => toggleSub(s, { minSeverity: e.target.value })} aria-label={`Minimum severity for ${s.eventType}`}>
+                        {SEVERITIES.map((x) => <option key={x} value={x}>{x}</option>)}
+                      </select>
+                    ) : s.minSeverity}
+                  </td>
+                  <td className="px-3 py-2">
+                    {['email', 'whatsapp'].map((c) => (
+                      <label key={c} className="inline-flex items-center gap-1 mr-3">
+                        <input type="checkbox" checked={s.channels.includes(c)} disabled={!canPolicy}
+                          onChange={(e) => toggleSub(s, { channels: e.target.checked ? [...s.channels, c] : s.channels.filter((x) => x !== c) })}
+                          aria-label={`${c} for ${s.eventType}`} className="accent-brand-600" /> {c}
+                      </label>
+                    ))}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <input type="checkbox" checked={s.enabled} disabled={!canPolicy} onChange={(e) => toggleSub(s, { enabled: e.target.checked })} aria-label={`Enable ${s.eventType}`} className="accent-brand-600" />
+                  </td>
+                  {canPolicy && <td className="px-3 py-2 text-right"><button onClick={() => removeSub(s)} className="p-1 text-gray-400 hover:text-red-600" aria-label={`Remove ${s.eventType}`}><Trash2 className="w-3.5 h-3.5" /></button></td>}
+                </tr>
+              ))}
+              {!subs.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">No policy rows — nobody is notified beyond their own task assignments.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {canPolicy && (
+          <div className="flex flex-wrap items-end gap-2 text-xs" aria-label="Add policy row">
+            <label>Who
+              <select className="input py-1 text-xs block" value={newSub.target} onChange={(e) => setNewSub((n) => ({ ...n, target: e.target.value }))} aria-label="Who">
+                {ROLES.map((r) => <option key={r} value={`role:${r}`}>every {r}</option>)}
+              </select>
+            </label>
+            <label>Event
+              <select className="input py-1 text-xs block" value={newSub.eventType} onChange={(e) => setNewSub((n) => ({ ...n, eventType: e.target.value }))} aria-label="Event">
+                <option value="*">everything</option>
+                <option value="alarm.">every alarm event</option>
+                <option value="task.">every task event</option>
+                {events.map((e) => <option key={e.type} value={e.type}>{e.label}</option>)}
+              </select>
+            </label>
+            <label>From severity
+              <select className="input py-1 text-xs block" value={newSub.minSeverity} onChange={(e) => setNewSub((n) => ({ ...n, minSeverity: e.target.value }))} aria-label="From severity">
+                {SEVERITIES.map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </label>
+            {['email', 'whatsapp'].map((c) => (
+              <label key={c} className="inline-flex items-center gap-1 pb-1.5"><input type="checkbox" checked={newSub.channels.includes(c)} onChange={() => toggleChannel(c)} className="accent-brand-600" aria-label={`New row ${c}`} /> {c}</label>
+            ))}
+            <button onClick={addSub} disabled={busy === 'sub' || !newSub.channels.length} className="btn-primary text-xs disabled:opacity-50" aria-label="Add policy row">
+              {busy === 'sub' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Add
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* ── Outbox ── */}
+      {canPolicy && outbox && (
+        <section aria-label="Outbox" className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-900">
+            Recent deliveries
+            <span className="ml-2 text-xs font-normal text-gray-500">
+              {outbox.counts.sent} sent · {outbox.counts.pending + outbox.counts.failed} waiting · {outbox.counts.dead} dead
+            </span>
+          </h3>
+          <div className="overflow-x-auto card">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+                <tr><th className="text-left px-3 py-2">When</th><th className="text-left px-3 py-2">To</th><th className="text-left px-3 py-2">Event</th><th className="text-left px-3 py-2">Subject</th><th className="text-left px-3 py-2">State</th><th className="px-3 py-2" /></tr>
+              </thead>
+              <tbody>
+                {outbox.outbox.map((o) => (
+                  <tr key={o.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{new Date(o.createdAt).toLocaleString()}</td>
+                    <td className="px-3 py-2"><span className="font-mono">{o.address}</span>{o.userName ? <span className="text-gray-400"> · {o.userName}</span> : null}<span className="text-gray-400"> · {o.channel}</span></td>
+                    <td className="px-3 py-2 font-mono">{o.eventType}</td>
+                    <td className="px-3 py-2 truncate max-w-[18rem]" title={o.subject}>{o.subject}</td>
+                    <td className="px-3 py-2"><StatePill state={o.state} />{o.lastError && <div className="text-[10px] text-red-600 mt-0.5 max-w-[16rem] truncate" title={o.lastError}>{o.lastError}</div>}</td>
+                    <td className="px-3 py-2 text-right">
+                      {(o.state === 'dead' || o.state === 'failed') && (
+                        <button onClick={() => retry(o)} disabled={!!busy} className="btn-secondary text-[11px] py-0.5 px-2 disabled:opacity-50" aria-label={`Retry ${o.subject}`}>
+                          {busy === `retry:${o.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />} Retry
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!outbox.outbox.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">Nothing sent yet.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}

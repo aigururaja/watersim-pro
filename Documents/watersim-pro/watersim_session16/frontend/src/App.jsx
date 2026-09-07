@@ -18,6 +18,12 @@ const AdminPage      = lazy(() => import('./pages/AdminPage'));
 const ReportsPage    = lazy(() => import('./pages/ReportsPage'));
 const ComparisonPage = lazy(() => import('./pages/ComparisonPage'));
 const AlarmsPage     = lazy(() => import('./pages/AlarmsPage'));
+const PlantPage      = lazy(() => import('./pages/PlantPage'));
+const AuditPage      = lazy(() => import('./pages/AuditPage'));
+const TrendsPage     = lazy(() => import('./pages/TrendsPage'));
+const TasksPage      = lazy(() => import('./pages/TasksPage'));
+const LivePlantPage  = lazy(() => import('./pages/LivePlantPage'));
+const TwinPage       = lazy(() => import('./pages/TwinPage'));
 
 function PageLoader({ label = 'Loading WaterSim Pro…' }) {
   return (
@@ -55,17 +61,30 @@ function AppRoutes() {
 
         {/* Protect routes within ErrorBoundary — each page has its own, plus this top-level one */}
         <Route path="/dashboard"  element={<ProtectedRoute><ErrorBoundary scope="Dashboard"><DashboardPage /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/projects"   element={<ProtectedRoute><ErrorBoundary scope="Projects"><ProjectsPage /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/projects/new" element={<ProtectedRoute><ErrorBoundary scope="Projects"><ProjectsPage autoOpen /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/projects"   element={<ProtectedRoute><ErrorBoundary scope="Projects"><ProjectsPage kind="twin" /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/projects/new" element={<ProtectedRoute><ErrorBoundary scope="Projects"><ProjectsPage kind="twin" autoOpen /></ErrorBoundary></ProtectedRoute>} />
         <Route path="/projects/:projectId" element={<ProtectedRoute><ErrorBoundary scope="Project"><ProjectPage /></ErrorBoundary></ProtectedRoute>} />
         <Route path="/projects/:projectId/flowsheets/:flowsheetId"
                element={<ProtectedRoute><ErrorBoundary scope="Canvas"><CanvasPage /></ErrorBoundary></ProtectedRoute>} />
+
+        {/* Operations: MONITORING projects — the plant as wired. The same pages
+            under their own base, so the sidebar stays on Operations. */}
+        <Route path="/monitoring/projects" element={<ProtectedRoute><ErrorBoundary scope="Projects"><ProjectsPage kind="monitoring" /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/monitoring/projects/new" element={<ProtectedRoute><ErrorBoundary scope="Projects"><ProjectsPage kind="monitoring" autoOpen /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/monitoring/projects/:projectId" element={<ProtectedRoute><ErrorBoundary scope="Project"><ProjectPage /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/monitoring/projects/:projectId/flowsheets/:flowsheetId"
+               element={<ProtectedRoute><ErrorBoundary scope="Canvas"><CanvasPage /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/monitoring/projects/:projectId/flowsheets/:flowsheetId/simulate/:runId/report"
+               element={<ProtectedRoute><ErrorBoundary scope="Report"><ReportPage /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/monitoring/projects/:projectId/settings" element={<ProtectedRoute><ErrorBoundary scope="Project Settings"><SettingsPage /></ErrorBoundary></ProtectedRoute>} />
 
         <Route path="/projects/:projectId/flowsheets/:flowsheetId/simulate/:runId/report"
                element={<ProtectedRoute><ErrorBoundary scope="Report"><ReportPage /></ErrorBoundary></ProtectedRoute>} />
 
         {/* Admin — accessible to admin + engineer roles (page guards internally) */}
         <Route path="/admin" element={<ProtectedRoute><ErrorBoundary scope="Admin"><AdminPage /></ErrorBoundary></ProtectedRoute>} />
+        {/* Audit trail — admin only (capability audit.read; the page explains itself to the rest) */}
+        <Route path="/audit" element={<ProtectedRoute><ErrorBoundary scope="Audit"><AuditPage /></ErrorBoundary></ProtectedRoute>} />
 
         {/* Reports history + comparison */}
         <Route path="/reports" element={<ProtectedRoute><ErrorBoundary scope="Reports"><ReportsPage /></ErrorBoundary></ProtectedRoute>} />
@@ -73,6 +92,23 @@ function AppRoutes() {
 
         {/* Org-wide alarm event history */}
         <Route path="/alarms" element={<ProtectedRoute><ErrorBoundary scope="Alarms"><AlarmsPage /></ErrorBoundary></ProtectedRoute>} />
+
+        {/* Historian trends: any tag over any window, from the Phase 1 historian */}
+        <Route path="/trends" element={<ProtectedRoute><ErrorBoundary scope="Trends"><TrendsPage /></ErrorBoundary></ProtectedRoute>} />
+
+        {/* The live plant screen: measured states, alarms, comms, control (Phase 3) */}
+        <Route path="/live" element={<ProtectedRoute><ErrorBoundary scope="Live plant"><LivePlantPage /></ErrorBoundary></ProtectedRoute>} />
+
+        {/* The digital twin: the model beside the plant, what-if, virtual commissioning (Phase 4) */}
+        <Route path="/twin" element={<ProtectedRoute><ErrorBoundary scope="Twin"><TwinPage /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/twin/:flowsheetId" element={<ProtectedRoute><ErrorBoundary scope="Twin"><TwinPage /></ErrorBoundary></ProtectedRoute>} />
+
+        {/* Maintenance tasks: the alarm → task → approval workflow (Phase 2) */}
+        <Route path="/tasks" element={<ProtectedRoute><ErrorBoundary scope="Tasks"><TasksPage /></ErrorBoundary></ProtectedRoute>} />
+
+        {/* The plant definition: process areas, I/O schedule, control narrative,
+            costing, and the review of everywhere the proposal disagrees with itself */}
+        <Route path="/plant" element={<ProtectedRoute><ErrorBoundary scope="Plant"><PlantPage /></ErrorBoundary></ProtectedRoute>} />
 
         {/* Simulations -> redirects to Reports */}
         <Route path="/simulations" element={<Navigate to="/reports" replace />} />

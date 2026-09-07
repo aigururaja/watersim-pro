@@ -11,10 +11,10 @@
  * "Load more" (the API is offset-paged, not cursor-paged like reports).
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   BellRing, Bell, Download, FileText, RefreshCw, Loader2, X, ChevronDown,
-  Check, CheckCheck, Cpu, Radio, ArrowRight,
+  Check, CheckCheck, Cpu, Radio, ArrowRight, ClipboardList,
 } from 'lucide-react';
 import AppLayout from '../components/layout/AppLayout';
 import { useAuth } from '../context/AuthContext';
@@ -195,7 +195,12 @@ function FilterBar({ filters, setFilters, flowsheets }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function AlarmsPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const navigate = useNavigate();
+  // Raising a maintenance task from an event (Phase 2). Guarded so a test
+  // double for useAuth without `can` still renders the page.
+  const canCreateTask = typeof can === 'function' && can('task.create');
+  const [tasking, setTasking] = useState(new Set());
   const announce = useAnnounce();
 
   // operator+ may acknowledge (the backend gate is requireRole('operator'),
@@ -381,6 +386,21 @@ export default function AlarmsPage() {
 
   const selectableCount = events.filter(e => !e.acknowledged).length;
 
+  // ── Create a maintenance task from an event ──────────────────────────────
+  // One task per event on the server: a second click opens the existing one.
+  const createTask = useCallback(async (event) => {
+    setTasking(prev => new Set(prev).add(event.id));
+    try {
+      const { data } = await api.post(`/alarms/events/${event.id}/task`, {});
+      showToast(`${data.number} ${data.state === 'assigned' ? `assigned to ${data.assignedToName}` : 'raised'}`);
+      navigate(`/tasks?open=${data.id}`);
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Could not create the task', false);
+    } finally {
+      setTasking(prev => { const n = new Set(prev); n.delete(event.id); return n; });
+    }
+  }, [navigate, showToast]);
+
   const columns = useMemo(() => [
     ...(canAck ? [{
       key: 'select', header: '', flex: '0 0 36px', width: 36,
@@ -481,7 +501,25 @@ export default function AlarmsPage() {
         );
       },
     },
-  ], [canAck, selected, acking, ackOne]);
+    ...(canCreateTask ? [{
+      key: 'task', header: 'Task', flex: '0 0 96px', width: 96,
+      render: (e) => {
+        const busy = tasking.has(e.id);
+        return (
+          <button
+            onClick={(ev) => { ev.stopPropagation(); createTask(e); }}
+            disabled={busy}
+            className="btn-secondary text-xs py-1 px-2 disabled:opacity-50"
+            aria-label={`Create task for alarm ${e.ruleName || e.id}`}
+            title="Raise a maintenance task for this alarm (or open the one that exists)"
+          >
+            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ClipboardList className="w-3 h-3" />}
+            Task
+          </button>
+        );
+      },
+    }] : []),
+  ], [canAck, selected, acking, ackOne, canCreateTask, tasking, createTask]);
 
   return (
     <AppLayout>

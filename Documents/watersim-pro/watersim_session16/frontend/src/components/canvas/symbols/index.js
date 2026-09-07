@@ -85,6 +85,16 @@ export const TAG = Object.freeze({
   gac_adsorption: 'GAC',
   // Utilities
   tank: 'TK',
+  // ITC STP equipment (Session 18)
+  equalisation_tank: 'EQT',
+  oil_grease_trap: 'OGT',
+  sbr_reactor: 'SBR',
+  multigrade_filter: 'MGF',
+  activated_carbon_filter: 'ACF',
+  micron_filter: 'MF',
+  water_softener: 'SOF',
+  sludge_centrifuge: 'CFG',
+  instrument: 'XT',
   // Legacy (imported / seeded sheets — not on the palette)
   preliminary: 'PRE',
   granular_filter: 'FLT',

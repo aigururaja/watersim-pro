@@ -87,7 +87,17 @@ function solve(inputs, params = {}) {
   const inf = inputs.influent || new Stream();
 
   const chemType = (p.chemical_type || 'alum').toLowerCase().replace(/[- ]/g, '_');
-  const coeff    = CHEMICAL_COEFFICIENTS[chemType] || CHEMICAL_COEFFICIENTS.alum;
+  // An unrecognised chemical used to fall through to alum in silence, which is
+  // the worst possible default: alum precipitates phosphorus, so a node labelled
+  // "chlorine dosing" quietly removed 2.7 % of the plant's TP and contradicted a
+  // review finding that said the plant has no phosphorus removal at all. The
+  // fallback stays — refusing to solve would be worse — but it now says so.
+  const known    = Object.prototype.hasOwnProperty.call(CHEMICAL_COEFFICIENTS, chemType);
+  const coeff    = known ? CHEMICAL_COEFFICIENTS[chemType] : CHEMICAL_COEFFICIENTS.alum;
+  const typeWarnings = known ? [] : [
+    `Unknown chemical_type "${p.chemical_type}" — falling back to alum coefficients, `
+    + `which REMOVE phosphorus. Known types: ${Object.keys(CHEMICAL_COEFFICIENTS).join(', ')}.`,
+  ];
   const dose     = Math.max(0, p.dose_mg_L);
 
   // Start with influent values
@@ -149,6 +159,7 @@ function solve(inputs, params = {}) {
     pH_in:            +inf.pH.toFixed(2),
     pH_out:           +pH.toFixed(2),
   };
+  if (typeWarnings.length) metrics.warnings = typeWarnings;
 
   return { effluent, metrics };
 }

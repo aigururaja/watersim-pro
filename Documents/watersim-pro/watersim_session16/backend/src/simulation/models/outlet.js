@@ -4,6 +4,22 @@
  * Acts as the sink node in the process graph.
  * Passes the incoming stream through unchanged and reports it as final effluent.
  *
+ * ── DISCHARGE TYPE (Session 18) ──────────────────────────────────────────────
+ * A plant has more boundaries than it has permitted discharges. The ITC works
+ * ends in five: three product waters (cooling tower, irrigation, flushing) and
+ * two waste exports (dewatered cake to a skip, softener regeneration to reject).
+ * Grading a 180,000 mg/L cake against a 30 mg/L TSS water permit is meaningless,
+ * and mixing it into the plant effluent poisons every downstream number.
+ *
+ * `discharge_type` says which kind of boundary this is:
+ *   'water'   a permitted water discharge — graded, and counted in the plant
+ *             effluent mix. THE DEFAULT, so every existing sheet is unchanged.
+ *   'solids'  a dewatered-solids export — reported, never graded
+ *   'reject'  a process reject or regeneration waste — reported, never graded
+ *
+ * Only 'water' outlets carry `compliant` / `permit_violations`; the others
+ * report `graded: false` and say why, so nothing is silently skipped.
+ *
  * Permit limits are now configurable via the `permitLimits` param.
  * Falls back to built-in defaults if none are provided.
  *
@@ -28,17 +44,44 @@ const DEFAULT_LIMITS = {
   pH_max:  9.0,
 };
 
+/** Boundary kinds an outlet can represent. Only 'water' is graded. */
+const DISCHARGE_TYPES = {
+  water:  { label: 'Permitted water discharge', graded: true },
+  solids: { label: 'Dewatered solids export',   graded: false,
+            reason: 'A solids export is weighed and hauled, not sampled against a water permit.' },
+  reject: { label: 'Process reject / regeneration waste', graded: false,
+            reason: 'A reject line is returned or tankered, not discharged under the water permit.' },
+};
+
 /**
  * @param {{ influent: Stream }} inputs
- * @param {{ permitLimits?: object }} params
+ * @param {{ permitLimits?: object, discharge_type?: string }} params
  * @returns {{ effluent: Stream, metrics: object }}
  */
 function solve(inputs, params = {}) {
   const inf      = inputs.influent || new Stream();
   const effluent = inf.clone();
 
+  const typeKey = DISCHARGE_TYPES[params.discharge_type] ? params.discharge_type : 'water';
+  const dischargeType = DISCHARGE_TYPES[typeKey];
+
   // Merge org permit template over defaults
   const limits = { ...DEFAULT_LIMITS, ...(params.permitLimits || {}) };
+
+  if (!dischargeType.graded) {
+    return {
+      effluent,
+      metrics: {
+        Q_out:          effluent.Q,
+        discharge_type: typeKey,
+        discharge_label: dischargeType.label,
+        graded:         false,
+        not_graded_because: dischargeType.reason,
+        compliant:      null,
+        permit_violations: [],
+      },
+    };
+  }
 
   // Effluent quality compliance check
   const flags = [];
@@ -64,6 +107,9 @@ function solve(inputs, params = {}) {
     effluent,
     metrics: {
       Q_out:             effluent.Q,
+      discharge_type:    typeKey,
+      discharge_label:   dischargeType.label,
+      graded:            true,
       compliant:         flags.length === 0,
       permit_violations: flags,
       limits_applied:    limits,
@@ -71,4 +117,4 @@ function solve(inputs, params = {}) {
   };
 }
 
-module.exports = { solve, DEFAULT_LIMITS };
+module.exports = { solve, DEFAULT_LIMITS, DISCHARGE_TYPES };

@@ -33,9 +33,48 @@
 'use strict';
 
 const { query } = require('../db/pool');
-const { broadcastToRoom } = require('../collab/wsServer');
+const { broadcastToRoom, broadcastToOrg } = require('../collab/wsServer');
 const { buildNodeLabels } = require('./validTargets');
 const logger = require('../utils/logger');
+
+// ── After a transition: the maintenance workflow and the notification fan-out.
+// Lazily required and fire-and-forget: an evaluation never waits on a task
+// insert or an outbox write, and a failure there is logged, not raised.
+function afterRaised(row, rule, flowsheetId) {
+  setImmediate(async () => {
+    try {
+      const { emit } = require('../notifications');
+      let task = null;
+      if (rule.create_task) {
+        const { createTaskFromEvent } = require('../maintenance/tasks');
+        const r = await createTaskFromEvent(row, rule, { source: 'evaluator' });
+        task = r.task;
+      }
+      await emit('alarm.raised', {
+        orgId: row.organisation_id, severity: row.severity, flowsheetId,
+        payload: { alarm: { id: row.id, ruleId: rule.id, ruleName: rule.name, kind: rule.kind, severity: row.severity, message: row.message, value: row.value, limitMin: row.limit_min, limitMax: row.limit_max, source: row.source, triggeredAt: row.triggered_at, nodeId: rule.node_id, paramKey: rule.param_key, tagId: rule.tag_id || null }, task },
+        dedupeKey: `alarm.raised|${row.id}`,
+      });
+    } catch (err) {
+      logger.warn('Post-raise hook failed', { eventId: row.id, err: err.message });
+    }
+  });
+}
+
+function afterCleared(row, rule, flowsheetId) {
+  setImmediate(async () => {
+    try {
+      const { emit } = require('../notifications');
+      await emit('alarm.cleared', {
+        orgId: row.organisation_id, severity: row.severity, flowsheetId,
+        payload: { alarm: { id: row.id, ruleName: rule?.name || null, message: row.message, clearedAt: row.cleared_at } },
+        dedupeKey: `alarm.cleared|${row.id}`,
+      });
+    } catch (err) {
+      logger.warn('Post-clear hook failed', { eventId: row.id, err: err.message });
+    }
+  });
+}
 
 const RULE_CACHE_TTL_MS = 10_000;
 
@@ -74,6 +113,15 @@ function buildMessage(rule, value, nodeLabels = {}) {
     : rule.target_type === 'node_output'
       ? `${nodeLabels[rule.node_id] || rule.node_id} outflow ${rule.param_key}`
       : `${nodeLabels[rule.node_id] || rule.node_id} ${rule.param_key}`;
+  if (rule.kind === 'quality') {
+    // The value on a comms-loss event is seconds since the last good sample.
+    const dark = Number.isFinite(Number(value)) ? `${fmt(value)} s` : 'an unknown time';
+    return `${subject} comms lost — no good PLC sample for ${dark} (limit ${fmt(rule.stale_after_s)} s)`;
+  }
+  if (rule.kind === 'drift') {
+    // The value on a drift event is the residual's z against its own history.
+    return `${subject} model and plant disagree — residual z = ${fmt(value)} (limit ±${fmt(rule.max_value)})`;
+  }
   if (rule.max_value != null && value > Number(rule.max_value)) {
     return `${subject} ${fmt(value)} exceeded max ${fmt(rule.max_value)}`;
   }
@@ -126,10 +174,9 @@ function serializeEvent(row, ruleName = null) {
 
 function broadcastEvent(flowsheetId, row, ruleName, transition) {
   try {
-    broadcastToRoom(flowsheetId, {
-      type: 'alarm:event',
-      payload: { event: serializeEvent(row, ruleName), transition },
-    });
+    const message = { type: 'alarm:event', payload: { event: serializeEvent(row, ruleName), transition } };
+    broadcastToRoom(flowsheetId, message);
+    broadcastToOrg(row.organisation_id, message);
   } catch (err) {
     logger.warn('Alarm broadcast failed', { flowsheetId, err: err.message });
   }
@@ -137,6 +184,11 @@ function broadcastEvent(flowsheetId, row, ruleName, transition) {
 
 /**
  * Run the event state machine for one evaluation pass.
+ *
+ * Quality (comms-loss) rules are never part of a value evaluation: the run
+ * and PLC entry points below exclude them, because a value pass that found
+ * the rule "clean" would clear a comms-loss event that is still real. They
+ * arrive here only from alarms/qualitySweep.js, with the seconds-dark as value.
  * @param {string} flowsheetId
  * @param {string} organisationId
  * @param {Array<{rule, value}>} breaches — from evaluateRules
@@ -174,13 +226,19 @@ async function processEvaluation(flowsheetId, organisationId, breaches, allRuleI
            (organisation_id, rule_id, flowsheet_id, run_id, source, state,
             severity, message, value, limit_min, limit_max)
          VALUES ($1,$2,$3,$4,$5,'active',$6,$7,$8,$9,$10)
+         ON CONFLICT (rule_id) WHERE state = 'active' DO NOTHING
          RETURNING *`,
         [organisationId, rule.id, flowsheetId, runId, source, rule.severity,
          buildMessage(rule, value, nodeLabels), value,
          rule.min_value != null ? rule.min_value : null,
          rule.max_value != null ? rule.max_value : null]
       );
+      // One active event per rule is a database guarantee
+      // (uq_alarm_events_one_active): a concurrent pass that raised it first
+      // wins, and this pass simply does not broadcast a second 'raised'.
+      if (!ins.rows[0]) continue;
       broadcastEvent(flowsheetId, ins.rows[0], rule.name, 'raised');
+      afterRaised(ins.rows[0], rule, flowsheetId);
     }
 
     // Evaluated clean while an active event exists → recovery.
@@ -196,6 +254,7 @@ async function processEvaluation(flowsheetId, organisationId, breaches, allRuleI
       );
       if (upd.rows[0]) {
         broadcastEvent(flowsheetId, upd.rows[0], rulesById[ruleId]?.name || null, 'cleared');
+        afterCleared(upd.rows[0], rulesById[ruleId] || null, flowsheetId);
       }
     }
   } catch (err) {
@@ -213,7 +272,8 @@ async function evaluateForRun(flowsheetId, organisationId, results, config, runI
   try {
     const r = await query(
       `SELECT * FROM alarm_rules
-       WHERE flowsheet_id = $1 AND organisation_id = $2 AND enabled = TRUE`,
+       WHERE flowsheet_id = $1 AND organisation_id = $2 AND enabled = TRUE
+         AND kind NOT IN ('quality', 'drift')`,
       [flowsheetId, organisationId]
     );
     if (!r.rows.length) return;
@@ -249,7 +309,8 @@ async function getParamRules(flowsheetId, organisationId) {
 
   const r = await query(
     `SELECT * FROM alarm_rules
-     WHERE flowsheet_id = $1 AND organisation_id = $2 AND enabled = TRUE AND target_type = 'param'`,
+     WHERE flowsheet_id = $1 AND organisation_id = $2 AND enabled = TRUE AND target_type = 'param'
+       AND kind NOT IN ('quality', 'drift')`,
     [flowsheetId, organisationId]
   );
   let nodeLabels = {};

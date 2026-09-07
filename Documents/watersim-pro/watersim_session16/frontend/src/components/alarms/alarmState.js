@@ -179,6 +179,14 @@ export function describeRule(rule, nodeLabels) {
   const hasMin = min != null && Number.isFinite(Number(min));
   const hasMax = max != null && Number.isFinite(Number(max));
 
+  const kind = rule.kind;
+  const stale = rule.staleAfterS ?? rule.stale_after_s;
+  if (kind === 'quality') {
+    return stale != null && Number.isFinite(Number(stale))
+      ? `${subject} comms lost for more than ${fmtLimit(stale)} s`
+      : `${subject} comms lost`;
+  }
+
   if (hasMin && hasMax) return `${subject} outside ${fmtLimit(min)}–${fmtLimit(max)}${suffix}`;
   if (hasMax) return `${subject} above ${fmtLimit(max)}${suffix}`;
   if (hasMin) return `${subject} below ${fmtLimit(min)}${suffix}`;

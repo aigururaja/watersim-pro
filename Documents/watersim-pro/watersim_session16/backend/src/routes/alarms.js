@@ -132,10 +132,82 @@ function limitError(minValue, maxValue) {
 /** undefined/null/'' → null; anything else → Number (NaN is caught by limitError). */
 const toLimit = (v) => (v === undefined || v === null || v === '' ? null : Number(v));
 
+const KINDS = ['high', 'low', 'range', 'quality', 'drift'];
+
+/** Request field → alarm_rules column for the task policy. */
+const POLICY_COLS = {
+  createTask: 'create_task',
+  taskAssigneeRole: 'task_assignee_role',
+  taskRequiresApproval: 'task_requires_approval',
+  taskDueWithinH: 'task_due_within_h',
+  taskPriority: 'task_priority',
+};
+
+/**
+ * Settle a rule's kind from what was sent. Since migration 011 one rule is one
+ * limit: 'high' carries maxValue only, 'low' minValue only, 'range' both, and
+ * 'quality' is the comms-loss rule with a staleAfterS instead of limits. When
+ * `kind` is absent it is derived from the limits, so the pre-011 request shape
+ * still works; when present the limits must agree with it, so a "high" rule
+ * can never carry a minimum the evaluator would silently honour.
+ * @returns {{kind,minValue,maxValue,staleAfterS}|{error,path}}
+ */
+function settleKind({ kind, minValue, maxValue, staleAfterS, targetType }) {
+  const hasMin   = minValue != null && Number.isFinite(Number(minValue));
+  const hasMax   = maxValue != null && Number.isFinite(Number(maxValue));
+  const hasStale = staleAfterS != null && Number.isFinite(Number(staleAfterS));
+  let k = kind;
+  if (!k) {
+    if (hasStale && !hasMin && !hasMax) k = 'quality';
+    else if (hasMin && hasMax) k = 'range';
+    else if (hasMax) k = 'high';
+    else if (hasMin) k = 'low';
+    else return { error: 'At least one of minValue / maxValue must be a finite number', path: 'limits' };
+  }
+  if (k === 'quality') {
+    if (!hasStale) return { error: 'A comms-loss (quality) rule needs staleAfterS — seconds without a good PLC sample', path: 'staleAfterS' };
+    if (targetType !== 'param') return { error: 'A comms-loss rule watches a PLC-bound node parameter (targetType param)', path: 'target' };
+    return { kind: k, minValue: null, maxValue: null, staleAfterS: Number(staleAfterS) };
+  }
+  if (k === 'drift') {
+    if (!hasMax) return { error: 'A drift rule needs maxValue — the |z| of the model/plant residual past which it raises', path: 'limits' };
+    if (hasMin) return { error: 'A drift rule takes maxValue only', path: 'limits' };
+    if (targetType !== 'param') return { error: 'A drift rule watches an instrument’s measured parameter (targetType param)', path: 'target' };
+    return { kind: k, minValue: null, maxValue: Number(maxValue), staleAfterS: null };
+  }
+  if (k === 'high') {
+    if (!hasMax) return { error: 'A high-limit rule needs maxValue', path: 'limits' };
+    if (hasMin) return { error: 'A high-limit rule takes maxValue only — create a separate low-limit rule for the minimum', path: 'limits' };
+    return { kind: k, minValue: null, maxValue: Number(maxValue), staleAfterS: null };
+  }
+  if (k === 'low') {
+    if (!hasMin) return { error: 'A low-limit rule needs minValue', path: 'limits' };
+    if (hasMax) return { error: 'A low-limit rule takes minValue only — create a separate high-limit rule for the maximum', path: 'limits' };
+    return { kind: k, minValue: Number(minValue), maxValue: null, staleAfterS: null };
+  }
+  if (!hasMin || !hasMax) return { error: 'A range rule needs both minValue and maxValue', path: 'limits' };
+  const lErr = limitError(minValue, maxValue);
+  if (lErr) return { error: lErr, path: 'limits' };
+  return { kind: 'range', minValue: Number(minValue), maxValue: Number(maxValue), staleAfterS: null };
+}
+
+/** The registry tag behind a (flowsheet, node, param) target, or null. */
+async function tagIdFor(flowsheetId, nodeId, paramKey) {
+  if (!nodeId) return null;
+  const r = await query(
+    'SELECT id FROM tags WHERE flowsheet_id = $1 AND node_id = $2 AND param_key = $3 LIMIT 1',
+    [flowsheetId, nodeId, paramKey]
+  );
+  return r.rows[0]?.id || null;
+}
+
 const flowsheetParams = [
   param('projectId').isUUID(),
   param('flowsheetId').isUUID(),
 ];
+
+const DUPLICATE_MSG = 'An alarm rule of this kind already exists for this target — '
+  + 'edit it, or add a rule of a different kind (high, low, range or comms-loss)';
 
 // ── GET /alarm-targets — legal targets derived from the canvas ───────────────
 router.get('/alarm-targets', flowsheetParams, async (req, res, next) => {
@@ -174,6 +246,15 @@ router.post('/alarms', requireRole('engineer'), [
   body('maxValue').optional({ nullable: true }).isFloat().withMessage('maxValue must be a number').toFloat(),
   body('severity').optional().isIn(['info', 'warning', 'critical']),
   body('enabled').optional().isBoolean().toBoolean(),
+  body('kind').optional().isIn(KINDS).withMessage('kind must be high, low, range, quality or drift'),
+  body('staleAfterS').optional({ nullable: true }).isInt({ min: 5, max: 86400 })
+    .withMessage('staleAfterS must be 5–86400 seconds').toInt(),
+  // Task policy (Phase 2): the evaluator raises the task, not a person.
+  body('createTask').optional().isBoolean().toBoolean(),
+  body('taskAssigneeRole').optional({ nullable: true }).isIn(['operator', 'engineer', 'manager']),
+  body('taskRequiresApproval').optional().isBoolean().toBoolean(),
+  body('taskDueWithinH').optional({ nullable: true }).isInt({ min: 1, max: 8760 }).toInt(),
+  body('taskPriority').optional({ nullable: true }).isIn(['low', 'medium', 'high', 'urgent']),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
   try {
@@ -188,34 +269,50 @@ router.post('/alarms', requireRole('engineer'), [
     const tErr = targetError(flowsheet.canvas_data, { targetType, nodeId, paramKey });
     if (tErr) return unprocessable(res, tErr, 'target');
 
-    const minValue = toLimit(req.body.minValue);
-    const maxValue = toLimit(req.body.maxValue);
-    const lErr = limitError(minValue, maxValue);
-    if (lErr) return unprocessable(res, lErr, 'limits');
+    const settled = settleKind({
+      kind: req.body.kind,
+      minValue: toLimit(req.body.minValue),
+      maxValue: toLimit(req.body.maxValue),
+      staleAfterS: req.body.staleAfterS,
+      targetType,
+    });
+    if (settled.error) return unprocessable(res, settled.error, settled.path);
+    const { kind, minValue, maxValue, staleAfterS } = settled;
+    const tagId = await tagIdFor(req.params.flowsheetId, nodeId, paramKey);
+    const severity = req.body.severity || 'warning';
+    // A critical rule raises a task unless told otherwise (plan, open question 3).
+    const createTask = req.body.createTask !== undefined ? req.body.createTask : severity === 'critical';
 
     const r = await query(
       `INSERT INTO alarm_rules
          (organisation_id, flowsheet_id, name, target_type, node_id, param_key,
-          min_value, max_value, severity, enabled, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          min_value, max_value, severity, enabled, created_by, kind, stale_after_s, tag_id,
+          create_task, task_assignee_role, task_requires_approval, task_due_within_h, task_priority)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
        RETURNING *`,
       [orgId(req), req.params.flowsheetId, req.body.name, targetType, nodeId, paramKey,
        minValue, maxValue,
-       req.body.severity || 'warning',
+       severity,
        req.body.enabled !== undefined ? req.body.enabled : true,
-       req.user.sub || req.user.id]
+       req.user.sub || req.user.id,
+       kind, staleAfterS, tagId,
+       createTask,
+       req.body.taskAssigneeRole ?? (createTask ? 'engineer' : null),
+       req.body.taskRequiresApproval !== undefined ? req.body.taskRequiresApproval : true,
+       req.body.taskDueWithinH ?? null,
+       req.body.taskPriority ?? null]
     );
 
     invalidateRuleCache(req.params.flowsheetId);
     auditLog(req, 'alarm_rule.create', 'alarm_rule', r.rows[0].id, {
       flowsheetId: req.params.flowsheetId,
-      name: req.body.name, targetType, nodeId, paramKey, minValue, maxValue,
-      severity: r.rows[0].severity,
+      name: req.body.name, targetType, nodeId, paramKey, minValue, maxValue, kind, staleAfterS,
+      severity: r.rows[0].severity, createTask,
     });
     res.status(201).json(r.rows[0]);
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(409).json({ error: 'An alarm rule already exists for this target' });
+      return res.status(409).json({ error: DUPLICATE_MSG });
     }
     next(err);
   }
@@ -233,6 +330,15 @@ router.patch('/alarms/:id', requireRole('engineer'), [
   body('maxValue').optional({ nullable: true }).isFloat().withMessage('maxValue must be a number').toFloat(),
   body('severity').optional().isIn(['info', 'warning', 'critical']),
   body('enabled').optional().isBoolean().toBoolean(),
+  body('kind').optional().isIn(KINDS).withMessage('kind must be high, low, range, quality or drift'),
+  body('staleAfterS').optional({ nullable: true }).isInt({ min: 5, max: 86400 })
+    .withMessage('staleAfterS must be 5–86400 seconds').toInt(),
+  // Task policy (Phase 2): the evaluator raises the task, not a person.
+  body('createTask').optional().isBoolean().toBoolean(),
+  body('taskAssigneeRole').optional({ nullable: true }).isIn(['operator', 'engineer', 'manager']),
+  body('taskRequiresApproval').optional().isBoolean().toBoolean(),
+  body('taskDueWithinH').optional({ nullable: true }).isInt({ min: 1, max: 8760 }).toInt(),
+  body('taskPriority').optional({ nullable: true }).isIn(['low', 'medium', 'high', 'urgent']),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
   try {
@@ -262,19 +368,34 @@ router.patch('/alarms/:id', requireRole('engineer'), [
 
     // Limits are always re-checked against the MERGED row, so clearing one
     // limit can never leave a rule with no threshold or an inverted window.
-    const minValue = req.body.minValue !== undefined ? toLimit(req.body.minValue) : row.min_value;
-    const maxValue = req.body.maxValue !== undefined ? toLimit(req.body.maxValue) : row.max_value;
-    const lErr = limitError(minValue, maxValue);
-    if (lErr) return unprocessable(res, lErr, 'limits');
+    // Limits are always re-settled against the MERGED row, so clearing one
+    // limit can never leave a rule with no threshold or an inverted window —
+    // and the kind follows the limits unless the caller names it.
+    const limitsTouched = ['minValue', 'maxValue', 'staleAfterS', 'kind'].some((k) => req.body[k] !== undefined);
+    const settled = settleKind({
+      kind: req.body.kind !== undefined ? req.body.kind : (limitsTouched ? undefined : row.kind),
+      minValue: req.body.minValue !== undefined ? toLimit(req.body.minValue) : row.min_value,
+      maxValue: req.body.maxValue !== undefined ? toLimit(req.body.maxValue) : row.max_value,
+      staleAfterS: req.body.staleAfterS !== undefined ? req.body.staleAfterS : row.stale_after_s,
+      targetType,
+    });
+    if (settled.error) return unprocessable(res, settled.error, settled.path);
+    const { kind, minValue, maxValue, staleAfterS } = settled;
 
     const fields = []; const vals = []; let i = 1;
     if (req.body.name     !== undefined) { fields.push(`name = $${i++}`);        vals.push(req.body.name); }
     if (targetTouched)                   { fields.push(`target_type = $${i++}`); vals.push(targetType);
                                            fields.push(`node_id = $${i++}`);     vals.push(nodeId);
-                                           fields.push(`param_key = $${i++}`);   vals.push(paramKey); }
-    if (req.body.minValue !== undefined) { fields.push(`min_value = $${i++}`);   vals.push(minValue); }
-    if (req.body.maxValue !== undefined) { fields.push(`max_value = $${i++}`);   vals.push(maxValue); }
+                                           fields.push(`param_key = $${i++}`);   vals.push(paramKey);
+                                           fields.push(`tag_id = $${i++}`);      vals.push(await tagIdFor(req.params.flowsheetId, nodeId, paramKey)); }
+    if (limitsTouched)                   { fields.push(`min_value = $${i++}`);   vals.push(minValue);
+                                           fields.push(`max_value = $${i++}`);   vals.push(maxValue);
+                                           fields.push(`stale_after_s = $${i++}`); vals.push(staleAfterS);
+                                           fields.push(`kind = $${i++}`);        vals.push(kind); }
     if (req.body.severity !== undefined) { fields.push(`severity = $${i++}`);    vals.push(req.body.severity); }
+    for (const [key, col] of Object.entries(POLICY_COLS)) {
+      if (req.body[key] !== undefined) { fields.push(`${col} = $${i++}`); vals.push(req.body[key]); }
+    }
     if (req.body.enabled  !== undefined) { fields.push(`enabled = $${i++}`);     vals.push(req.body.enabled); }
     if (!fields.length) return res.status(422).json({ error: 'No fields to update' });
 
@@ -294,7 +415,7 @@ router.patch('/alarms/:id', requireRole('engineer'), [
     res.json(r.rows[0]);
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(409).json({ error: 'An alarm rule already exists for this target' });
+      return res.status(409).json({ error: DUPLICATE_MSG });
     }
     next(err);
   }

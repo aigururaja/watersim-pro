@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users, Building2, ShieldCheck, Plus, Pencil, Trash2, RefreshCw,
   KeyRound, ToggleLeft, ToggleRight, ChevronDown, Crown, Wrench,
-  HardHat, Eye, X, Check, AlertTriangle, Loader2, BarChart3,
+  HardHat, Eye, X, Check, AlertTriangle, Loader2, BarChart3, ClipboardCheck,
 } from 'lucide-react';
 import AppLayout from '../components/layout/AppLayout';
+import { ROLE_META } from '../auth/roles';
 import { useAuth } from '../context/AuthContext';
 import { useAnnounce } from '../components/AccessibilityProvider';
 import { SkeletonCard, SkeletonTable } from '../components/Skeleton';
@@ -14,12 +15,16 @@ import api from '../services/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// Highest first, as the picker shows them. Labels and descriptions come from
+// the shared role table so this page cannot describe a role the server does
+// not have; only the icon and colour are presentational.
 const ROLES = [
-  { value: 'admin',    label: 'Admin',    icon: Crown,    color: 'text-red-600    bg-red-50    border-red-200',    desc: 'Full access: user management, all settings' },
-  { value: 'engineer', label: 'Engineer', icon: Wrench,   color: 'text-blue-600  bg-blue-50   border-blue-200',   desc: 'Create & run simulations, edit settings' },
-  { value: 'operator', label: 'Operator', icon: HardHat,  color: 'text-amber-600 bg-amber-50  border-amber-200',  desc: 'View simulations, read-only access' },
-  { value: 'viewer',   label: 'Viewer',   icon: Eye,      color: 'text-gray-600  bg-gray-50   border-gray-200',   desc: 'View-only access to projects and results' },
-];
+  { value: 'admin',    icon: Crown,      color: 'text-red-600    bg-red-50    border-red-200' },
+  { value: 'manager',  icon: ClipboardCheck, color: 'text-purple-600 bg-purple-50 border-purple-200' },
+  { value: 'engineer', icon: Wrench,     color: 'text-blue-600  bg-blue-50   border-blue-200' },
+  { value: 'operator', icon: HardHat,    color: 'text-amber-600 bg-amber-50  border-amber-200' },
+  { value: 'viewer',   icon: Eye,        color: 'text-gray-600  bg-gray-50   border-gray-200' },
+].map((r) => ({ ...r, label: ROLE_META[r.value].label, desc: ROLE_META[r.value].desc }));
 
 const roleInfo = Object.fromEntries(ROLES.map(r => [r.value, r]));
 

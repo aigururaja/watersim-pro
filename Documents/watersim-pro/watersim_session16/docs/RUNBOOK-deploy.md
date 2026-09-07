@@ -159,3 +159,130 @@ Notable manifest facts:
 | Excel export 500s in prod | backend image must include `openpyxl` (installed in `backend/Dockerfile.prod` pip line) |
 | PDF export fails on k8s only | `/tmp` emptyDir or `MPLCONFIGDIR` removed from `k8s/backend.yaml` |
 | `kubectl apply -f k8s/migrate-job.yaml` → "field is immutable" | Delete the old Job first (step 2 above) |
+| `docker compose pull` → "repository does not exist" | `.env.prod` missing `IMAGE_ORG`/`IMAGE_TAG`. If you have no registry, build on the host instead — §9 |
+| `proxy` container restart-loops on a fresh host | `nginx/proxy.conf` still names the example domain in its `ssl_certificate` paths — §9.3 |
+| Backend serves an old route as 404 after a deploy | The container is running the previous image. `build` then `up -d --force-recreate backend`; a plain `restart` reuses it |
+| Backend exits at boot: "JWT_SECRET must be at least 32 characters" | `openssl rand -hex 32`; the check is enforced in production only |
+
+---
+
+## 9. Fresh Ubuntu server, no CI — build on the host
+
+Sections 1–5 assume GitHub Actions builds images and pushes them to GHCR. If you
+are standing up a single server for a client and have no CI, build on the host
+instead. `scripts/deploy.sh` is **pull-only** and will not help here — use the
+compose commands below directly.
+
+### 9.1 Server specification
+
+Sized from the `mem_limit` / `cpus` declared per service in
+`docker-compose.prod.yml` (postgres 1 GB/1.0, backend 512 MB/1.0, frontend
+128 MB/0.5, proxy 64 MB/0.25 — 1.7 GB and 2.75 vCPU of limits), plus headroom
+for Ubuntu, the Docker daemon and the build itself.
+
+| | Building on the host | Pulling prebuilt images |
+|---|---|---|
+| **OS** | Ubuntu 22.04 LTS or 24.04 LTS (x86-64) | same |
+| **vCPU** | 4 | 2 |
+| **RAM** | **8 GB** — the Vite build and `npm ci` transiently need ~2 GB on top of the running stack | 4 GB |
+| **Disk** | **80 GB** SSD — images ≈ 1.5 GB (the backend image carries Python, numpy and matplotlib), build cache 2–3 GB, the rest is Postgres data and backups | 40 GB |
+| **Swap** | 2 GB, so a build cannot OOM-kill Postgres | optional |
+
+`SIMULATION_MAX_CONCURRENT` (default 4) is the number of simulation worker
+threads. Keep it at or below the vCPUs you actually gave the box, or runs queue
+and the 60 s wall-clock timeout starts firing on work that was only waiting.
+
+Inbound ports: **80** and **443** only. Postgres and the backend sit on an
+`internal: true` Docker network and are never published.
+
+### 9.2 Prerequisites
+
+```bash
+# Docker Engine + compose v2 from Docker's own repo (Ubuntu's docker.io is older)
+sudo apt-get update && sudo apt-get install -y ca-certificates curl git
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker "$USER" && newgrp docker      # log out/in for this to stick
+
+docker compose version                                 # must print v2.x
+
+# Firewall
+sudo ufw allow OpenSSH && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw enable
+```
+
+A **DNS A record for your domain must already point at this host** before
+TLS bootstrap — Let's Encrypt validates over HTTP on port 80.
+
+### 9.3 Deploy
+
+```bash
+git clone <your-repo-url> /srv/watersim && cd /srv/watersim
+
+cp .env.prod.example .env.prod
+# EDIT .env.prod — at minimum:
+#   PUBLIC_HOST / CORS_ORIGIN  your real domain
+#   POSTGRES_PASSWORD          openssl rand -base64 32
+#   JWT_SECRET                 openssl rand -hex 32     (≥32 chars, enforced at boot)
+#   IMAGE_ORG                  any name — it only labels the locally built image
+#   IMAGE_TAG                  local
+chmod 600 .env.prod
+
+# nginx/proxy.conf hardcodes the example domain in FOUR places — two
+# `server_name` lines and the two `ssl_certificate` paths. It is a mounted file,
+# not templated, so compose will not substitute PUBLIC_HOST for you. Miss this
+# and the proxy container crash-loops looking for certs under
+# /etc/letsencrypt/live/app.watersim.example.com/ that certbot never issued.
+sed -i 's/app\.watersim\.example\.com/app.example.com/g' nginx/proxy.conf
+grep -n 'server_name\|ssl_certificate' nginx/proxy.conf     # confirm all four
+
+# TLS FIRST — nginx will not start without certs, and certbot's webroot renewal
+# needs nginx running. init-tls.sh breaks that deadlock with standalone mode.
+# Run once, with port 80 free.
+./scripts/init-tls.sh app.example.com ops@example.com
+
+# Build both images ON THE HOST (context is the repo root — this matters)
+docker compose --env-file .env.prod -f docker-compose.prod.yml build
+
+# Migrate, then start everything including the cert renewer
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
+docker compose --env-file .env.prod -f docker-compose.prod.yml --profile tls up -d
+
+# Optional: seed the demo org and the ITC plant (creates the flowsheet,
+# the reuse permit template and the alarm rules)
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm backend node src/seeds/index.js
+```
+
+### 9.4 Verify
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps      # all healthy
+curl -fsS https://app.example.com/health | jq                          # status: healthy, db: connected
+curl -o /dev/null -w '%{http_code}\n' https://app.example.com/api/v1/plant   # 401 = mounted (200 needs a token)
+```
+
+A **404** on a route you know exists means the container is running older code —
+rebuild and recreate, do not restart:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml build backend
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+### 9.5 Updating later
+
+```bash
+cd /srv/watersim && git pull
+docker compose --env-file .env.prod -f docker-compose.prod.yml build
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+docker image prune -f
+```
+
+Back up before every update — `./scripts/backup.sh`, and rehearse the restore
+once (`docs/RUNBOOK-backup-restore.md`). An untested backup is not a backup.

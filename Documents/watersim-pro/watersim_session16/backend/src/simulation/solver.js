@@ -43,6 +43,13 @@ const MODELS = {
   // Session 17: flow-control elements (pump on/off, valve open/close)
   pump:             require('./models/pump'),
   valve:            require('./models/valve'),
+  // Session 18 — ITC STP: the equipment this plant actually has
+  sbr_reactor:      require('./models/sbrReactor'),
+  equalisation:     require('./models/equalisationTank'),
+  pressure_filter:  require('./models/pressureFilter'),
+  softener:         require('./models/waterSoftener'),
+  grease_trap:      require('./models/oilGreaseTrap'),
+  instrument:       require('./models/instrument'),
 };
 
 const PALETTE_TYPE_MAP = {
@@ -71,6 +78,31 @@ const PALETTE_TYPE_MAP = {
   ph_adjustment: 'chemical_dosing',
   pump: 'pump', valve: 'valve',
   blower: null, tank: null,
+  // ── ITC STP palette types ────────────────────────────────────────────────
+  // The plant's vessels map onto the models above; each alias is the type a
+  // user drops on the canvas, resolved to the engine that computes it.
+  sbr_reactor: 'sbr_reactor',
+  equalisation_tank: 'equalisation',
+  oil_grease_trap: 'grease_trap',
+  multigrade_filter: 'pressure_filter',
+  activated_carbon_filter: 'pressure_filter',
+  micron_filter: 'pressure_filter',
+  water_softener: 'softener',
+  sludge_centrifuge: 'thickener',
+  instrument: 'instrument',
+};
+
+/**
+ * Palette types that need a default parameter to select their variant.
+ * `multigrade_filter` and `activated_carbon_filter` share one model and are
+ * told apart by `media`, so dropping either on the canvas must arrive with the
+ * right media set rather than silently defaulting to the other one.
+ */
+const TYPE_PARAM_DEFAULTS = {
+  multigrade_filter:       { media: 'multigrade', diameter_mm: 1500, rated_flow_m3_h: 25 },
+  activated_carbon_filter: { media: 'carbon',     diameter_mm: 1650, rated_flow_m3_h: 25 },
+  micron_filter:           { media: 'micron',     diameter_mm: 300,  rated_flow_m3_h: 20 },
+  sludge_centrifuge:       { type: 'gravity', dewatering: true },
 };
 
 const SOURCE_TYPES = new Set(['inlet']);
@@ -94,8 +126,13 @@ const OUTPUT_PORTS = [
   'permeate', 'concentrate', 'screenings', 'digestate', 'backwash',
 ];
 
+/** The palette type as authored on the canvas, before any alias resolution. */
+function rawNodeType(node) {
+  return node.data?.opType || node.data?.type || node.id.replace(/_\d+$/, '');
+}
+
 function resolveNodeType(node) {
-  const raw = node.data?.opType || node.data?.type || node.id.replace(/_\d+$/, '');
+  const raw = rawNodeType(node);
   if (MODELS[raw]) return raw;
   const mapped = PALETTE_TYPE_MAP[raw];
   if (mapped === null) return 'passthrough';
@@ -305,7 +342,12 @@ function executePass(ctx) {
     if (!node) continue;
     const type   = resolveNodeType(node);
     const model  = type === 'passthrough' ? null : MODELS[type];
-    const params = nodeParams[nodeId] || {};
+    // Variant defaults first, the user's params on top — so an ACF dropped on
+    // the canvas arrives as carbon media even though it shares the MGF model,
+    // while anything the user actually set still wins.
+    const variantDefaults = TYPE_PARAM_DEFAULTS[rawNodeType(node)];
+    const userParams = nodeParams[nodeId] || {};
+    const params = variantDefaults ? { ...variantDefaults, ...userParams } : userParams;
 
     const incomingEdges   = edgesByTarget.get(nodeId) || [];
     const forwardIncoming = incomingEdges.filter(e => !tornEdgeIds.has(e.id));
@@ -611,14 +653,63 @@ function runSteadyState(canvasData, config = {}) {
     iterations, recycleEdges: recycleEdges.length,
     unroutedLosses,
   };
+  // ── Plant boundaries ─────────────────────────────────────────────────────
+  // A works can have several of each: the ITC plant takes three influents
+  // (kitchen, sewage, laundry) and ends in five boundaries. Reading only the
+  // first of each — as this did before Session 18 — reported one third of the
+  // influent and graded whichever outlet happened to be authored first.
+  //
+  // Influent is the flow-weighted mix of EVERY inlet. Effluent is the mix of
+  // every GRADED outlet, so a solids export at 180,000 mg/L cannot contaminate
+  // the discharge quality. Ungraded boundaries are still reported, by name, in
+  // `summary.boundaries` — nothing leaves the plant unaccounted for.
+  //
+  // With one inlet and one outlet this is identical to the old behaviour.
   if (inletNodes.length) {
-    summary.influent = unitResults[inletNodes[0].id]?.outputs?.effluent || null;
+    const influents = inletNodes
+      .map(n => unitResults[n.id]?.outputs?.effluent)
+      .filter(Boolean);
+    summary.influent = influents.length === 0 ? null
+                     : influents.length === 1 ? influents[0]
+                     : Stream.mix(influents.map(s => s instanceof Stream ? s : new Stream(s)));
+    summary.inletCount = inletNodes.length;
   }
+
   if (outletNodes.length) {
-    const r = unitResults[outletNodes[0].id];
-    summary.effluent          = r?.outputs?.effluent  || null;
-    summary.permit_violations = r?.metrics?.permit_violations || [];
-    summary.compliant         = r?.metrics?.compliant ?? null;
+    const boundaries = outletNodes.map((n) => {
+      const r = unitResults[n.id];
+      const m = r?.metrics || {};
+      return {
+        nodeId: n.id,
+        label: (n.data && n.data.label) || n.id,
+        dischargeType: m.discharge_type || 'water',
+        graded: m.graded !== false,
+        Q: r?.outputs?.effluent?.Q ?? 0,
+        stream: r?.outputs?.effluent || null,
+        compliant: m.compliant ?? null,
+        permit_violations: m.permit_violations || [],
+      };
+    });
+
+    const graded = boundaries.filter(b => b.graded && b.stream);
+    const gradedStreams = graded.map(b => b.stream instanceof Stream ? b.stream : new Stream(b.stream));
+
+    summary.boundaries = boundaries.map(({ stream, ...rest }) => rest);
+    summary.outletCount = outletNodes.length;
+    summary.gradedOutletCount = graded.length;
+
+    summary.effluent = gradedStreams.length === 0 ? null
+                     : gradedStreams.length === 1 ? gradedStreams[0]
+                     : Stream.mix(gradedStreams);
+
+    // Every breach at every graded outlet, tagged with where it happened, so a
+    // multi-discharge plant names the failing line instead of averaging it away.
+    summary.permit_violations = graded.flatMap(b =>
+      b.permit_violations.map(v => (graded.length > 1 ? { ...v, outlet: b.label } : v))
+    );
+    summary.compliant = graded.length === 0
+      ? null
+      : graded.every(b => b.compliant === true);
   }
 
   // Sweep non-finite values: replace with null, warn, and flag the run degraded.
@@ -638,4 +729,4 @@ function runSteadyState(canvasData, config = {}) {
   };
 }
 
-module.exports = { runSteadyState, MODELS, resolveNodeType, PALETTE_TYPE_MAP };
+module.exports = { runSteadyState, MODELS, resolveNodeType, rawNodeType, PALETTE_TYPE_MAP, TYPE_PARAM_DEFAULTS };

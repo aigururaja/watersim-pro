@@ -2,12 +2,14 @@ const bcrypt = require('bcryptjs');
 const { query, withTransaction } = require('../db/pool');
 const UserModel = require('../models/user.model');
 const OrgModel = require('../models/organisation.model');
-const { AppError } = require('../middleware/auth');
+const { AppError, invalidateRoleCache } = require('../middleware/auth');
 const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
+const { ROLES } = require('../auth/roles');
 
 const BCRYPT_ROUNDS = 12;
-const VALID_ROLES = ['admin', 'engineer', 'operator', 'viewer'];
+// The one role list, shared with the hierarchy and the frontend — see auth/roles.js.
+const VALID_ROLES = ROLES;
 
 /** Single email normalization rule used everywhere email is read or written. */
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
@@ -177,6 +179,9 @@ const updateMember = async (req, res, next) => {
       return result.rows[0];
     });
 
+    // A role or activation change must bite on the member's NEXT request, not
+    // when their cached role expires — drop the entry the auth middleware holds.
+    if (role !== undefined || isActive !== undefined) invalidateRoleCache(userId);
     auditLog(req, 'member.update', 'user', userId, { role, firstName, lastName, isActive });
     logger.info('Member updated', { userId, by: req.user.sub });
     res.json(formatUser(updated));
@@ -253,6 +258,7 @@ const deleteMember = async (req, res, next) => {
       if (result.rowCount !== 1) throw new AppError('User not found', 404);
     });
 
+    invalidateRoleCache(userId);
     auditLog(req, 'member.delete', 'user', userId, {});
     logger.info('Member deleted', { userId, by: req.user.sub });
     res.json({ success: true });

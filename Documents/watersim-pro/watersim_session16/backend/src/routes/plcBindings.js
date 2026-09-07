@@ -22,6 +22,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
 const { getDriver } = require('../plc/registry');
+const { writeShadow } = require('../twin/shadow');
 
 const router = express.Router({ mergeParams: true }); // inherits :projectId + :flowsheetId
 router.use(authenticate);
@@ -283,7 +284,7 @@ router.post('/plc-bindings/:bindingId/write', requireRole('operator'), [
   try {
     if (!await checkFlowsheet(req, res)) return; // enforces p.status != 'deleted' too
     const r = await query(
-      `SELECT b.*, c.protocol, c.config, c.enabled AS connection_enabled
+      `SELECT b.*, c.protocol, c.config, c.enabled AS connection_enabled, c.mode AS connection_mode
        FROM plc_bindings b
        JOIN plc_connections c ON c.id = b.connection_id
        WHERE b.id = $1 AND b.flowsheet_id = $2 AND b.organisation_id = $3`,
@@ -305,9 +306,17 @@ router.post('/plc-bindings/:bindingId/write', requireRole('operator'), [
     const scale = Number(binding.scale) || 1;
     const offset = Number(binding.offset_val) || 0;
     const raw = (req.body.value - offset) / scale;
+    const shadow = binding.connection_mode === 'shadow';
+    let reflected = [];
 
     try {
       await withConnectionWriteLock(binding.connection_id, async () => {
+        if (shadow) {
+          // Shadow (commissioning) mode: the write lands in the simulator
+          // namespace and the sibling status points respond — never the device.
+          reflected = await writeShadow(binding, raw);
+          return;
+        }
         let client;
         try {
           client = driver.createClient(binding.config || {}, {
@@ -339,8 +348,10 @@ router.post('/plc-bindings/:bindingId/write', requireRole('operator'), [
       address: binding.address,
       value: req.body.value,
       rawValue: raw,
+      shadow,
+      reflected: reflected.length,
     });
-    res.json({ ok: true, bindingId: binding.id, value: req.body.value, rawValue: raw });
+    res.json({ ok: true, bindingId: binding.id, value: req.body.value, rawValue: raw, shadow, reflected });
   } catch (err) { next(err); }
 });
 

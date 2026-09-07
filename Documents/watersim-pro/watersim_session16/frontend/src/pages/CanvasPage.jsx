@@ -10,7 +10,7 @@ import 'reactflow/dist/style.css';
 // and @keyframes live, and until now they were in no bundle at all.
 import '../styles/canvas-tokens.css';
 import '../styles/canvas-motion.css';
-import { ArrowLeft, Undo2, Redo2, Zap, Play, MoreHorizontal, Camera, Settings2, Trash2, PanelRight, Link2 } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, Zap, Play, MoreHorizontal, Camera, Settings2, Trash2, PanelRight, Link2, Boxes } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar,
@@ -18,9 +18,13 @@ import {
 import api from '../services/api';
 import { downloadFile } from '../utils/download';
 import AppLayout from '../components/layout/AppLayout';
-import UnitOpNode from '../components/canvas/UnitOpNode';
+import CanvasNode from '../components/canvas/CanvasNode';
 import UnitOpPalette from '../components/canvas/UnitOpPalette';
-import StreamEdge, { SERVICES } from '../components/canvas/StreamEdge';
+import { SERVICES } from '../components/canvas/StreamEdge';
+import CanvasEdge from '../components/canvas/CanvasEdge';
+import { CanvasStyleContext, readCanvasStyle, writeCanvasStyle } from '../components/canvas/canvasStyle';
+import { MimicDefs } from '../components/mimic/MimicSymbols';
+import { useProjectBase } from '../utils/projectBase';
 import SymbolDefs from '../components/canvas/symbols/defs';
 import { setFrame, getRefs } from '../components/canvas/liveStore';
 import {
@@ -225,12 +229,96 @@ export const PARAM_DEFS = {
       hint: 'true = digestate split into cake + centrate' },
     { key: 'cake_DS_pct',      label: 'Cake Dry Solids (%)',      type: 'number', step: 1, min: 12, max: 35 },
   ],
+
+  // ── Session 18 — ITC sewage treatment plant equipment ─────────────────────
+  oil_grease_trap: [
+    { key: 'volume_m3',          label: 'Trap Volume (m³)',           type: 'number', step: 0.05, min: 0 },
+    { key: 'rated_HRT_min',      label: 'Design Retention (min)',     type: 'number', step: 1, min: 1,
+      hint: 'Separation is gravity-driven, so retention time is the whole design' },
+    { key: 'fog_in_mg_L',        label: 'Inlet FOG (mg/L)',           type: 'number', step: 10, min: 0 },
+    { key: 'fog_removal_pct',    label: 'Clean-trap FOG Capture (%)', type: 'number', step: 5, min: 0, max: 99 },
+    { key: 'TSS_removal_pct',    label: 'Settleable Solids Capture (%)', type: 'number', step: 5, min: 0, max: 90 },
+    { key: 'grease_capacity_m3', label: 'Grease Capacity (m³)',       type: 'number', step: 0.01, min: 0 },
+  ],
+  equalisation_tank: [
+    { key: 'volume_m3',        label: 'Working Volume (m³)',       type: 'number', step: 5, min: 0 },
+    { key: 'low_level_pct',    label: 'Low-Level Setpoint (%)',    type: 'number', step: 5, min: 0, max: 100 },
+    { key: 'high_level_pct',   label: 'High-Level Setpoint (%)',   type: 'number', step: 5, min: 0, max: 100 },
+    { key: 'peak_factor',      label: 'Peak Inflow Factor (×avg)', type: 'number', step: 0.1, min: 1,
+      hint: 'Hotel kitchens peak hard at meal times — 2.5 is typical' },
+    { key: 'has_level_switch', label: 'Level Switch Only',         type: 'switch',
+      hint: 'On = a high-level switch, not a continuous transmitter' },
+  ],
+  sbr_reactor: [
+    { key: 'reactors',        label: 'Reactors Sharing the Feed', type: 'number', step: 1, min: 1, max: 8 },
+    { key: 'fill_h',          label: 'Fill Phase (h)',            type: 'number', step: 0.25, min: 0 },
+    { key: 'aerate_h',        label: 'Aeration Phase (h)',        type: 'number', step: 0.25, min: 0 },
+    { key: 'settle_h',        label: 'Settle Phase (h)',          type: 'number', step: 0.25, min: 0 },
+    { key: 'decant_h',        label: 'Decant Phase (h)',          type: 'number', step: 0.25, min: 0 },
+    { key: 'feed_pump_m3_h',  label: 'Feed Pump (m³/hr)',         type: 'number', step: 1, min: 0,
+      hint: 'Fill hours × this × cycles/day × reactors is the plant’s real capacity' },
+    { key: 'decant_TSS_mg_L', label: 'Decant TSS (mg/L)',         type: 'number', step: 5, min: 0 },
+    { key: 'SRT_d',           label: 'SRT (days)',                type: 'number', step: 1, min: 3 },
+    { key: 'MLSS_mg_L',       label: 'MLSS (mg/L)',               type: 'number', step: 100, min: 500 },
+    { key: 'DO_set_mg_L',     label: 'DO Setpoint (mg/L)',        type: 'number', step: 0.5, min: 0 },
+    { key: 'volume_m3',       label: 'Volume m³ (0=auto)',        type: 'number', step: 50, min: 0 },
+    { key: 'denitrification', label: 'Denitrification',           type: 'select', options: ['false','true'] },
+    { key: 'anoxic_fraction', label: 'Anoxic Fraction (0–1)',     type: 'number', step: 0.05, min: 0, max: 0.6 },
+  ],
+  multigrade_filter: [
+    { key: 'media',                label: 'Media',                 type: 'select', options: ['multigrade','carbon','micron'] },
+    { key: 'diameter_mm',          label: 'Vessel Diameter (mm)',  type: 'number', step: 50, min: 100 },
+    { key: 'rated_flow_m3_h',      label: 'Rated Flow (m³/hr)',    type: 'number', step: 1, min: 0 },
+    { key: 'backwash_interval_h',  label: 'Backwash Interval (h)', type: 'number', step: 1, min: 0.1 },
+    { key: 'backwash_m3_per_wash', label: 'Backwash Volume (m³)',  type: 'number', step: 0.5, min: 0 },
+    { key: 'chlorine_in_ppm',      label: 'Inlet Chlorine (ppm)',  type: 'number', step: 0.1, min: 0 },
+  ],
+  activated_carbon_filter: [
+    { key: 'media',                label: 'Media',                 type: 'select', options: ['carbon','multigrade','micron'] },
+    { key: 'diameter_mm',          label: 'Vessel Diameter (mm)',  type: 'number', step: 50, min: 100 },
+    { key: 'rated_flow_m3_h',      label: 'Rated Flow (m³/hr)',    type: 'number', step: 1, min: 0 },
+    { key: 'backwash_interval_h',  label: 'Backwash Interval (h)', type: 'number', step: 1, min: 0.1 },
+    { key: 'backwash_m3_per_wash', label: 'Backwash Volume (m³)',  type: 'number', step: 0.5, min: 0 },
+    { key: 'chlorine_in_ppm',      label: 'Inlet Chlorine (ppm)',  type: 'number', step: 0.1, min: 0,
+      hint: 'Carbon dechlorinates — this is what protects the UF membranes downstream' },
+  ],
+  micron_filter: [
+    { key: 'media',                label: 'Media',                 type: 'select', options: ['micron','multigrade','carbon'] },
+    { key: 'diameter_mm',          label: 'Housing Diameter (mm)', type: 'number', step: 25, min: 50 },
+    { key: 'rated_flow_m3_h',      label: 'Rated Flow (m³/hr)',    type: 'number', step: 1, min: 0 },
+    { key: 'backwash_interval_h',  label: 'Change Interval (h)',   type: 'number', step: 12, min: 0.1 },
+    { key: 'backwash_m3_per_wash', label: 'Flush Volume (m³)',     type: 'number', step: 0.1, min: 0 },
+  ],
+  water_softener: [
+    { key: 'resin_litres',         label: 'Resin Volume (L)',        type: 'number', step: 50, min: 0 },
+    { key: 'capacity_g_per_L',     label: 'Capacity (g CaCO₃/L)',    type: 'number', step: 5, min: 1 },
+    { key: 'feed_hardness_ppm',    label: 'Feed Hardness (ppm)',     type: 'number', step: 10, min: 0 },
+    { key: 'product_hardness_ppm', label: 'Product Hardness (ppm)',  type: 'number', step: 1, min: 0 },
+    { key: 'salt_g_per_L',         label: 'Salt Dose (g/L resin)',   type: 'number', step: 10, min: 0 },
+    { key: 'regen_water_m3',       label: 'Regeneration Water (m³)', type: 'number', step: 0.5, min: 0 },
+    { key: 'rated_flow_m3_h',      label: 'Rated Flow (m³/hr)',      type: 'number', step: 1, min: 0 },
+  ],
+  sludge_centrifuge: [
+    { key: 'type',            label: 'Machine Type',             type: 'select', options: ['DAF','gravity'],
+      hint: 'DAF settings model a high-speed decanter; gravity models a thickener' },
+    { key: 'target_TSS_mg_L', label: 'Cake Solids (mg/L)',       type: 'number', step: 5000, min: 1000 },
+    { key: 'SLR_kg_m2_d',     label: 'Solids Loading (kg/m²/d)', type: 'number', step: 10, min: 1 },
+    { key: 'capture_pct',     label: 'Solids Capture (%)',       type: 'number', step: 1, min: 50, max: 99.5 },
+  ],
+  instrument: [
+    { key: 'measurement', label: 'Measures',                   type: 'select', options: ['flow','level','pH'] },
+    { key: 'level_pct',   label: 'Level (%) — level only',     type: 'number', step: 1, min: 0, max: 100 },
+    { key: 'range_min',   label: 'Span Minimum',               type: 'number', step: 1 },
+    { key: 'range_max',   label: 'Span Maximum (0 = unranged)', type: 'number', step: 1 },
+  ],
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const nodeTypes = { unitOp: UnitOpNode };
-const edgeTypes = { stream: StreamEdge };
+// Each type draws the card or the line the sheet's style says: the Live
+// plant's machine and pipe, or the drafting symbol and process line.
+const nodeTypes = { unitOp: CanvasNode };
+const edgeTypes = { stream: CanvasEdge };
 
 let idCounter = 1;
 const getId = () => `node_${idCounter++}`;
@@ -344,6 +432,17 @@ function EncodingLegend({ qref }) {
 export default function CanvasPage() {
   const { projectId, flowsheetId } = useParams();
   const navigate   = useNavigate();
+  // `/projects/…` (Digital Twin) or `/monitoring/projects/…` (Operations):
+  // every link out of the sheet stays on the surface the person came from.
+  const base       = useProjectBase();
+  // How the sheet is drawn: the Live plant's machines and pipes ('mimic'), or
+  // the drafting symbols ('drawing'). Remembered per browser.
+  const [canvasStyle, setCanvasStyle] = useState(readCanvasStyle);
+  const toggleCanvasStyle = useCallback(() => setCanvasStyle((s) => {
+    const next = s === 'mimic' ? 'drawing' : 'mimic';
+    writeCanvasStyle(next);
+    return next;
+  }), []);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   // ── Canvas performance monitor (FPS overlay in dev) ──────────────────────
@@ -539,7 +638,7 @@ export default function CanvasPage() {
         clearHistory();
         recordSnapshot(canvas.nodes || [], canvas.edges || []);
       })
-      .catch(() => navigate(`/projects/${projectId}`));
+      .catch(() => navigate(`${base}/${projectId}`));
   }, [flowsheetId]);
 
   // ── Connections ────────────────────────────────────────────────────────────
@@ -1368,7 +1467,7 @@ export default function CanvasPage() {
 
         {/* Toolbar */}
         <div style={S.toolbar}>
-          <button className="tb-ghost" style={{ ...S.btn, ...S.iconBtn }} title="Back to project" aria-label="Back" onClick={() => navigate(`/projects/${projectId}`)}><ArrowLeft size={16} /></button>
+          <button className="tb-ghost" style={{ ...S.btn, ...S.iconBtn }} title="Back to project" aria-label="Back" onClick={() => navigate(`${base}/${projectId}`)}><ArrowLeft size={16} /></button>
           <span style={S.title}>{flowsheet?.name || 'Loading…'}</span>
           {liveMode && (
             <span style={{
@@ -1418,6 +1517,21 @@ export default function CanvasPage() {
                 </span>
               </span>
             )}
+            <span style={S.divider} />
+            {/* The sheet's look: the Live plant's machines and pipes, or the
+                drafting symbols. Same flowsheet either way. */}
+            <button
+              className="tb-ghost"
+              style={{ ...S.btn, ...(canvasStyle === 'mimic' ? { background: '#E9F2FA', color: '#1F4E79', border: '1px solid #B6D3EC' } : null) }}
+              onClick={toggleCanvasStyle}
+              aria-pressed={canvasStyle === 'mimic'}
+              aria-label="Canvas style"
+              title={canvasStyle === 'mimic'
+                ? 'Realistic: the machines and pipes as on the Live plant. Click for the drafting symbols.'
+                : 'Drafting symbols. Click for the realistic view, as on the Live plant.'}
+            >
+              <Boxes size={14} />{canvasStyle === 'mimic' ? 'Realistic' : 'Drawing'}
+            </button>
             <span style={S.divider} />
             <button
               className="tb-ghost"
@@ -1513,7 +1627,7 @@ export default function CanvasPage() {
                     role="menuitem"
                     style={S.menuItem}
                     title="Edit cost coefficients for this project"
-                    onClick={() => { navigate(`/projects/${projectId}/settings`); setMenuOpen(false); }}
+                    onClick={() => { navigate(`${base}/${projectId}/settings`); setMenuOpen(false); }}
                   >
                     <Settings2 size={14} />Cost settings…
                   </button>
@@ -1568,7 +1682,8 @@ export default function CanvasPage() {
                className the play-state gate acts on — toggling live mutates one
                class on one DOM node, so nothing re-renders and no loop restarts.
                `ws-lod-far` is written by <CanvasLod/> via this same ref. */
-            className={['ws-sheet', motion && 'ws-live'].filter(Boolean).join(' ')}
+            className={['ws-sheet', motion && 'ws-live', canvasStyle === 'mimic' && 'ws-sheet--mimic'].filter(Boolean).join(' ')}
+            data-canvas-style={canvasStyle}
             style={{ ...S.canvasWrap, flex: 1, minHeight: 0 }}
             onDrop={onDrop}
             onDragOver={onDragOver}
@@ -1578,6 +1693,8 @@ export default function CanvasPage() {
                 stipples, the UV radial gradient and the reusable marks. Thirty
                 nodes must not each carry their own. */}
             <SymbolDefs />
+            {/* The mimic's gradients and filters, once for the whole sheet. */}
+            <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ position: 'absolute' }}><MimicDefs /></svg>
             {/* Remote collaborator cursors */}
             <RemoteCursors cursors={remoteCursors} />
             <AlarmFloodContext.Provider value={alarmFlood}>
@@ -1588,6 +1705,7 @@ export default function CanvasPage() {
             <NodeAlarmContext.Provider value={alarmSeverityByNode}>
             <NodeControlContext.Provider value={onControlToggle}>
             <NodeInfoContext.Provider value={onNodeInfo}>
+            <CanvasStyleContext.Provider value={canvasStyle}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -1613,9 +1731,11 @@ export default function CanvasPage() {
               <PerfOverlay />
               <Controls />
               <MiniMap nodeColor={() => '#2E75B6'} maskColor="rgba(240,246,255,0.6)" style={{ width: 140, height: 92 }} pannable zoomable className="ws-minimap" />
-              <Panel position="bottom-left" style={{ marginLeft: 52, marginBottom: 34 }}>
-                <EncodingLegend qref={legendQref} />
-              </Panel>
+              {canvasStyle !== 'mimic' && (
+                <Panel position="bottom-left" style={{ marginLeft: 52, marginBottom: 34 }}>
+                  <EncodingLegend qref={legendQref} />
+                </Panel>
+              )}
               {nodes.length === 0 && (
                 <Panel position="top-right">
                   <div style={S.hint}>
@@ -1624,6 +1744,7 @@ export default function CanvasPage() {
                 </Panel>
               )}
             </ReactFlow>
+            </CanvasStyleContext.Provider>
             </NodeInfoContext.Provider>
             </NodeControlContext.Provider>
             </NodeAlarmContext.Provider>
@@ -1927,6 +2048,7 @@ const ParamPanel = React.memo(function ParamPanel({
 // ── Summary Panel ─────────────────────────────────────────────────────────────
 
 const SummaryPanel = React.memo(function SummaryPanel({ summary, costBreakdown, unitResults, warnings, runId, projectId, flowsheetId, onClose }) {
+  const base = useProjectBase(); // the report opens on the surface the sheet was opened from
   const c = summary.compliant;
   const [showCost, setShowCost] = React.useState(false);
   const [exporting, setExporting] = React.useState(null); // null | 'csv' | 'json'
@@ -2273,7 +2395,7 @@ const SummaryPanel = React.memo(function SummaryPanel({ summary, costBreakdown, 
           <div style={S.secTitle}>Export</div>
           {/* View Report button — links to full ReportPage */}
           <a
-            href={`/projects/${projectId}/flowsheets/${flowsheetId}/simulate/${runId}/report`}
+            href={`${base}/${projectId}/flowsheets/${flowsheetId}/simulate/${runId}/report`}
             style={{
               display: 'block', width: '100%', textAlign: 'center',
               padding: '7px 12px', marginBottom: 8, borderRadius: 6,

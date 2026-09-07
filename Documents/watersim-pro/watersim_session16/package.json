@@ -18,7 +18,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check eslint.config.js playwright.config.js \"e2e/**/*.js\"",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "plant:flow": "npm run plant:flow --workspace=backend"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

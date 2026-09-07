@@ -371,6 +371,11 @@ const UnitOpNode = memo(({ id, data, selected, xPos, yPos }) => {
 UnitOpNode.displayName = 'UnitOpNode';
 export default UnitOpNode;
 
+// The pieces MimicNode (the Live plant's machine drawn on the sheet) lays over
+// its symbol: the same switch, ⓘ, readout and crop marks, so both styles of
+// card behave identically and the tests above pin both.
+export { ControlRow, NodeInfoButton, Readouts, CropMarks };
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Styles — geometry from the §1.3 / §2.1 tokens, with literal fallbacks so a
 // test renderer that never loads canvas-tokens.css still lays the card out.

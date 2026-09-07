@@ -1,32 +1,40 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+/**
+ * DashboardPage — the home screen, built for the role that logged in.
+ *
+ * One call to GET /dashboard returns the sections this role gets (the server
+ * decides; see backend routes/dashboard.js), and RoleDashboard draws them:
+ * a viewer's plant overview, an operator's console, an engineer's desk, a
+ * manager's overview, an administrator's page. Alarm and task events on the
+ * organisation socket refresh it; PLC updates move the readings in place;
+ * and it reconciles itself once a minute regardless.
+ */
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { RefreshCw, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AppLayout from '../components/layout/AppLayout';
 import OnboardingWizard, { hasCompletedOnboarding } from '../components/OnboardingWizard';
-import { SkeletonStatCard, SkeletonRecentProject } from '../components/Skeleton';
-import { FolderOpen, Activity, Cpu, ArrowRight, Plus, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import { SkeletonStatCard, SkeletonCard } from '../components/Skeleton';
+import RoleDashboard, { ROLE_META } from '../components/dashboard/RoleDashboards';
+import { useOrgLive } from '../hooks/useOrgLive';
+import { relTime } from '../components/alarms/alarmState';
 import api from '../services/api';
+
+const RECONCILE_MS = 60_000;
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [projects, setProjects]   = useState([]);
-  const [runsTotal, setRunsTotal] = useState(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const reloadTimer = useRef(null);
 
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
-      const [projRes, reportsRes] = await Promise.all([
-        api.get('/projects'),
-        // Runs count is non-critical — degrade to '—' if it fails
-        api.get('/reports', { params: { limit: 1 } }).catch(() => null),
-      ]);
-      const data = projRes.data;
-      setProjects(Array.isArray(data) ? data : (data?.data || data?.projects || []));
-      setRunsTotal(reportsRes?.data?.total ?? null);
+      const { data: d } = await api.get('/dashboard');
+      setData(d);
+      setError(null);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load dashboard data');
     } finally {
@@ -34,46 +42,68 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { const t = setInterval(() => load(true), RECONCILE_MS); return () => clearInterval(t); }, [load]);
 
-  // Show onboarding when user has no projects and hasn't completed it before
+  // An alarm or task event changes the numbers: reload, at most once a second and a half.
+  const bump = useCallback(() => {
+    if (reloadTimer.current) return;
+    reloadTimer.current = setTimeout(() => { reloadTimer.current = null; load(true); }, 1500);
+  }, [load]);
+  useEffect(() => () => { if (reloadTimer.current) clearTimeout(reloadTimer.current); }, []);
+
+  // PLC values move the readings in place, no round trip.
+  const applyValues = useCallback(({ values }) => {
+    if (!Array.isArray(values) || !values.length) return;
+    setData((d) => {
+      if (!d?.readings?.items?.length) return d;
+      const byTag = new Map(values.filter((v) => v.tagId).map((v) => [v.tagId, v]));
+      let changed = false;
+      const items = d.readings.items.map((r) => {
+        const v = byTag.get(r.id);
+        if (!v) return r;
+        changed = true;
+        return { ...r, value: v.value, quality: v.quality, at: v.ts };
+      });
+      return changed ? { ...d, readings: { ...d.readings, items } } : d;
+    });
+  }, []);
+
+  useOrgLive({ onPlcUpdate: applyValues, onAlarmEvent: bump, onTaskEvent: bump });
+
+  // First-run help for the people who can build a plant: no projects yet, and they have not been through it.
   useEffect(() => {
-    if (!loading && !error && user && projects.length === 0 && !hasCompletedOnboarding(user.id)) {
+    if (!loading && !error && user && data?.projects && data.projects.total === 0 && !hasCompletedOnboarding(user.id)) {
       setShowOnboarding(true);
     }
-  }, [loading, error, projects.length, user]);
+  }, [loading, error, data, user]);
 
-  const totalFlowsheets = projects.reduce((n, p) => n + (p.flowsheet_count || 0), 0);
-  const recentProjects  = projects.slice(0, 3);
-
-  const statCards = [
-    { icon: FolderOpen, label: 'Projects',        value: loading ? null : projects.length,          color: 'bg-blue-50 text-blue-600' },
-    { icon: Cpu,        label: 'Flowsheets',       value: loading ? null : totalFlowsheets,           color: 'bg-purple-50 text-purple-600' },
-    { icon: Activity,   label: 'Simulation Runs',  value: loading ? null : (runsTotal ?? '—'),        color: 'bg-green-50 text-green-600' },
-  ];
+  const role = data?.role || user?.role || 'viewer';
+  const meta = ROLE_META[role] || ROLE_META.viewer;
 
   return (
     <AppLayout>
       {showOnboarding && user && (
-        <OnboardingWizard
-          userId={user.id}
-          userName={user.firstName}
-          onComplete={() => setShowOnboarding(false)}
-        />
+        <OnboardingWizard userId={user.id} userName={user.firstName} onComplete={() => setShowOnboarding(false)} />
       )}
 
-      <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-7xl mx-auto">
-        {/* Welcome */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">
-            Welcome back, {user?.firstName} 👋
-          </h2>
-          <p className="text-gray-500 mt-1 text-sm">
-            {user?.organisation?.name} · <span className="capitalize">{user?.role}</span>
-          </p>
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">{meta.title}</h2>
+            <p className="text-gray-500 mt-1 text-sm">
+              Welcome back, {user?.firstName} 👋 · {user?.organisation?.name} · <span className="capitalize">{role}</span>
+            </p>
+            <p className="text-gray-400 text-xs mt-0.5">{meta.blurb}</p>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-gray-400">
+            {data?.at && <span>updated {relTime(data.at)}</span>}
+            <button onClick={() => load(true)} disabled={loading} className="btn-secondary text-xs py-1 disabled:opacity-50" aria-label="Refresh">
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        {/* Load error + retry */}
         {error && (
           <div role="alert" className="card p-5 border-l-4 border-red-500 flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
@@ -83,73 +113,20 @@ export default function DashboardPage() {
                 <p className="text-sm text-gray-500">{error}</p>
               </div>
             </div>
-            <button onClick={loadDashboard} className="btn-secondary text-sm">
+            <button onClick={() => load()} className="btn-secondary text-sm">
               <RefreshCw className="w-4 h-4" aria-hidden="true" /> Retry
             </button>
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4" role="list" aria-label="Summary statistics">
-          {statCards.map(({ icon: Icon, label, value, color }) => (
-            loading && value === null
-              ? <SkeletonStatCard key={label} />
-              : (
-                <div key={label} className="card p-5 flex items-center gap-4" role="listitem">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`} aria-hidden="true">
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900" aria-label={`${value} ${label}`}>{value}</p>
-                    <p className="text-sm text-gray-500">{label}</p>
-                  </div>
-                </div>
-              )
-          ))}
-        </div>
-
-        {/* Quick actions + recent projects */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="card p-6">
-            <h3 className="font-semibold text-gray-900 mb-1">New Project</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Start a new wastewater or water purification simulation project.
-            </p>
-            <Link to="/projects/new" className="btn-primary text-sm inline-flex">
-              <Plus className="w-4 h-4" aria-hidden="true" /> Create project
-            </Link>
+        {loading && !data && (
+          <div className="space-y-4" aria-busy="true" aria-label="Loading dashboard">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[1, 2, 3, 4].map((i) => <SkeletonStatCard key={i} />)}</div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((i) => <SkeletonCard key={i} lines={4} />)}</div>
           </div>
+        )}
 
-          <div className="card p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">Recent Projects</h3>
-            {loading ? (
-              <div className="space-y-1" aria-busy="true" aria-label="Loading recent projects">
-                {[1, 2].map(i => <SkeletonRecentProject key={i} />)}
-              </div>
-            ) : recentProjects.length === 0 ? (
-              <p className="text-sm text-gray-500 mb-4">No projects yet. Create your first project to get started.</p>
-            ) : (
-              <nav aria-label="Recent projects" className="space-y-1 mb-4">
-                {recentProjects.map(p => (
-                  <Link key={p.id} to={`/projects/${p.id}`}
-                    className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 group transition-colors">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FolderOpen className="w-4 h-4 text-brand-400 flex-shrink-0" aria-hidden="true" />
-                      <span className="text-sm font-medium text-gray-700 truncate">{p.name}</span>
-                    </div>
-                    <span className="text-xs text-gray-400 flex items-center gap-1 flex-shrink-0 ml-2" aria-label={`Last updated ${new Date(p.updated_at).toLocaleDateString()}`}>
-                      <Clock className="w-3 h-3" aria-hidden="true" />
-                      {new Date(p.updated_at).toLocaleDateString()}
-                    </span>
-                  </Link>
-                ))}
-              </nav>
-            )}
-            <Link to="/projects" className="btn-secondary text-sm inline-flex">
-              <ArrowRight className="w-4 h-4" aria-hidden="true" /> View all projects
-            </Link>
-          </div>
-        </div>
+        {data && <RoleDashboard data={data} />}
       </div>
     </AppLayout>
   );

@@ -52,3 +52,6 @@ logs/
 # Misc
 *.tgz
 *.tar.gz
+
+# Microsoft Office lock files
+~$*

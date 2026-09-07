@@ -265,6 +265,80 @@ export const OP_INFO = {
     watchFor: 'Solids that escape capture leave in the filtrate, which normally returns to the head of the works — even a 95 % capture on a heavy sludge is a genuine recycle load. Raising the target concentration shrinks the thickened flow, but a gravity thickener realistically tops out around 6 % dry solids.',
     animation: 'The rake turns from thickened_Q_m3_d, which is computed, and the underflow band is the captured-solids fraction. The target concentration you type is a setpoint and drives nothing that moves. Vessels fill once when live view starts. This is a view transition, not a filling simulation — process basins in service are always full.',
   },
+
+  // ── Sewage treatment plant (Session 18 — the ITC equipment set) ────────────
+  oil_grease_trap: {
+    title: 'Oil & Grease Trap',
+    tagline: 'A baffled box on the kitchen line that skims the fat off before it reaches anything expensive.',
+    what: 'Kitchen wastewater arrives loaded with fat, oil and grease. Left in, it coats aeration diffusers, blinds filters and floats on the reactor as a scum mat that no amount of air will fix. The trap is simply a box with baffles: the flow slows, grease floats to the top behind the first baffle and is skimmed, grit drops to the floor, and the outlet draws from the middle where the water is cleanest.',
+    how: 'Separation is gravity-driven, so retention time is the whole design: HRT_min = volume_m3 ÷ (Q ÷ 1440), and capture is derated linearly by HRT_min ÷ rated_HRT_min, floored at 30 % so a badly undersized trap still reports something rather than nothing. FOG is not a Stream field, so it is carried as the fog_in_mg_L parameter and reported as a metric; what moves on the stream is the BOD and COD the grease was carrying (1.2 and 2.5 g per g of FOG, capped at what the stream actually holds) plus the settled solids. The skimmings leave as a screenings stream at 150,000 mg/L.',
+    watchFor: 'A trap is only as good as its emptying schedule. days_between_cleanout tells you how fast it fills; once full it re-entrains everything it caught and the plant sees a slug of grease worse than no trap at all. Check HRT_min against the rated retention too — a trap sized on footprint rather than on flow will read a derate in the 30–50 % range and quietly pass most of the FOG downstream.',
+    animation: 'Nothing moves. The grease layer is drawn at a fixed depth with its TONE set by fog_removal_pct, because the model computes a mass captured per day and never a layer thickness — a layer that grew would be inventing a depth. The outlet baffle goes dashed when the trap is running below its design retention.',
+  },
+  equalisation_tank: {
+    title: 'Equalisation / Buffer Tank',
+    tagline: 'Buys the plant time — absorbs the peaks so everything downstream sees a steady feed.',
+    what: 'A hotel does not produce sewage evenly. Kitchens surge at meal times, laundries run in shifts, and a treatment train fed that way is either flooded or starved. A balancing tank sits between the two: it fills during the peak and empties during the lull, so the pumps and reactors downstream see an average rather than a rollercoaster. Nothing is treated here — the tank buys time, not quality.',
+    how: 'In steady state a buffer tank changes nothing about the water, and this model says so rather than inventing removal: composition passes through untouched. What it computes is hydraulic duty — HRT_h = volume ÷ hourly flow, turnovers_per_day = Q ÷ volume, and the usable volume between the low- and high-level setpoints. From those comes peak_absorbed_h: how many hours the tank can accept peak_factor × the average inflow before the high-level switch trips, which is usable ÷ (hourly × (peak_factor − 1)).',
+    watchFor: 'peak_absorbed_h is the number that matters. Under an hour and the tank is decorative — the surge passes straight through and hits the process anyway. Check it against how long your actual peak lasts, not against the tank volume, because a big tank with its setpoints set 10 % apart has almost no usable band at all.',
+    animation: 'No level, ever. The steady-state solver has no accumulation term, so a moving level here would be a constant dressed up as a measurement. What is drawn is the working BAND between the two level setpoints — real numbers an operator set — and it starts at the low setpoint rather than the floor, so it cannot be misread as a depth.',
+  },
+  sbr_reactor: {
+    title: 'SBR Reactor (Sequencing Batch Reactor)',
+    tagline: 'Treats and settles in the same tank, on a timer instead of in a separate clarifier.',
+    what: 'A conventional plant aerates in one tank and settles in another. An SBR does both in one, by taking turns: fill it, blow air through it while the bacteria eat, switch the air off and let the sludge settle, then lower a decanter and draw the clear water off the top. Then start again. It trades a clarifier and a return-sludge pump for a controller and a clock, which is why it suits a plant this size.',
+    how: 'The biology is not re-derived here — it is delegated to the activated-sludge model at the same SRT, MLSS and temperature, because an SBR aerobic phase is the same biochemistry as a continuous basin. What this model adds is the two things a batch reactor does differently: it decants supernatant at decant_TSS_mg_L instead of at MLSS, keeping the settled blanket as inventory rather than exporting it, and it computes the cycle capacity — reactors × (24 ÷ cycle_h) × feed_pump_m3_h × fill_h. Feed above that capacity is reported as backlog_m3_d with a warning instead of being silently treated.',
+    watchFor: 'capacity_utilisation_pct above 100 % is the single most important reading on this node: the cycle physically cannot take the flow offered, so the surplus backs up into the balancing tank and accumulates every day. The fix is a longer fill, a bigger feed pump or another reactor — never a shorter settle, which is what actually loses you the effluent quality.',
+    animation: 'The four-phase bar is drawn from the real computed durations, in proportion. No phase is shown as live and nothing loops, because steady state has no clock: the model computes durations and daily averages, never a current phase. The decanter arm is drawn parked, the one pose that is true at every instant the model describes.',
+  },
+  multigrade_filter: {
+    title: 'Multigrade Filter (MGF)',
+    tagline: 'A pressure vessel of graded sand and gravel that polishes out what the reactor left behind.',
+    what: 'Water is pushed down through layers of progressively finer sand under pressure. The coarse top layer catches the big particles, the fine layers below catch what got past, and the gravel at the bottom holds the whole bed up. Periodically the flow is reversed to lift the bed and flush the trapped dirt out to the backwash line. It is the workhorse polishing step between a biological reactor and anything sensitive.',
+    how: 'Removal is a media-specific fraction — 80 % TSS, 25 % BOD, 20 % COD for graded sand — derated by hydraulic loading: HLR_m_h = Q ÷ 24 ÷ area, area from the vessel diameter, and derate = rated_HLR ÷ HLR clamped to a 0.4 floor. Backwash is a genuine water loss, not a footnote: backwash_m3_per_wash at backwash_interval_h comes off the throughput and leaves on a backwash stream carrying exactly the solids the bed removed, so the mass balance closes.',
+    watchFor: 'derate_pct below 100 means the vessel is passing more than it is rated for and the removal figure has already been reduced accordingly — check the vessel diameter against the actual flow rather than trusting the headline percentage. Watch the backwash volume too: on a small plant a filter washing every few hours can send a surprising fraction of the day’s production back to the head of works.',
+    animation: 'Nothing loops. The bed tone comes from the computed TSS_removal_pct as a static encoder, and the bed surface is drawn dashed when the vessel is overloaded — the canvas convention for "this is not doing what the drawing implies". The model computes daily averages, and a daily average may never drive a rate.',
+  },
+  activated_carbon_filter: {
+    title: 'Activated Carbon Filter (ACF)',
+    tagline: 'The same pressure vessel, filled with carbon — and on this plant, the thing that protects the membranes.',
+    what: 'Granular activated carbon is enormously porous: a handful has the surface area of a football pitch. Organic molecules, colour and odour stick to that surface as the water passes, and chlorine is destroyed on contact with it. On a plant that doses chlorine upstream and runs ultrafiltration membranes downstream, the carbon bed is what stands between the two — chlorine shortens membrane life, and this is where it is taken back out.',
+    how: 'The same pressure-filter engine as the multigrade filter, with carbon’s own coefficients: 55 % TSS, 45 % BOD and 50 % COD removal at a 10 m/h rated loading, derated by actual loading the same way. The distinguishing term is dechlorination — 95 % of the residual entering the bed is destroyed, reported as chlorine_out_ppm — and the higher BOD and COD removal, which is adsorption doing work that a sand bed cannot.',
+    watchFor: 'Adsorption capacity is finite and this model does not track its exhaustion: it reports a steady removal indefinitely, whereas a real bed breaks through and needs regenerating or replacing. Treat the removal figures as clean-bed performance and plan a media change on service hours, not on what this node reports.',
+    animation: 'Identical to the multigrade filter, with a carbon stipple in place of sand and a struck-through Cl mark when the model computes dechlorination. Static encoders only — see the multigrade filter note.',
+  },
+  micron_filter: {
+    title: 'Micron Cartridge Filter',
+    tagline: 'The last barrier before the membranes — a pleated cartridge that catches what everything upstream missed.',
+    what: 'A replaceable pleated cartridge in a small housing, sized in microns. It is not a treatment step in any meaningful sense; it is insurance. Anything that gets past the filters upstream — a slug of carbon fines, a scrap of media after a backwash — would otherwise arrive at the ultrafiltration membranes, which are far more expensive than a cartridge.',
+    how: 'The pressure-filter engine with cartridge coefficients: 90 % TSS removal at a 20 m/h rated loading, and almost no BOD or COD removal, because a cartridge is a strainer, not a treatment. The change interval takes the place of a backwash interval and the flush volume the backwash volume, so a cartridge that is changed rather than washed reports a negligible water loss.',
+    watchFor: 'Pressure drop, which this model does not compute, is what actually tells you a cartridge is spent — a blinded cartridge starves the ultrafiltration feed pump long before the removal figure here would change. Schedule changes on differential pressure at the vessel, not on anything reported by this node.',
+    animation: 'Pleats instead of a bed, drawn still. Nothing about a cartridge moves and nothing here pretends otherwise.',
+  },
+  water_softener: {
+    title: 'Water Softener (Ion Exchange)',
+    tagline: 'Swaps the calcium out for sodium, so the cooling tower does not scale up.',
+    what: 'Hard water is passed through a bed of resin beads loaded with sodium. Calcium and magnesium stick to the resin and sodium comes off, so the water leaving is soft. Eventually every site on the resin is taken and it stops working, at which point strong brine is flushed through to drive the hardness back off and reload the sodium. That spent brine goes to reject.',
+    how: 'Hardness is not a Stream field, so it is carried as the feed_hardness_ppm parameter and reported as a metric — this model does not pretend to track hardness through the rest of the flowsheet, because nothing downstream reads it. The service cycle is real arithmetic: bed capacity = resin_litres × capacity_g_per_L, load = feed − product hardness, throughput per run = capacity ÷ load, and salt per regeneration = resin_litres × salt_g_per_L ÷ 1000. Regeneration water leaves on a concentrate stream so the reject line is visible rather than implied.',
+    watchFor: 'regenerations_per_day above two means the resin bed is undersized for the hardness load — the softener will spend more of its day in regeneration than in service, and the salt bill and reject volume both climb with it. Softening also does not reduce dissolved solids: it exchanges one ion for another, so a soft water is not a low-TDS water.',
+    animation: 'The regeneration clock is a dial position, not a rotation: the model gives regenerations per DAY, and a spinning hand would turn a daily count into an implied speed. The brine tank level is drawn dashed because nothing computes it — the model consumes salt per regeneration and knows nothing about what is left in the tank.',
+  },
+  sludge_centrifuge: {
+    title: 'Decanter Centrifuge',
+    tagline: 'Spins the water out of sludge so what leaves site is a cake, not a tanker of liquid.',
+    what: 'Sludge is fed into a bowl spinning fast enough that solids are thrown to the wall in seconds — gravity settling that would take hours, done by centrifugal force. An internal scroll turns slightly slower than the bowl and walks the collected solids up a tapered beach to the cake port, while clarified centrate leaves the wide end and returns to the head of the works.',
+    how: 'This type resolves to the thickener model. Area = solids_in ÷ SLR, captured solids = solids_in × capture_pct, and the cake flow is those solids divided by the target concentration. Particulate BOD, COD, TN and TP follow the same capture split by mass balance; soluble species leave at the influent concentration in both the cake and the centrate.',
+    watchFor: 'The centrate is a real recycle load, not a waste — it returns to the balancing tank carrying whatever solids the machine missed plus a concentrated dose of ammonia released during sludge storage. On a small plant that return can be a significant share of the nitrogen load, and it arrives in a slug rather than continuously.',
+    animation: 'The scroll is drawn STILL. This is the one symbol where rotation would be the obvious choice and is still wrong: the model computes a loading rate, a capture percentage and a cake concentration, and has no bowl speed, no differential speed and no torque. A spinning scroll would be a fixed cadence pretending to be a machine setting.',
+  },
+  instrument: {
+    title: 'Field Instrument (FT / LT / pH)',
+    tagline: 'The ISA balloon on the line — a flow meter, level transmitter or analyser, drawn where it actually sits.',
+    what: 'The transmitters that turn the process into numbers a controller can act on. Putting them on the canvas as their own nodes is what makes the sheet match the P&ID: an engineer looking for FT-201 finds it on the line it measures, and a PLC tag binds to the node that represents the actual transmitter rather than to some unrelated unit’s parameter.',
+    how: 'It does nothing to the water — the stream leaves exactly as it arrived. What it produces is a reading, taken from the stream the solver actually computed, so it can never drift from the process: flow reads Q in m³/d and m³/hr, pH reads the stream pH, and level reads the level_pct parameter, which is what a bound PLC tag writes into it. range_min and range_max describe the calibrated span; a reading outside a span that has been set is flagged as out_of_range.',
+    watchFor: 'A span left unset (range_max at or below range_min) is normal on a sheet being drawn, and the balloon is drawn dashed to say so — but an unranged loop cannot be scaled, so the number is raw. The opposite case matters more: a saturated 4–20 mA loop shows a perfectly plausible figure on a SCADA screen while telling you nothing at all.',
+    animation: 'Nothing moves and nothing is drawn as a dial position. The model has no dial, and a needle would imply a span the instrument may not have been given. An out-of-range reading fills the balloon; the node’s own alarm ring carries the severity.',
+  },
 };
 
 /**
@@ -743,6 +817,224 @@ export const PARAM_INFO = {
     unit: '%',
     typical: '18–25 % from a centrifuge, 25–32 % from a filter press; 22 % default.',
     effect: 'Cake volume = captured solids ÷ (DS × 10), so raising it shrinks the tonnage hauled off site and pushes more water into the centrate returned to the works.',
+  },
+
+  // ── Oil & grease trap ─────────────────────────────────────────────────────
+  rated_HRT_min: {
+    meaning: 'The retention time the trap was designed for — the yardstick actual retention is judged against.',
+    unit: 'minutes',
+    typical: '20–30 minutes for a kitchen grease trap.',
+    effect: 'Capture is derated by actual HRT ÷ this value, floored at 30 %. Raising it makes the same trap look worse without changing the tank; it is a statement about the design intent, not about the hardware.',
+  },
+  fog_in_mg_L: {
+    meaning: 'Fat, oil and grease arriving in the stream. Carried as a parameter because FOG is not one of the twelve Stream fields.',
+    unit: 'mg/L',
+    typical: 'Hotel kitchen wastewater 150–400 mg/L; domestic sewage 50–100 mg/L.',
+    effect: 'Sets how much grease there is to capture, and therefore the BOD and COD the trap removes with it — 1.2 g BOD and 2.5 g COD per gram of FOG, capped at what the stream actually carries.',
+  },
+  fog_removal_pct: {
+    meaning: 'The share of incoming FOG a clean, correctly sized trap captures, before any derating for short retention.',
+    unit: '%',
+    typical: '80–90 % for a well-maintained trap at design retention.',
+    effect: 'Raising it removes more grease and more of the oxygen demand riding on it. The reported capture is this value × the retention derate, so on an undersized trap the two figures diverge sharply.',
+  },
+  grease_capacity_m3: {
+    meaning: 'How much skimmed grease the trap holds before it has to be emptied.',
+    unit: 'm³',
+    typical: 'Roughly a third of the trap volume.',
+    effect: 'Sets days_between_cleanout. It changes no removal figure — it tells you how often somebody has to attend, and a trap emptied slower than this passes everything it caught.',
+  },
+
+  // ── Buffer tanks ──────────────────────────────────────────────────────────
+  low_level_pct: {
+    meaning: 'The low-level setpoint — where the outlet pumps stop so they do not run dry.',
+    unit: '% of working volume',
+    typical: '15–25 %.',
+    effect: 'Raising it shrinks the usable band between the setpoints, which cuts buffer_hours and peak_absorbed_h without changing the tank at all.',
+  },
+  high_level_pct: {
+    meaning: 'The high-level setpoint — where the level switch trips and the tank is considered full.',
+    unit: '% of working volume',
+    typical: '85–90 %, leaving freeboard for a surge.',
+    effect: 'Raising it widens the usable band and buys more surge time, at the cost of the freeboard that stops an overflow.',
+  },
+  peak_factor: {
+    meaning: 'Peak inflow as a multiple of the daily average — the surge the tank has to absorb.',
+    unit: '× average',
+    typical: '2.0–3.0 for a hotel; kitchens and laundries peak hard and together.',
+    effect: 'peak_absorbed_h is usable volume ÷ (hourly average × (peak_factor − 1)), so raising this shortens the time the tank survives a surge, steeply.',
+  },
+  has_level_switch: {
+    meaning: 'On when the vessel has only a high-level switch, off when it has a continuous level transmitter.',
+    unit: 'on / off',
+    typical: 'Off for process tanks; on for the small collection and grease chambers.',
+    effect: 'Changes nothing hydraulically. It changes what the plant can actually see: a switch gives one bit at one level, a transmitter gives a continuous reading the controller can act on.',
+  },
+
+  // ── SBR reactor ───────────────────────────────────────────────────────────
+  reactors: {
+    meaning: 'How many reactors share the feed. Set this to 1 when each reactor is drawn as its own node.',
+    unit: 'count',
+    typical: '2, run offset so one fills while the other aerates.',
+    effect: 'Multiplies cycle capacity directly. It is the only lever that raises throughput without touching the cycle times or the pump.',
+  },
+  fill_h: {
+    meaning: 'How long the feed pump charges the reactor at the start of each cycle.',
+    unit: 'hours',
+    typical: '1–2 hours.',
+    effect: 'Volume per fill is fill_h × feed_pump_m3_h, so this sets throughput directly — but it also lengthens the cycle, which reduces cycles per day. The net gain is real but less than proportional.',
+  },
+  aerate_h: {
+    meaning: 'How long the blowers run after filling — the phase where BOD is oxidised and ammonia nitrified.',
+    unit: 'hours',
+    typical: '2–4 hours.',
+    effect: 'Longer aeration improves treatment but lengthens the cycle, cutting cycles per day and therefore total plant capacity. This is the trade-off at the centre of every SBR design.',
+  },
+  settle_h: {
+    meaning: 'Quiescent time with the air off, while the sludge blanket forms below the clear supernatant.',
+    unit: 'hours',
+    typical: '0.75–1.5 hours.',
+    effect: 'Too short and the decanter draws solids into the effluent, which no downstream filter is sized to catch. Shortening it to gain capacity is the most common way an SBR is quietly ruined.',
+  },
+  decant_h: {
+    meaning: 'How long the decanter takes to lower, draw the clear supernatant off, and reverse to park.',
+    unit: 'hours',
+    typical: '0.5–1 hour.',
+    effect: 'Part of the cycle time, so it costs capacity like every other phase. Drawing too fast disturbs the blanket, which is why it is a timed travel rather than a dump valve.',
+  },
+  feed_pump_m3_h: {
+    meaning: 'The capacity of the pump filling the reactor — with fill_h, it sets the volume of one batch.',
+    unit: 'm³/hr',
+    typical: 'Sized so fill_h × this × cycles/day × reactors comfortably exceeds the design flow.',
+    effect: 'Raises cycle capacity in direct proportion without lengthening the cycle, which makes it the cheapest fix when capacity_utilisation_pct is over 100 %.',
+  },
+  decant_TSS_mg_L: {
+    meaning: 'Suspended solids in the supernatant the decanter draws off after settling.',
+    unit: 'mg/L',
+    typical: '10–30 mg/L from a well-settled blanket.',
+    effect: 'This is the reactor’s effluent TSS. Everything above it stays in the tank as inventory rather than leaving, so raising it exports solids to the filters downstream instead of keeping the culture.',
+  },
+
+  // ── Pressure filters ──────────────────────────────────────────────────────
+  media: {
+    meaning: 'What the vessel is filled with — graded sand, activated carbon, or a pleated cartridge.',
+    unit: 'category',
+    typical: 'multigrade for bulk polishing, carbon for dechlorination and organics, micron as a final barrier.',
+    effect: 'Selects the whole removal set and the rated loading. Carbon alone dechlorinates; only carbon meaningfully removes COD; the cartridge is a strainer with almost no BOD or COD effect.',
+  },
+  diameter_mm: {
+    meaning: 'Vessel diameter, from which the filtration area and therefore the hydraulic loading are computed.',
+    unit: 'mm',
+    typical: 'ACF Ø1650 mm and MGF Ø1500 mm on this plant; cartridge housings 200–400 mm.',
+    effect: 'Area goes with the square of the diameter, so a small increase drops the loading rate sharply and lifts a derated filter back to clean-bed performance.',
+  },
+  rated_flow_m3_h: {
+    meaning: 'The flow the vessel is rated for by its manufacturer.',
+    unit: 'm³/hr',
+    typical: '25 m³/hr for the ACF and MGF; 20 m³/hr for the softener.',
+    effect: 'Passing more than this raises a warning. It does not itself derate the removal — the loading rate against the media’s rated HLR does that — so treat it as the vendor’s statement, not as the physics.',
+  },
+  backwash_m3_per_wash: {
+    meaning: 'Water used to lift and flush the bed in one backwash.',
+    unit: 'm³',
+    typical: '4–8 m³ for a 1.5 m vessel; a fraction of that for a cartridge flush.',
+    effect: 'Comes straight off the throughput and leaves on the backwash stream carrying the solids the bed removed. Combined with the interval, it is the filter’s real water cost.',
+  },
+  chlorine_in_ppm: {
+    meaning: 'Residual chlorine entering the vessel — carried as a parameter, because chlorine is not a Stream field.',
+    unit: 'ppm',
+    typical: '0.5–1 ppm where chlorine is dosed upstream.',
+    effect: 'Only carbon acts on it: 95 % is destroyed across the bed. On a plant that doses chlorine and then feeds membranes, this is the number that decides whether the membranes are protected.',
+  },
+
+  // ── Water softener ────────────────────────────────────────────────────────
+  resin_litres: {
+    meaning: 'Volume of ion-exchange resin in the vessel.',
+    unit: 'litres',
+    typical: '400–600 L in a Ø1000 mm column.',
+    effect: 'Sets the bed capacity, and therefore how much water is treated between regenerations. Doubling the resin halves the regeneration frequency and the reject volume with it.',
+  },
+  capacity_g_per_L: {
+    meaning: 'How much hardness one litre of resin can hold before it is exhausted.',
+    unit: 'g CaCO₃ per litre of resin',
+    typical: '40–60 g/L for strong-acid cation resin at a normal salt dose.',
+    effect: 'Multiplies with resin volume to give the bed capacity. It falls as resin ages, so an optimistic value here understates the regeneration frequency the plant will actually see.',
+  },
+  feed_hardness_ppm: {
+    meaning: 'Hardness of the water entering the softener, as calcium carbonate.',
+    unit: 'ppm as CaCO₃',
+    typical: '150–400 ppm depending on the source.',
+    effect: 'Sets the load on the bed: throughput per run is capacity ÷ (feed − product hardness). Doubling the feed hardness halves the run length and doubles the salt bill.',
+  },
+  product_hardness_ppm: {
+    meaning: 'The hardness target for the treated water leaving the vessel.',
+    unit: 'ppm as CaCO₃',
+    typical: 'Under 5 ppm for cooling-tower make-up.',
+    effect: 'Only affects the arithmetic through the load term. A tighter target barely changes run length; what it really costs is the salt dose needed to achieve it on regeneration.',
+  },
+  salt_g_per_L: {
+    meaning: 'Salt used per litre of resin at each regeneration.',
+    unit: 'g/L resin',
+    typical: '100–160 g/L; higher doses restore more capacity at a worse efficiency.',
+    effect: 'Sets the daily salt consumption directly. It does not change the bed capacity in this model, so treat capacity_g_per_L and this as a matched pair from the resin datasheet.',
+  },
+  regen_water_m3: {
+    meaning: 'Water used per regeneration — brine draw, slow rinse and fast rinse together.',
+    unit: 'm³',
+    typical: '2–4 m³ for a bed this size.',
+    effect: 'Leaves on the concentrate stream as reject, so it comes off the plant’s recovery. Multiplied by regenerations per day, it is the softener’s whole water cost.',
+  },
+
+  // ── Centrifuge ────────────────────────────────────────────────────────────
+  target_TSS_mg_L: {
+    meaning: 'Solids concentration of the cake the machine is set to produce.',
+    unit: 'mg/L',
+    typical: '160,000–220,000 mg/L (16–22 % dry solids) from a decanter centrifuge.',
+    effect: 'Cake flow is captured solids ÷ this, so raising it shrinks the volume hauled off site and pushes more water into the centrate returned to the works.',
+  },
+  'sludge_centrifuge.type': {
+    meaning: 'Which set of thickener coefficients to use — DAF settings model a high-speed decanter, gravity settings a static thickener.',
+    unit: 'category',
+    typical: 'DAF for a centrifuge.',
+    effect: 'Selects the default capture, loading rate and target concentration. Any of the three you set by hand overrides the type’s default.',
+  },
+  'sludge_centrifuge.SLR_kg_m2_d': {
+    meaning: 'Solids loading rate the machine is sized on — dry solids fed per square metre of separation area per day.',
+    unit: 'kg/m²/d',
+    typical: '120 kg/m²/d on the DAF setting; 80 on gravity.',
+    effect: 'Sets the area the model reports for the duty. It does not change how much is captured — capture_pct does that — so a machine that is too small shows up as an implausible area rather than as a worse cake.',
+  },
+  'sludge_centrifuge.capture_pct': {
+    meaning: 'The share of incoming dry solids that ends up in the cake rather than the centrate.',
+    unit: '%',
+    typical: '95–98 % with polymer; noticeably lower without it.',
+    effect: 'Everything not captured returns to the head of works in the centrate, so lowering it moves solids straight back into the balancing tank and around the plant again.',
+  },
+
+  // ── Instruments ───────────────────────────────────────────────────────────
+  measurement: {
+    meaning: 'What this transmitter measures, which also sets its ISA function letters — FT, LT or AT.',
+    unit: 'category',
+    typical: 'flow for pipe meters, level for tanks, pH for the filtered-water analyser.',
+    effect: 'Selects where the reading comes from: flow and pH are read off the stream the solver computed, level from the level_pct parameter, which is what a bound PLC tag writes into it.',
+  },
+  level_pct: {
+    meaning: 'The level a level transmitter is currently reading. Ignored by flow meters and analysers.',
+    unit: '%',
+    typical: 'Written by a PLC binding in service; set by hand when modelling a scenario.',
+    effect: 'Becomes the reading, and nothing else. A level instrument is a passthrough — this value never changes the flow or the composition passing the node.',
+  },
+  range_min: {
+    meaning: 'The bottom of the transmitter’s calibrated span — what the 4 mA end of the loop represents.',
+    unit: 'same as the measurement',
+    typical: '0 for flow and level; 0 for a pH loop calibrated 0–14.',
+    effect: 'With range_max it scales the reading into a span percentage. A reading below it is flagged as out of range, because a saturated loop reads plausibly and means nothing.',
+  },
+  range_max: {
+    meaning: 'The top of the calibrated span — the 20 mA end. Leave at 0 for a loop that has not been ranged.',
+    unit: 'same as the measurement',
+    typical: 'Set above the maximum the process can produce, with headroom.',
+    effect: 'At or below range_min the loop is treated as unranged: the reading is still reported, the span percentage is not, and the instrument balloon is drawn dashed rather than warned about.',
   },
 };
 

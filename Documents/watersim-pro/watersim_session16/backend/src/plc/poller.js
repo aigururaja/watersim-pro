@@ -29,8 +29,10 @@
 
 const { query } = require('../db/pool');
 const { getDriver, probeAvailability } = require('./registry');
-const { broadcastToRoom } = require('../collab/wsServer');
+const { broadcastToRoom, broadcastToOrg } = require('../collab/wsServer');
 const { evaluateParamValue } = require('../alarms/evaluator');
+const { recordSamples, backfillBindingTags } = require('../historian');
+const { shadowClient } = require('../twin/shadow');
 const logger = require('../utils/logger');
 
 const TICK_MS            = 500;    // scheduler resolution
@@ -44,6 +46,10 @@ const clients = new Map();
 
 let timer   = null;
 let ticking = false;
+// Bindings created after the registry, or tags created after the binding, are
+// linked on this cadence so their history starts without a restart.
+let lastBackfillAt = 0;
+const BACKFILL_EVERY_MS = 60_000;
 
 function effectiveIntervalMs(binding) {
   const ms = Number(binding.poll_interval_ms) || DEFAULT_POLL_MS;
@@ -51,7 +57,8 @@ function effectiveIntervalMs(binding) {
 }
 
 function configKeyOf(conn) {
-  return `${conn.protocol}:${JSON.stringify(conn.config || {})}`;
+  // Mode is part of the key so flipping live ↔ shadow rebuilds the client.
+  return `${conn.protocol}:${conn.mode || 'live'}:${JSON.stringify(conn.config || {})}`;
 }
 
 async function dropClient(connectionId) {
@@ -79,10 +86,14 @@ async function getClientFor(conn) {
 
   const failCount = entry ? entry.failCount : 0;
   try {
-    const client = driver.createClient(conn.config || {}, {
-      connectionId:   conn.connection_id,
-      organisationId: conn.organisation_id,
-    });
+    // Shadow mode (Phase 4): the device is never contacted; reads come from
+    // the simulator registers the shadow writes land in.
+    const client = conn.mode === 'shadow'
+      ? shadowClient({ id: conn.connection_id, organisation_id: conn.organisation_id })
+      : driver.createClient(conn.config || {}, {
+        connectionId:   conn.connection_id,
+        organisationId: conn.organisation_id,
+      });
     await client.connect();
     clients.set(conn.connection_id, { client, configKey: key, failCount: 0, backoffUntil: 0 });
     return client;
@@ -129,7 +140,8 @@ async function tick() {
   const { rows } = await query(
     `SELECT b.id, b.flowsheet_id, b.node_id, b.param_key, b.address, b.direction,
             b.scale, b.offset_val, b.poll_interval_ms, b.last_read_at, b.last_value,
-            c.id AS connection_id, c.protocol, c.config, c.organisation_id
+            b.tag_id, b.quality,
+            c.id AS connection_id, c.protocol, c.config, c.organisation_id, c.mode
      FROM plc_bindings b
      JOIN plc_connections c ON c.id = b.connection_id
      WHERE b.enabled = TRUE
@@ -159,18 +171,35 @@ async function tick() {
     byConnection.get(b.connection_id).push(b);
   }
 
-  // flowsheetId -> [{ bindingId, nodeId, paramKey, value, quality, ts }]
+  // flowsheetId -> [{ bindingId, nodeId, paramKey, value, quality, ts, tagId, flowsheetId }]
   const updatesByFlowsheet = new Map();
+  // organisationId -> the same objects, for the organisation-wide live room.
+  const updatesByOrg = new Map();
+  // Historian: every good sample, and the FIRST bad/stale sample after the
+  // quality changed — a link that is down for an hour is one row saying so,
+  // not one row per tick. Only bindings linked to a registry tag are kept.
+  const samples = [];
   const pushUpdate = (binding, value, quality) => {
+    const ts = new Date().toISOString();
     if (!updatesByFlowsheet.has(binding.flowsheet_id)) updatesByFlowsheet.set(binding.flowsheet_id, []);
-    updatesByFlowsheet.get(binding.flowsheet_id).push({
-      bindingId: binding.id,
-      nodeId:    binding.node_id,
-      paramKey:  binding.param_key,
+    const update = {
+      bindingId:   binding.id,
+      nodeId:      binding.node_id,
+      paramKey:    binding.param_key,
       value,
       quality,
-      ts:        new Date().toISOString(),
-    });
+      ts,
+      tagId:       binding.tag_id || null,
+      flowsheetId: binding.flowsheet_id,
+    };
+    updatesByFlowsheet.get(binding.flowsheet_id).push(update);
+    if (binding.organisation_id) {
+      if (!updatesByOrg.has(binding.organisation_id)) updatesByOrg.set(binding.organisation_id, []);
+      updatesByOrg.get(binding.organisation_id).push(update);
+    }
+    if (binding.tag_id && (quality === 'good' || binding.quality !== quality)) {
+      samples.push({ tagId: binding.tag_id, ts, value: quality === 'good' ? value : null, quality });
+    }
   };
 
   // Poll connection groups concurrently so one unreachable/slow PLC (which
@@ -191,6 +220,22 @@ async function tick() {
     } catch (err) {
       logger.warn('PLC poller: broadcast failed', { flowsheetId, err: err.message });
     }
+  }
+
+  for (const [orgId, values] of updatesByOrg) {
+    try {
+      broadcastToOrg(orgId, { type: 'plc:update', payload: { values } });
+    } catch (err) {
+      logger.warn('PLC poller: org broadcast failed', { orgId, err: err.message });
+    }
+  }
+
+  // One batched insert per tick; recordSamples never throws.
+  if (samples.length) await recordSamples(samples);
+
+  if (now - lastBackfillAt > BACKFILL_EVERY_MS) {
+    lastBackfillAt = now;
+    backfillBindingTags().catch((err) => logger.debug('PLC poller: registry link skipped', { err: err.message }));
   }
 }
 
@@ -283,6 +328,36 @@ async function markStale(bindings, pushUpdate) {
 }
 
 /**
+ * The built-in simulator keeps its writable registers in process memory, so
+ * a restart would forget every Start and Open ever commanded and the demo
+ * plant would boot with everything stopped. Restore each write binding's
+ * last commanded value into its register before the first poll — the same
+ * thing a real PLC does by simply still being there.
+ */
+async function primeSimulatorRegisters() {
+  const { rows } = await query(
+    `SELECT b.address, b.last_value, b.scale, b.offset_val, c.id AS connection_id, c.organisation_id
+       FROM plc_bindings b JOIN plc_connections c ON c.id = b.connection_id
+      WHERE c.protocol = 'simulator' AND b.enabled = TRUE AND b.direction IN ('write', 'read_write')
+        AND b.address ILIKE 'mem:%' AND b.last_value IS NOT NULL`
+  );
+  const sim = getDriver('simulator');
+  let n = 0;
+  for (const b of rows) {
+    try {
+      const client = sim.createClient({}, { connectionId: b.connection_id, organisationId: b.organisation_id });
+      const raw = (Number(b.last_value) - (Number(b.offset_val) || 0)) / (Number(b.scale) || 1);
+      await client.writeTag(b.address, raw);
+      n += 1;
+    } catch (err) {
+      logger.debug('Simulator register not primed', { address: b.address, err: err.message });
+    }
+  }
+  if (n) logger.info('Simulator registers restored from last commanded values', { count: n });
+  return n;
+}
+
+/**
  * Start the poll loop. No-op when already running, and skipped entirely under
  * NODE_ENV==='test' unless { force: true }.
  */
@@ -293,6 +368,7 @@ function startPoller({ force = false, tickMs = TICK_MS } = {}) {
   // Warm the bridge-driver availability probe (memoized, never rejects) so
   // GET /plc/protocols is accurate without paying for the first probe inline.
   probeAvailability().catch(() => {});
+  primeSimulatorRegisters().catch((err) => logger.warn('Simulator priming failed', { err: err.message }));
 
   timer = setInterval(async () => {
     if (ticking) return; // never overlap slow cycles
@@ -321,4 +397,4 @@ async function stopPoller() {
   logger.info('PLC poller stopped');
 }
 
-module.exports = { startPoller, stopPoller, tick, _clients: clients };
+module.exports = { startPoller, stopPoller, tick, primeSimulatorRegisters, _clients: clients };

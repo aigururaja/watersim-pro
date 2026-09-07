@@ -66,6 +66,35 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('accessToken')).toBeNull();
   });
 
+  it('exposes the role as capabilities so the shell can gate itself before any API call', async () => {
+    authService.login.mockResolvedValue({
+      user: { id: 'u3', firstName: 'Meera', role: 'manager' },
+      accessToken: 'tok-mgr',
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Logged out: no role, nothing granted, but the shape is stable.
+    expect(result.current.role).toBeNull();
+    expect(result.current.can('ops.view')).toBe(false);
+    expect(result.current.capabilities).toEqual([]);
+
+    await act(async () => { await result.current.login({ email: 'm', password: 'p' }); });
+
+    expect(result.current.role).toBe('manager');
+    expect(result.current.can('task.approve')).toBe(true);   // manager's own verb
+    expect(result.current.can('model.edit')).toBe(true);     // inherited from engineer
+    expect(result.current.can('audit.read')).toBe(false);    // admin only
+    expect(result.current.can('no.such')).toBe(false);       // unknown verb never grants
+    expect(result.current.capabilities).toContain('alarm.ack_critical');
+    expect(result.current.capabilities).not.toContain('users.manage');
+
+    await act(async () => { await result.current.logout(); });
+    expect(result.current.role).toBeNull();
+    expect(result.current.can('task.approve')).toBe(false);
+  });
+
   it('restores a session from the refresh cookie on mount', async () => {
     authService.refresh.mockResolvedValue({
       user: { id: 'u2', firstName: 'Raj' },

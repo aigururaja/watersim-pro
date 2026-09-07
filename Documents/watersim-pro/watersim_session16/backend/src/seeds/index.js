@@ -5,6 +5,7 @@
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { query } = require('../db/pool');
+const { seedItcStp } = require('./itcStp');
 
 const ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
 
@@ -116,10 +117,20 @@ async function seed() {
     console.log(`   ✔  Flowsheet     : Pre-treatment Train`);
   }
 
+  // ── ITC sewage treatment plant ───────────────────────────────────────────
+  // Seeded into its OWN organisation, so the demo org keeps its generic
+  // municipal example while the ITC plant keeps its own users, its reuse permit
+  // template and the alarm rules taken from its control narrative.
+  console.log('\n▶  Seeding the ITC sewage treatment plant…\n');
+  await seedItcStp(query);
+
   console.log('\n✅  Seed complete!\n');
   console.log('   admin@watersim.dev          / Admin1234!');
   console.log('   engineer@watersim.dev       / Engineer1!');
-  console.log('   operator@watersim.dev       / Operator1!\n');
+  console.log('   operator@watersim.dev       / Operator1!');
+  console.log('   admin@itc-stp.local         / Admin1234!   (ITC plant)');
+  console.log('   engineer@itc-stp.local      / Engineer1!   (ITC plant)');
+  console.log('   operator@itc-stp.local      / Operator1!   (ITC plant)\n');
   process.exit(0);
 }
 

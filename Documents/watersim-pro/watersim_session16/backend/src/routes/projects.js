@@ -1,6 +1,6 @@
 const express = require('express');
-const { body, param, validationResult } = require('express-validator');
-const { query } = require('../db/pool');
+const { body, param, query: qv, validationResult } = require('express-validator');
+const { query, withTransaction } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
@@ -18,21 +18,32 @@ function vErr(req, res) {
 const userId = (req) => req.user.sub || req.user.id;
 const orgId  = (req) => req.user.org  || req.user.organisationId;
 
-// GET /api/v1/projects
-router.get('/', async (req, res, next) => {
+const KINDS = ['monitoring', 'twin'];
+
+// GET /api/v1/projects?kind=monitoring|twin
+//
+// A MONITORING project is the plant as built and wired (PLC bindings, tags,
+// the live view); it is created from Operations. A TWIN project is a model to
+// run beside it or a design study; it is created from the Digital Twin, or
+// imported from a monitoring project (see POST /:id/import-to-twin).
+router.get('/', [qv('kind').optional().isIn(KINDS)], async (req, res, next) => {
+  if (vErr(req, res)) return;
   try {
     const result = await query(
-      `SELECT p.id, p.name, p.description, p.project_type, p.status, p.tags,
+      `SELECT p.id, p.name, p.description, p.project_type, p.status, p.tags, p.kind,
+              p.source_project_id, sp.name AS source_project_name,
               p.created_at, p.updated_at,
               u.first_name || ' ' || u.last_name AS created_by_name,
               COUNT(f.id)::int AS flowsheet_count
        FROM   projects p
        JOIN   users u ON u.id = p.created_by
+       LEFT   JOIN projects sp ON sp.id = p.source_project_id
        LEFT   JOIN flowsheets f ON f.project_id = p.id AND f.is_snapshot = false
        WHERE  p.organisation_id = $1 AND p.status != 'deleted'
-       GROUP  BY p.id, u.first_name, u.last_name
+         AND  ($2::text IS NULL OR p.kind = $2)
+       GROUP  BY p.id, u.first_name, u.last_name, sp.name
        ORDER  BY p.updated_at DESC`,
-      [orgId(req)]
+      [orgId(req), req.query.kind || null]
     );
     res.json(result.rows);
   } catch (err) {
@@ -48,16 +59,18 @@ router.post('/', requireRole('engineer'), [
   body('projectType').isIn(['wastewater', 'water_purification', 'combined'])
     .withMessage('projectType must be wastewater | water_purification | combined'),
   body('tags').optional().isArray(),
+  body('kind').optional().isIn(KINDS).withMessage('kind must be monitoring | twin'),
 ], async (req, res, next) => {
   if (vErr(req, res)) return;
   const { name, description, projectType, tags } = req.body;
+  const kind = req.body.kind || 'twin';
   try {
     const result = await query(
-      `INSERT INTO projects (organisation_id, created_by, name, description, project_type, tags)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [orgId(req), userId(req), name, description || null, projectType, tags || []]
+      `INSERT INTO projects (organisation_id, created_by, name, description, project_type, tags, kind)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [orgId(req), userId(req), name, description || null, projectType, tags || [], kind]
     );
-    auditLog(req, 'project.create', 'project', result.rows[0].id, { name });
+    auditLog(req, 'project.create', 'project', result.rows[0].id, { name, kind });
     logger.info('Project created', { projectId: result.rows[0].id, userId: userId(req) });
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -114,6 +127,61 @@ router.patch('/:id', requireRole('engineer'), [
     if (!result.rows[0]) return res.status(404).json({ error: 'Project not found' });
     auditLog(req, 'project.update', 'project', req.params.id, { fields: Object.keys(req.body) });
     res.json(result.rows[0]);
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/v1/projects/:id/import-to-twin  (engineer+)
+ *
+ * Copy a MONITORING project into a new TWIN project: the same flowsheets
+ * (nodes, streams, parameters), each linked to the live flowsheet it came
+ * from, so the twin loop reads the plant's measured values, drift rules and
+ * instrument tags through that link. PLC bindings are NOT copied: the twin
+ * never talks to the PLC — it reads what the monitoring project measured.
+ *
+ * Body: { name? }  default "<source name> — twin"
+ */
+router.post('/:id/import-to-twin', requireRole('engineer'), [
+  param('id').isUUID(),
+  body('name').optional().trim().isLength({ min: 1, max: 200 }),
+  body('description').optional().trim(),
+], async (req, res, next) => {
+  if (vErr(req, res)) return;
+  try {
+    const src = await query(
+      `SELECT * FROM projects WHERE id = $1 AND organisation_id = $2 AND status != 'deleted'`,
+      [req.params.id, orgId(req)]
+    );
+    const source = src.rows[0];
+    if (!source) return res.status(404).json({ error: 'Project not found' });
+    if (source.kind !== 'monitoring') {
+      return res.status(422).json({ error: 'Only a monitoring project can be imported into the twin' });
+    }
+    const name = req.body.name || `${source.name} — twin`;
+    const description = req.body.description !== undefined
+      ? req.body.description
+      : `Imported from "${source.name}"${source.description ? `. ${source.description}` : ''}`;
+    const created = await withTransaction(async (client) => {
+      const { rows: [project] } = await client.query(
+        `INSERT INTO projects (organisation_id, created_by, name, description, project_type, tags, settings, kind, source_project_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'twin',$8) RETURNING *`,
+        [orgId(req), userId(req), name, description || null, source.project_type, source.tags || [],
+         JSON.stringify(source.settings || {}), source.id]
+      );
+      const { rows: flowsheets } = await client.query(
+        `INSERT INTO flowsheets (project_id, created_by, name, description, canvas_data, source_flowsheet_id)
+         SELECT $1, $2, f.name, f.description, f.canvas_data, f.id
+           FROM flowsheets f
+          WHERE f.project_id = $3 AND f.is_snapshot = false
+          ORDER BY f.created_at
+         RETURNING id, name, source_flowsheet_id`,
+        [project.id, userId(req), source.id]
+      );
+      return { ...project, flowsheet_count: flowsheets.length, flowsheets, source_project_name: source.name };
+    });
+    auditLog(req, 'project.import', 'project', created.id, { name, sourceProjectId: source.id, flowsheets: created.flowsheet_count });
+    logger.info('Project imported to twin', { projectId: created.id, sourceProjectId: source.id, userId: userId(req) });
+    res.status(201).json(created);
   } catch (err) { next(err); }
 });
 

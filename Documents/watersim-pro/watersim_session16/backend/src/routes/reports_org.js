@@ -11,6 +11,7 @@
  * DELETE /reports/saved/:runId      — unsave a run
  * GET    /reports/:runId/excel      — export single run as .xlsx
  * POST   /reports/compare/excel     — export comparison of N runs as .xlsx
+ * POST   /reports/period            — tags over a time window as .csv / .xlsx / .pdf (Phase 1)
  */
 
 const express = require('express');
@@ -19,6 +20,8 @@ const { query } = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { generateExcel } = require('../reports/excelGenerator');
 const { buildReportData } = require('../reports/reportData');
+const { buildPeriodReport } = require('../reports/periodReport');
+const { BUCKETS } = require('../historian/query');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -318,6 +321,46 @@ router.get('/:runId/excel',
       res.send(xlsxBuffer);
     } catch (err) {
       logger.error('Excel generation error', { runId, error: err.message });
+      next(err);
+    }
+  }
+);
+
+// ── POST /reports/period — tags over a time window ────────────────────────────
+// Every report builder before this took a simulation RUN. This one takes a
+// PERIOD: the historian's series for up to twelve tags, with the alarm events
+// raised on their flowsheets in the same window.
+router.post('/period',
+  [
+    body('tagIds').isArray({ min: 1, max: 12 }).withMessage('tagIds must list 1–12 tag ids'),
+    body('tagIds.*').isUUID(),
+    body('from').isISO8601().withMessage('from must be an ISO-8601 timestamp'),
+    body('to').isISO8601().withMessage('to must be an ISO-8601 timestamp'),
+    body('bucket').optional().isIn(['auto', ...BUCKETS]),
+    body('format').optional().isIn(['csv', 'xlsx', 'pdf']),
+    body('title').optional().isString().trim().isLength({ max: 120 }),
+  ],
+  async (req, res, next) => {
+    if (vErr(req, res)) return;
+    const from = new Date(req.body.from);
+    const to = new Date(req.body.to);
+    if (!(from < to) || to - from > 400 * 86400_000) {
+      return res.status(422).json({ error: 'Validation failed', details: [{ msg: 'from must be before to, and the window at most 400 days', path: 'from' }] });
+    }
+    const format = req.body.format || 'pdf';
+    try {
+      const { buffer, filename, contentType } = await buildPeriodReport({
+        orgId: orgId(req), userId: req.user.sub, tagIds: req.body.tagIds,
+        from, to, bucket: req.body.bucket || 'auto', format, title: req.body.title,
+      });
+      logger.info('Generating period report', { format, tags: req.body.tagIds.length, by: req.user.sub });
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.send(buffer);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message });
+      logger.error('Period report error', { error: err.message });
       next(err);
     }
   }

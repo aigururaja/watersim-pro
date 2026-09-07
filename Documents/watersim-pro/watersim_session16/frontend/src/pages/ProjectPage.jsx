@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useProjectBase } from '../utils/projectBase';
 import AppLayout from '../components/layout/AppLayout';
 import { SkeletonFlowsheetCard } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
@@ -11,6 +12,7 @@ import { Cpu, Camera } from 'lucide-react';
 export default function ProjectPage() {
   const { projectId } = useParams();
   const navigate      = useNavigate();
+  const base          = useProjectBase(); // /projects (twin) or /monitoring/projects (operations)
 
   const [project, setProject]       = useState(null);
   const [flowsheets, setFlowsheets] = useState([]);
@@ -62,7 +64,7 @@ export default function ProjectPage() {
     setCreating(true);
     try {
       const { data } = await api.post(`/projects/${projectId}/flowsheets`, newFs);
-      navigate(`/projects/${projectId}/flowsheets/${data.id}`);
+      navigate(`${base}/${projectId}/flowsheets/${data.id}`);
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to create flowsheet', false);
       setCreating(false);
@@ -102,7 +104,7 @@ export default function ProjectPage() {
         canvas_data: snapDetail.canvas_data ?? snapDetail.data?.canvas_data,
       });
       showToast('Restored as new flowsheet');
-      navigate(`/projects/${projectId}/flowsheets/${(restored.data.id ?? restored.data.data?.id)}`);
+      navigate(`${base}/${projectId}/flowsheets/${(restored.data.id ?? restored.data.data?.id)}`);
     } catch (err) {
       showToast(err.response?.data?.error || 'Restore failed', false);
     } finally {
@@ -149,7 +151,7 @@ export default function ProjectPage() {
 
         {/* Breadcrumb */}
         <div style={S.breadcrumb}>
-          <span style={S.bc} onClick={() => navigate('/projects')}>Projects</span>
+          <span style={S.bc} onClick={() => navigate(base)}>Projects</span>
           <span style={{ color: '#9CA3AF' }}> / </span>
           <span style={{ color: '#111', fontWeight: 600 }}>{project?.name}</span>
         </div>
@@ -163,7 +165,7 @@ export default function ProjectPage() {
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               style={{ ...S.newBtn, background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB' }}
-              onClick={() => navigate(`/projects/${projectId}/settings`)}
+              onClick={() => navigate(`${base}/${projectId}/settings`)}
             >⚙ Cost Settings</button>
             {tab === 'flowsheets' && (
               <button style={S.newBtn} onClick={() => setShowNew(true)}>+ New Flowsheet</button>
@@ -221,7 +223,7 @@ export default function ProjectPage() {
               <FlowsheetCard
                 key={fs.id}
                 fs={fs}
-                onOpen={() => navigate(`/projects/${projectId}/flowsheets/${fs.id}`)}
+                onOpen={() => navigate(`${base}/${projectId}/flowsheets/${fs.id}`)}
                 onSnapshot={() => { setSnapTarget(fs); setSnapName(`${fs.name} — ${new Date().toLocaleDateString()}`); }}
                 onDelete={() => deleteFlowsheet(fs)}
                 deleting={deletingFs === fs.id}

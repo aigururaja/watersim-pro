@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { authService } from '../services/auth.service';
+import { can as roleCan, capabilitiesOf } from '../auth/roles';
 
 const AuthContext = createContext(null);
 
@@ -51,8 +52,16 @@ export function AuthProvider({ children }) {
     return data.accessToken;
   }, []);
 
+  // Capability view of the current role, for gating what the shell shows.
+  // The server re-checks every write; this only decides what is rendered.
+  const role = user?.role || null;
+  const can = useCallback((capability) => roleCan(role, capability), [role]);
+  const capabilities = useMemo(() => capabilitiesOf(role), [role]);
+
   return (
-    <AuthContext.Provider value={{ user, accessToken, loading, login, logout, refreshToken, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{ user, role, can, capabilities, accessToken, loading, login, logout, refreshToken, isAuthenticated: !!user }}
+    >
       {children}
     </AuthContext.Provider>
   );

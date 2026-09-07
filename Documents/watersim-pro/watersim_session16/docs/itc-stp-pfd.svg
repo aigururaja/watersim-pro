@@ -1,0 +1,469 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3944 772" width="3944" height="772" font-family="ui-sans-serif, system-ui, Segoe UI, Helvetica, Arial, sans-serif">
+<defs>
+<marker id="ah-raw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8B5E34"/></marker>
+<marker id="ah-treated" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2E75B6"/></marker>
+<marker id="ah-product" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0D9488"/></marker>
+<marker id="ah-sludge" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#78350F"/></marker>
+<marker id="ah-return" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
+<marker id="ah-reject" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9333EA"/></marker>
+<marker id="ah-chemical" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7C3AED"/></marker>
+<marker id="ah-air" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0891B2"/></marker>
+</defs>
+<rect width="3944" height="772" fill="#FFFFFF"/>
+<text x="40" y="34" font-size="20" font-weight="700" fill="#0F172A">Sewage Treatment Plant — Process Flow Diagram</text>
+<text x="40" y="54" font-size="12" fill="#475569">Client ITC · Contractor Safekrite · Sub-contractor Infercon Automation</text>
+<text x="40" y="72" font-size="11" fill="#64748B">Design flow 675 KLD · 39 unit operations · 46 streams · flows from the steady-state solution · valves and instruments summarised on the line they sit on (see the P&amp;ID schedule)</text>
+<line x1="40" y1="82" x2="3904" y2="82" stroke="#CBD5E1" stroke-width="1"/>
+<path d="M 2202 250 L 2202 592 L 822 592 L 822 346" fill="none" stroke="#B45309" stroke-width="1.4" stroke-dasharray="7 4" marker-end="url(#ah-return)"/>
+<rect x="1460" y="584" width="104" height="14" rx="3" fill="#FFFFFF" opacity="0.92"/><text x="1512" y="594" font-size="9" text-anchor="middle" fill="#B45309">24 · Centrate to EQT</text>
+<path d="M 2202 346 L 2202 618 L 822 618 L 822 346" fill="none" stroke="#B45309" stroke-width="1.4" stroke-dasharray="7 4" marker-end="url(#ah-return)"/>
+<rect x="1460" y="610" width="104" height="14" rx="3" fill="#FFFFFF" opacity="0.92"/><text x="1512" y="620" font-size="9" text-anchor="middle" fill="#B45309">26 · Backwash to EQT</text>
+<path d="M 2432 346 L 2432 644 L 822 644 L 822 346" fill="none" stroke="#B45309" stroke-width="1.4" stroke-dasharray="7 4" marker-end="url(#ah-return)"/>
+<rect x="1575" y="636" width="104" height="14" rx="3" fill="#FFFFFF" opacity="0.92"/><text x="1627" y="646" font-size="9" text-anchor="middle" fill="#B45309">29 · Backwash to EQT</text>
+<path d="M 3122 442 L 3122 670 L 822 670 L 822 346" fill="none" stroke="#B45309" stroke-width="1.4" stroke-dasharray="7 4" marker-end="url(#ah-return)"/>
+<rect x="1920" y="662" width="104" height="14" rx="3" fill="#FFFFFF" opacity="0.92"/><text x="1972" y="672" font-size="9" text-anchor="middle" fill="#B45309">42 · Spent backwash t…</text>
+<path d="M 224 173 L 247 173 L 247 269 L 270 269" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="247" cy="173" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="247" y="176.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">1</text>
+<text x="247" y="194" font-size="8.5" text-anchor="middle" fill="#64748B">100 m³/d</text>
+<path d="M 224 269 L 477 269 L 477 317 L 730 317" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="477" cy="269" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="477" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">2</text>
+<text x="477" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">150 mm</text>
+<text x="477" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">475 m³/d</text>
+<path d="M 224 365 L 707 365 L 707 269 L 1190 269" fill="none" stroke="#0891B2" stroke-width="1.6" stroke-dasharray="1 3" marker-end="url(#ah-air)"/>
+<circle cx="707" cy="365" r="9" fill="#FFFFFF" stroke="#0891B2" stroke-width="1.2"/><text x="707" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#0891B2">3</text>
+<text x="707" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">125 mm</text>
+<path d="M 224 365 L 1190 365" fill="none" stroke="#0891B2" stroke-width="1.6" stroke-dasharray="1 3" marker-end="url(#ah-air)"/>
+<circle cx="707" cy="365" r="9" fill="#FFFFFF" stroke="#0891B2" stroke-width="1.2"/><text x="707" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#0891B2">4</text>
+<text x="707" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">125 mm</text>
+<path d="M 224 461 L 247 461 L 247 365 L 270 365" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="247" cy="461" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="247" y="464.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">5</text>
+<text x="247" y="482" font-size="8.5" text-anchor="middle" fill="#64748B">100 m³/d</text>
+<path d="M 454 269 L 592 269 L 592 317 L 730 317" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="592" cy="269" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="592" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">6</text>
+<text x="592" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">150 mm</text>
+<text x="592" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">99.9 m³/d</text>
+<path d="M 454 365 L 477 365 L 477 317 L 500 317" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="477" cy="365" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="477" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">7</text>
+<text x="477" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="477" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">100 m³/d</text>
+<path d="M 684 317 L 730 317" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="707" cy="317" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="707" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">8</text>
+<text x="707" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">65 mm</text>
+<text x="707" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">100 m³/d</text>
+<path d="M 914 317 L 960 317" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="937" cy="317" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="937" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">9</text>
+<text x="937" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="937" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">714.1 m³/d</text>
+<path d="M 1144 317 L 1167 317 L 1167 269 L 1190 269" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="1167" cy="317" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="1167" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">10</text>
+<text x="1167" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="1167" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">357.1 m³/d</text>
+<path d="M 1144 317 L 1167 317 L 1167 365 L 1190 365" fill="none" stroke="#8B5E34" stroke-width="1.6" marker-end="url(#ah-raw)"/>
+<circle cx="1167" cy="317" r="9" fill="#FFFFFF" stroke="#8B5E34" stroke-width="1.2"/><text x="1167" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#8B5E34">11</text>
+<text x="1167" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="1167" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">357.1 m³/d</text>
+<path d="M 1374 269 L 1397 269 L 1397 365 L 1420 365" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="1397" cy="269" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="1397" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">12</text>
+<text x="1397" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">80 mm</text>
+<text x="1397" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">288.2 m³/d</text>
+<path d="M 1374 269 L 1420 269" fill="none" stroke="#78350F" stroke-width="1.6" marker-end="url(#ah-sludge)"/>
+<circle cx="1397" cy="269" r="9" fill="#FFFFFF" stroke="#78350F" stroke-width="1.2"/><text x="1397" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#78350F">13</text>
+<text x="1397" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">80 mm</text>
+<text x="1397" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">13.3 m³/d</text>
+<path d="M 1374 365 L 1420 365" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="1397" cy="365" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="1397" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">14</text>
+<text x="1397" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">80 mm</text>
+<text x="1397" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">288.2 m³/d</text>
+<path d="M 1374 365 L 1397 365 L 1397 269 L 1420 269" fill="none" stroke="#78350F" stroke-width="1.6" marker-end="url(#ah-sludge)"/>
+<circle cx="1397" cy="365" r="9" fill="#FFFFFF" stroke="#78350F" stroke-width="1.2"/><text x="1397" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#78350F">15</text>
+<text x="1397" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">80 mm</text>
+<text x="1397" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">13.3 m³/d</text>
+<path d="M 1604 269 L 1650 269" fill="none" stroke="#78350F" stroke-width="1.6" marker-end="url(#ah-sludge)"/>
+<circle cx="1627" cy="269" r="9" fill="#FFFFFF" stroke="#78350F" stroke-width="1.2"/><text x="1627" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#78350F">16</text>
+<text x="1627" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">80 mm</text>
+<text x="1627" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">13.3 m³/d</text>
+<path d="M 1604 365 L 1650 365" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="1627" cy="365" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="1627" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">17</text>
+<text x="1627" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="1627" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">576.4 m³/d</text>
+<path d="M 1834 269 L 1880 269" fill="none" stroke="#78350F" stroke-width="1.6" marker-end="url(#ah-sludge)"/>
+<circle cx="1857" cy="269" r="9" fill="#FFFFFF" stroke="#78350F" stroke-width="1.2"/><text x="1857" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#78350F">18</text>
+<text x="1857" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="1857" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">13.3 m³/d</text>
+<path d="M 1834 365 L 1880 365" fill="none" stroke="#7C3AED" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#ah-chemical)"/>
+<circle cx="1857" cy="365" r="9" fill="#FFFFFF" stroke="#7C3AED" stroke-width="1.2"/><text x="1857" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#7C3AED">19</text>
+<text x="1857" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="1857" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">576.4 m³/d</text>
+<path d="M 2064 269 L 2087 269 L 2087 221 L 2110 221" fill="none" stroke="#78350F" stroke-width="1.6" marker-end="url(#ah-sludge)"/>
+<circle cx="2087" cy="269" r="9" fill="#FFFFFF" stroke="#78350F" stroke-width="1.2"/><text x="2087" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#78350F">20</text>
+<text x="2087" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="2087" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">13.3 m³/d</text>
+<path d="M 2064 365 L 2087 365 L 2087 317 L 2110 317" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2087" cy="365" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2087" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">21</text>
+<text x="2087" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="2087" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">317 m³/d</text>
+<path d="M 2064 365 L 2087 365 L 2087 413 L 2110 413" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2087" cy="365" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2087" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">22</text>
+<text x="2087" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="2087" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">201.8 m³/d</text>
+<path d="M 2064 365 L 2317 365 L 2317 317 L 2570 317" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2317" cy="365" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2317" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">23</text>
+<text x="2317" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="2317" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">57.6 m³/d</text>
+<path d="M 2294 221 L 2340 221" fill="none" stroke="#78350F" stroke-width="1.6" marker-end="url(#ah-sludge)"/>
+<circle cx="2317" cy="221" r="9" fill="#FFFFFF" stroke="#78350F" stroke-width="1.2"/><text x="2317" y="224.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#78350F">25</text>
+<text x="2317" y="208" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="2317" y="242" font-size="8.5" text-anchor="middle" fill="#64748B">0.3 m³/d</text>
+<path d="M 2294 317 L 2340 317" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2317" cy="317" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2317" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">27</text>
+<text x="2317" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">80 mm</text>
+<text x="2317" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">311 m³/d</text>
+<path d="M 2294 413 L 2340 413" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2317" cy="413" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2317" y="416.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">28</text>
+<text x="2317" y="400" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="2317" y="434" font-size="8.5" text-anchor="middle" fill="#64748B">201.7 m³/d</text>
+<path d="M 2524 317 L 2547 317 L 2547 221 L 2570 221" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2547" cy="317" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2547" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">30</text>
+<text x="2547" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="2547" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">183.6 m³/d</text>
+<path d="M 2524 317 L 2570 317" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2547" cy="317" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2547" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">31</text>
+<text x="2547" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">80 mm</text>
+<text x="2547" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">122.4 m³/d</text>
+<path d="M 2524 413 L 2570 413" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2547" cy="413" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2547" y="416.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">32</text>
+<text x="2547" y="400" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="2547" y="434" font-size="8.5" text-anchor="middle" fill="#64748B">201.7 m³/d</text>
+<path d="M 2754 221 L 2800 221" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2777" cy="221" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2777" y="224.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">33</text>
+<text x="2777" y="208" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="2777" y="242" font-size="8.5" text-anchor="middle" fill="#64748B">183.6 m³/d</text>
+<path d="M 2754 317 L 2800 317" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2777" cy="317" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2777" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">34</text>
+<text x="2777" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="2777" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">180.1 m³/d</text>
+<path d="M 2754 413 L 2800 413" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="2777" cy="413" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="2777" y="416.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">35</text>
+<text x="2777" y="400" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="2777" y="434" font-size="8.5" text-anchor="middle" fill="#64748B">201.7 m³/d</text>
+<path d="M 2984 221 L 3007 221 L 3007 125 L 3030 125" fill="none" stroke="#9333EA" stroke-width="1.6" stroke-dasharray="2 3" marker-end="url(#ah-reject)"/>
+<circle cx="3007" cy="221" r="9" fill="#FFFFFF" stroke="#9333EA" stroke-width="1.2"/><text x="3007" y="224.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#9333EA">36</text>
+<text x="3007" y="208" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="3007" y="242" font-size="8.5" text-anchor="middle" fill="#64748B">5.4 m³/d</text>
+<path d="M 2984 221 L 3030 221" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="3007" cy="221" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="3007" y="224.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">37</text>
+<text x="3007" y="208" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="3007" y="242" font-size="8.5" text-anchor="middle" fill="#64748B">178.2 m³/d</text>
+<path d="M 2984 317 L 3030 317" fill="none" stroke="#0D9488" stroke-width="1.6" marker-end="url(#ah-product)"/>
+<circle cx="3007" cy="317" r="9" fill="#FFFFFF" stroke="#0D9488" stroke-width="1.2"/><text x="3007" y="320.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#0D9488">38</text>
+<text x="3007" y="304" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="3007" y="338" font-size="8.5" text-anchor="middle" fill="#64748B">180.1 m³/d</text>
+<path d="M 2984 413 L 3007 413 L 3007 509 L 3030 509" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="3007" cy="413" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="3007" y="416.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">39</text>
+<text x="3007" y="400" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="3007" y="434" font-size="8.5" text-anchor="middle" fill="#64748B">186.6 m³/d</text>
+<path d="M 2984 413 L 3030 413" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="3007" cy="413" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="3007" y="416.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">40</text>
+<text x="3007" y="400" font-size="8.5" text-anchor="middle" fill="#94A3B8">50 mm</text>
+<text x="3007" y="434" font-size="8.5" text-anchor="middle" fill="#64748B">15.1 m³/d</text>
+<path d="M 3214 221 L 3237 221 L 3237 269 L 3260 269" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="3237" cy="221" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="3237" y="224.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">41</text>
+<text x="3237" y="208" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="3237" y="242" font-size="8.5" text-anchor="middle" fill="#64748B">178.2 m³/d</text>
+<path d="M 3214 509 L 3237 509 L 3237 365 L 3260 365" fill="none" stroke="#2E75B6" stroke-width="1.6" marker-end="url(#ah-treated)"/>
+<circle cx="3237" cy="509" r="9" fill="#FFFFFF" stroke="#2E75B6" stroke-width="1.2"/><text x="3237" y="512.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#2E75B6">43</text>
+<text x="3237" y="496" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="3237" y="530" font-size="8.5" text-anchor="middle" fill="#64748B">186.6 m³/d</text>
+<path d="M 3444 269 L 3490 269" fill="none" stroke="#7C3AED" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#ah-chemical)"/>
+<circle cx="3467" cy="269" r="9" fill="#FFFFFF" stroke="#7C3AED" stroke-width="1.2"/><text x="3467" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#7C3AED">44</text>
+<text x="3467" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="3467" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">178.2 m³/d</text>
+<path d="M 3444 365 L 3490 365" fill="none" stroke="#0D9488" stroke-width="1.6" marker-end="url(#ah-product)"/>
+<circle cx="3467" cy="365" r="9" fill="#FFFFFF" stroke="#0D9488" stroke-width="1.2"/><text x="3467" y="368.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#0D9488">45</text>
+<text x="3467" y="352" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="3467" y="386" font-size="8.5" text-anchor="middle" fill="#64748B">186.6 m³/d</text>
+<path d="M 3674 269 L 3697 269 L 3697 317 L 3720 317" fill="none" stroke="#0D9488" stroke-width="1.6" marker-end="url(#ah-product)"/>
+<circle cx="3697" cy="269" r="9" fill="#FFFFFF" stroke="#0D9488" stroke-width="1.2"/><text x="3697" y="272.4" font-size="9.5" font-weight="700" text-anchor="middle" fill="#0D9488">46</text>
+<text x="3697" y="256" font-size="8.5" text-anchor="middle" fill="#94A3B8">100 mm</text>
+<text x="3697" y="290" font-size="8.5" text-anchor="middle" fill="#64748B">178.2 m³/d</text>
+<g>
+<rect x="40" y="144" width="184" height="58" rx="4" fill="#F1F5F9" stroke="#475569" stroke-width="1.4" />
+<rect x="40" y="144" width="184" height="4" rx="2" fill="#475569"/>
+<text x="49" y="161" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">IN-K</text>
+<text x="49" y="176" font-size="10.5" fill="#1E293B">Kitchen influent</text>
+<text x="49" y="193" font-size="8.5" fill="#64748B">100 KLD kitchen influent</text>
+<circle cx="213" cy="156" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="213" y="159.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="270" y="240" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="279" y="257" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">OGT</text>
+<text x="279" y="272" font-size="10.5" fill="#1E293B">Oil &amp; grease trap</text>
+<text x="279" y="289" font-size="8.5" fill="#64748B">OGT 400 × 500 mm, high-leve…</text>
+<circle cx="443" cy="252" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="443" y="255.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="40" y="240" width="184" height="58" rx="4" fill="#F1F5F9" stroke="#475569" stroke-width="1.4" />
+<rect x="40" y="240" width="184" height="4" rx="2" fill="#475569"/>
+<text x="49" y="257" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">IN-S</text>
+<text x="49" y="272" font-size="10.5" fill="#1E293B">Sewage influent</text>
+<text x="49" y="289" font-size="8.5" fill="#64748B">475 KLD sewage influent</text>
+<circle cx="213" cy="252" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="213" y="255.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="40" y="432" width="184" height="58" rx="4" fill="#F1F5F9" stroke="#475569" stroke-width="1.4" />
+<rect x="40" y="432" width="184" height="4" rx="2" fill="#475569"/>
+<text x="49" y="449" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">IN-L</text>
+<text x="49" y="464" font-size="10.5" fill="#1E293B">Laundry influent</text>
+<text x="49" y="481" font-size="8.5" fill="#64748B">100 KLD laundry influent</text>
+<circle cx="213" cy="444" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="213" y="447.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="270" y="336" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="279" y="353" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">CT</text>
+<text x="279" y="368" font-size="10.5" fill="#1E293B">Collection tank</text>
+<text x="279" y="385" font-size="8.5" fill="#64748B">CT 600 × 1000 mm, high-leve…</text>
+<circle cx="443" cy="348" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="443" y="351.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="500" y="288" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="500" y="288" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="509" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">ELP</text>
+<text x="509" y="320" font-size="10.5" fill="#1E293B">Effluent lifting pump</text>
+<text x="509" y="337" font-size="8.5" fill="#64748B">5 m³/hr @ 8 m, Johnson, 1W …</text>
+</g>
+<g>
+<rect x="730" y="288" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="739" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">EQT</text>
+<text x="739" y="320" font-size="10.5" fill="#1E293B">Equalisation tank</text>
+<text x="739" y="337" font-size="8.5" fill="#64748B">EQT level transmitter (1 AI)</text>
+<circle cx="903" cy="300" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="903" y="303.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="960" y="288" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="960" y="288" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="969" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">RFP</text>
+<text x="969" y="320" font-size="10.5" fill="#1E293B">Reactor feed pump</text>
+<text x="969" y="337" font-size="8.5" fill="#64748B">43 m³/hr @ 8 m, Johnson, 1W…</text>
+</g>
+<g>
+<rect x="40" y="336" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="40" y="336" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="49" y="353" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">B-301</text>
+<text x="49" y="368" font-size="10.5" fill="#1E293B">Air blowers ×3</text>
+<text x="49" y="385" font-size="8.5" fill="#64748B">475 m³/hr @ 0.55 kg/cm², Be…</text>
+</g>
+<g>
+<rect x="1190" y="240" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="1199" y="257" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">R1</text>
+<text x="1199" y="272" font-size="10.5" fill="#1E293B">Reactor 1</text>
+<text x="1199" y="289" font-size="8.5" fill="#64748B">fill 1.5 h, aerate 2 h, set…</text>
+<circle cx="1363" cy="252" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="1363" y="255.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="1190" y="336" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="1199" y="353" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">R2</text>
+<text x="1199" y="368" font-size="10.5" fill="#1E293B">Reactor 2</text>
+<text x="1199" y="385" font-size="8.5" fill="#64748B">same cycle as R1, run offse…</text>
+<circle cx="1363" cy="348" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="1363" y="351.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="1420" y="240" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="1420" y="240" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="1429" y="257" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">STP</text>
+<text x="1429" y="272" font-size="10.5" fill="#1E293B">Sludge transfer pump</text>
+<text x="1429" y="289" font-size="8.5" fill="#64748B">10 m³/hr @ 8 m</text>
+</g>
+<g>
+<rect x="1650" y="240" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="1659" y="257" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">SHT</text>
+<text x="1659" y="272" font-size="10.5" fill="#1E293B">Sludge holding tank</text>
+<text x="1659" y="289" font-size="8.5" fill="#64748B">sludge tank level (1 AI)</text>
+<circle cx="1823" cy="252" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="1823" y="255.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="1880" y="240" width="184" height="58" rx="4" fill="#FAF5FF" stroke="#7C3AED" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="1889" y="257" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">PD-411</text>
+<text x="1889" y="272" font-size="10.5" fill="#1E293B">Poly dosing</text>
+<text x="1889" y="289" font-size="8.5" fill="#64748B">Milton dosing pump, 500 L t…</text>
+</g>
+<g>
+<rect x="2110" y="192" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="2110" y="192" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="2119" y="209" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">CFG-421</text>
+<text x="2119" y="224" font-size="10.5" fill="#1E293B">Decanter centrifuge</text>
+<text x="2119" y="241" font-size="8.5" fill="#64748B">Hiller, 1 m³/hr</text>
+</g>
+<g>
+<rect x="2340" y="192" width="184" height="58" rx="4" fill="#F1F5F9" stroke="#475569" stroke-width="1.4" />
+<rect x="2340" y="192" width="184" height="4" rx="2" fill="#475569"/>
+<text x="2349" y="209" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">CAKE</text>
+<text x="2349" y="224" font-size="10.5" fill="#1E293B">Solid discharge</text>
+<text x="2349" y="241" font-size="8.5" fill="#64748B">solid discharge to skip</text>
+</g>
+<g>
+<rect x="1420" y="336" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="1429" y="353" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">INT-WT</text>
+<text x="1429" y="368" font-size="10.5" fill="#1E293B">Intermediate water tank</text>
+<text x="1429" y="385" font-size="8.5" fill="#64748B">INT tank level (1 AI)</text>
+<circle cx="1593" cy="348" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="1593" y="351.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="1650" y="336" width="184" height="58" rx="4" fill="#FAF5FF" stroke="#7C3AED" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="1659" y="353" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">CD-501</text>
+<text x="1659" y="368" font-size="10.5" fill="#1E293B">0.5 to 1 ppm</text>
+<text x="1659" y="385" font-size="8.5" fill="#64748B">dosing ON below 0.5 ppm, OF…</text>
+</g>
+<g>
+<rect x="1880" y="336" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="1880" y="336" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="1889" y="353" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">FFP</text>
+<text x="1889" y="368" font-size="10.5" fill="#1E293B">Filter feed pump</text>
+<text x="1889" y="385" font-size="8.5" fill="#64748B">43 m³/hr @ 8 m, Johnson, 1W…</text>
+</g>
+<g>
+<rect x="2110" y="288" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="2119" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">ACF</text>
+<text x="2119" y="320" font-size="10.5" fill="#1E293B">Activated carbon filter</text>
+<text x="2119" y="337" font-size="8.5" fill="#64748B">Ø1650 mm, HOS 1500 mm, 25 m…</text>
+</g>
+<g>
+<rect x="2340" y="288" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="2349" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">MGF</text>
+<text x="2349" y="320" font-size="10.5" fill="#1E293B">Multigrade filter</text>
+<text x="2349" y="337" font-size="8.5" fill="#64748B">Ø1500 mm, HOS 1500 mm, 25 m…</text>
+</g>
+<g>
+<rect x="2570" y="192" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="2570" y="192" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="2579" y="209" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">SFP</text>
+<text x="2579" y="224" font-size="10.5" fill="#1E293B">Softener feed pump</text>
+<text x="2579" y="241" font-size="8.5" fill="#64748B">43 m³/hr @ 8 m, Johnson, 1W…</text>
+</g>
+<g>
+<rect x="2800" y="192" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="2809" y="209" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">SOF</text>
+<text x="2809" y="224" font-size="10.5" fill="#1E293B">Softener</text>
+<text x="2809" y="241" font-size="8.5" fill="#64748B">Ø1000 mm, HOS 1500 mm, 20 m…</text>
+<circle cx="2973" cy="204" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="2973" y="207.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="3030" y="96" width="184" height="58" rx="4" fill="#F1F5F9" stroke="#475569" stroke-width="1.4" />
+<rect x="3030" y="96" width="184" height="4" rx="2" fill="#475569"/>
+<text x="3039" y="113" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">RJT</text>
+<text x="3039" y="128" font-size="10.5" fill="#1E293B">Regeneration reject</text>
+<text x="3039" y="145" font-size="8.5" fill="#64748B">regeneration to reject</text>
+</g>
+<g>
+<rect x="3030" y="192" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="3039" y="209" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">SWT</text>
+<text x="3039" y="224" font-size="10.5" fill="#1E293B">Soft water tank</text>
+<text x="3039" y="241" font-size="8.5" fill="#64748B">SWT level (1 AI)</text>
+<circle cx="3203" cy="204" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="3203" y="207.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="3260" y="240" width="184" height="58" rx="4" fill="#FAF5FF" stroke="#7C3AED" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="3269" y="257" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">CD-1101</text>
+<text x="3269" y="272" font-size="10.5" fill="#1E293B">SWT Cl₂ dosing</text>
+<text x="3269" y="289" font-size="8.5" fill="#64748B">Milton Roy 0–12 LPH, 200 L …</text>
+</g>
+<g>
+<rect x="3490" y="240" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="3490" y="240" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="3499" y="257" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">SWTP</text>
+<text x="3499" y="272" font-size="10.5" fill="#1E293B">Soft water transfer pump</text>
+<text x="3499" y="289" font-size="8.5" fill="#64748B">Grundfos, qty 3</text>
+</g>
+<g>
+<rect x="3720" y="288" width="184" height="58" rx="4" fill="#F1F5F9" stroke="#475569" stroke-width="1.4" />
+<rect x="3720" y="288" width="184" height="4" rx="2" fill="#475569"/>
+<text x="3729" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">CLG-TWR</text>
+<text x="3729" y="320" font-size="10.5" fill="#1E293B">Cooling tower</text>
+<text x="3729" y="337" font-size="8.5" fill="#64748B">soft water to cooling tower</text>
+</g>
+<g>
+<rect x="2570" y="288" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="2579" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">IRR-WT</text>
+<text x="2579" y="320" font-size="10.5" fill="#1E293B">Irrigation water tank</text>
+<text x="2579" y="337" font-size="8.5" fill="#64748B">IRR tank level (1 AI)</text>
+<circle cx="2743" cy="300" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="2743" y="303.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="2800" y="288" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="2800" y="288" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="2809" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">HWTP</text>
+<text x="2809" y="320" font-size="10.5" fill="#1E293B">Horticulture transfer pump</text>
+<text x="2809" y="337" font-size="8.5" fill="#64748B">Grundfos</text>
+</g>
+<g>
+<rect x="3030" y="288" width="184" height="58" rx="4" fill="#F1F5F9" stroke="#475569" stroke-width="1.4" />
+<rect x="3030" y="288" width="184" height="4" rx="2" fill="#475569"/>
+<text x="3039" y="305" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">IRR-SYS</text>
+<text x="3039" y="320" font-size="10.5" fill="#1E293B">Irrigation system</text>
+<text x="3039" y="337" font-size="8.5" fill="#64748B">treated water to irrigation</text>
+</g>
+<g>
+<rect x="2110" y="384" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="2119" y="401" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">MF</text>
+<text x="2119" y="416" font-size="10.5" fill="#1E293B">Micron filter</text>
+<text x="2119" y="433" font-size="8.5" fill="#64748B">micron filter ahead of the …</text>
+<circle cx="2283" cy="396" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="2283" y="399.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="2340" y="384" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="2340" y="384" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="2349" y="401" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">UFFP</text>
+<text x="2349" y="416" font-size="10.5" fill="#1E293B">UF feed pump</text>
+<text x="2349" y="433" font-size="8.5" fill="#64748B">10 m³/hr @ 25 m, Grundfos, …</text>
+</g>
+<g>
+<rect x="2570" y="384" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="2579" y="401" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">UF</text>
+<text x="2579" y="416" font-size="10.5" fill="#1E293B">Ultrafiltration</text>
+<text x="2579" y="433" font-size="8.5" fill="#64748B">20 min production, 1 min fl…</text>
+</g>
+<g>
+<rect x="2800" y="384" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="2809" y="401" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">SNT</text>
+<text x="2809" y="416" font-size="10.5" fill="#1E293B">1000 L</text>
+<text x="2809" y="433" font-size="8.5" fill="#64748B">Sintex tank 1000 L, level t…</text>
+<circle cx="2973" cy="396" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="2973" y="399.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="3030" y="384" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="3030" y="384" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="3039" y="401" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">UFBP</text>
+<text x="3039" y="416" font-size="10.5" fill="#1E293B">UF backwash pump</text>
+<text x="3039" y="433" font-size="8.5" fill="#64748B">15 m³/hr @ 15 m, Grundfos, …</text>
+</g>
+<g>
+<rect x="3030" y="480" width="184" height="58" rx="4" fill="#FFFFFF" stroke="#1E293B" stroke-width="1.8" />
+<text x="3039" y="497" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">FWT</text>
+<text x="3039" y="512" font-size="10.5" fill="#1E293B">Flush water tank</text>
+<text x="3039" y="529" font-size="8.5" fill="#64748B">FW tank level (1 AI)</text>
+<circle cx="3203" cy="492" r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1"/><text x="3203" y="495.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text>
+</g>
+<g>
+<rect x="3260" y="336" width="184" height="58" rx="4" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.4" />
+<rect x="3260" y="336" width="4" height="58" rx="2" fill="#1E293B"/>
+<text x="3269" y="353" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">FWTP</text>
+<text x="3269" y="368" font-size="10.5" fill="#1E293B">Flushing water transfer pump</text>
+<text x="3269" y="385" font-size="8.5" fill="#64748B">Grundfos, qty 3</text>
+</g>
+<g>
+<rect x="3490" y="336" width="184" height="58" rx="4" fill="#F1F5F9" stroke="#475569" stroke-width="1.4" />
+<rect x="3490" y="336" width="184" height="4" rx="2" fill="#475569"/>
+<text x="3499" y="353" font-size="11" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#0F172A">FW-SYS</text>
+<text x="3499" y="368" font-size="10.5" fill="#1E293B">Flushing water system</text>
+<text x="3499" y="385" font-size="8.5" fill="#64748B">flush water to the building</text>
+</g>
+<line x1="40" y1="688" x2="3904" y2="688" stroke="#CBD5E1"/>
+<line x1="40" y1="706" x2="66" y2="706" stroke="#8B5E34" stroke-width="2"  marker-end="url(#ah-raw)"/><text x="74" y="709.5" font-size="10" fill="#334155">Raw sewage</text>
+<line x1="300" y1="706" x2="326" y2="706" stroke="#2E75B6" stroke-width="2"  marker-end="url(#ah-treated)"/><text x="334" y="709.5" font-size="10" fill="#334155">Treated water</text>
+<line x1="560" y1="706" x2="586" y2="706" stroke="#0D9488" stroke-width="2"  marker-end="url(#ah-product)"/><text x="594" y="709.5" font-size="10" fill="#334155">Product water (reuse)</text>
+<line x1="820" y1="706" x2="846" y2="706" stroke="#78350F" stroke-width="2"  marker-end="url(#ah-sludge)"/><text x="854" y="709.5" font-size="10" fill="#334155">Sludge</text>
+<line x1="40" y1="726" x2="66" y2="726" stroke="#B45309" stroke-width="2" stroke-dasharray="7 4" marker-end="url(#ah-return)"/><text x="74" y="729.5" font-size="10" fill="#334155">Return to EQT</text>
+<line x1="300" y1="726" x2="326" y2="726" stroke="#9333EA" stroke-width="2" stroke-dasharray="2 3" marker-end="url(#ah-reject)"/><text x="334" y="729.5" font-size="10" fill="#334155">Reject / waste</text>
+<line x1="560" y1="726" x2="586" y2="726" stroke="#7C3AED" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#ah-chemical)"/><text x="594" y="729.5" font-size="10" fill="#334155">Chemical dosing</text>
+<line x1="820" y1="726" x2="846" y2="726" stroke="#0891B2" stroke-width="2" stroke-dasharray="1 3" marker-end="url(#ah-air)"/><text x="854" y="729.5" font-size="10" fill="#334155">Process air</text>
+<circle cx="47" cy="752" r="7" fill="#FEF3C7" stroke="#D97706"/><text x="47" y="755.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="#92400E">A</text><text x="62" y="755.5" font-size="10" fill="#334155">Parameter is an assumption, not a stated duty — 16 block(s) on this sheet. Circled numbers key into the stream table.</text>
+</svg>

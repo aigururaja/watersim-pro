@@ -28,7 +28,7 @@
  *     registry. Pulling the registrations in through the palette would flip
  *     them and fail a suite this phase is required to keep green.
  *
- * Adding a 27th symbol is two lines: the file, and one line here.
+ * Adding a symbol is two lines: the file, and one line here.
  */
 
 // ── Lane C — inline family (10) ─────────────────────────────────────────────
@@ -63,6 +63,18 @@ import './ro_membrane';
 import './uf_membrane';
 import './gac_adsorption';
 import './tank';
+
+// ── Session 18 — ITC STP equipment (7 files, 9 types) ───────────────────────
+// `pressure_filter` registers three types from one drawing: the ACF, MGF and
+// micron filter are the same vessel with different media, and the model behind
+// them is one file with a `media` parameter.
+import './equalisation_tank';
+import './oil_grease_trap';
+import './sbr_reactor';
+import './pressure_filter';   // multigrade_filter + activated_carbon_filter + micron_filter
+import './water_softener';
+import './sludge_centrifuge';
+import './instrument';
 
 import { SYMBOLS } from './index';
 

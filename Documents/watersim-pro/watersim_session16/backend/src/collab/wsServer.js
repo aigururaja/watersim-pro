@@ -26,7 +26,12 @@ const nextColor = () => PRESENCE_COLORS[colorIdx++ % PRESENCE_COLORS.length];
 
 // ── In-memory room registry ──────────────────────────────────────────────────
 // rooms: Map<flowsheetId, Map<ws, { userId, displayName, color, initials }>>
+// Since Phase 3 a room key may also be `org:<organisationId>` — the
+// organisation-wide room the live plant screen listens on. It hears every
+// bound tag's plc:update, every alarm, task and notification event, and it is
+// LISTEN-ONLY: messages sent into it are dropped before validation.
 const rooms = new Map();
+const orgRoomKey = (orgId) => `org:${orgId}`;
 
 function getRoom(flowsheetId) {
   if (!rooms.has(flowsheetId)) rooms.set(flowsheetId, new Map());
@@ -66,6 +71,17 @@ function broadcastToRoom(flowsheetId, message) {
   if (!room || room.size === 0) return 0;
   broadcast(room, message);
   return room.size;
+}
+
+/** Fan out to everyone in the organisation's live room. Returns the client count. */
+function broadcastToOrg(orgId, message) {
+  if (!orgId) return 0;
+  return broadcastToRoom(orgRoomKey(orgId), message);
+}
+
+/** How many clients each room has — for tests and the health page. */
+function roomSizes() {
+  return Object.fromEntries([...rooms].map(([k, r]) => [k, r.size]));
 }
 
 // ── Per-connection throttle map (for cursor + node:move) ────────────────────
@@ -169,6 +185,20 @@ function attachWsServer(httpServer) {
       return;
     }
 
+    // /ws/org — the organisation-wide, listen-only room (Phase 3). Tenancy
+    // is the token's own organisation; there is nothing else to check.
+    if (pathname === '/ws/org') {
+      if (!user.org) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req, { user, flowsheetId: orgRoomKey(user.org), readOnly: true });
+      });
+      return;
+    }
+
     // Extract flowsheetId from /ws/flowsheets/:flowsheetId
     const match = pathname.match(/^\/ws\/flowsheets\/([^/]+)$/);
     if (!match || !UUID_RE.test(match[1])) {
@@ -223,7 +253,7 @@ function attachWsServer(httpServer) {
   wss.on('close', () => clearInterval(heartbeat));
 
   // -- Connection handler ----------------------------------------------------
-  wss.on('connection', (ws, _req, { user, flowsheetId }) => {
+  wss.on('connection', (ws, _req, { user, flowsheetId, readOnly = false }) => {
     const room     = getRoom(flowsheetId);
     const initials = (user.name || user.email || 'U')
       .split(/\s+/)
@@ -271,6 +301,9 @@ function attachWsServer(httpServer) {
         ws.close(1008, 'Rate limit exceeded');
         return;
       }
+
+      // The organisation room is a loudspeaker, not a whiteboard.
+      if (readOnly) return;
 
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
@@ -356,4 +389,4 @@ function attachWsServer(httpServer) {
   return wss;
 }
 
-module.exports = { attachWsServer, broadcastToRoom };
+module.exports = { attachWsServer, broadcastToRoom, broadcastToOrg, roomSizes, orgRoomKey };

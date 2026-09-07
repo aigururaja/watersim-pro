@@ -71,7 +71,23 @@ export default function AlarmRuleDialog({
   const [name, setName] = useState(rule?.name ?? '');
   const [minValue, setMinValue] = useState(rule?.min_value ?? rule?.minValue ?? '');
   const [maxValue, setMaxValue] = useState(rule?.max_value ?? rule?.maxValue ?? '');
+  // Since Phase 1 a rule is ONE limit. A value rule's kind (high, low, range)
+  // follows from which limits are filled — the server settles it — so a
+  // HIGH-critical rule and a LOW-warning rule can sit on the same target. The
+  // comms-loss (quality) rule is the other kind: it watches a PLC-bound point
+  // going quiet, and has a time limit instead of a value limit.
+  const [kind, setKind] = useState(() => ((rule?.kind ?? rule?.kindOf) === 'quality' ? 'quality' : 'value'));
+  const [staleAfterS, setStaleAfterS] = useState(rule?.stale_after_s ?? rule?.staleAfterS ?? 60);
   const [severity, setSeverity] = useState(rule?.severity ?? 'warning');
+  // Task policy (Phase 2). Sent only when the person touched it (or wants a
+  // task on a new rule), so an untouched rule's PATCH carries the same body
+  // it always did. A new critical rule defaults to raising a task.
+  const [createTask, setCreateTask] = useState(rule ? !!(rule.create_task ?? rule.createTask) : (rule?.severity ?? 'warning') === 'critical');
+  const [taskRole, setTaskRole] = useState(rule?.task_assignee_role ?? rule?.taskAssigneeRole ?? 'engineer');
+  const [taskDueH, setTaskDueH] = useState(rule?.task_due_within_h ?? rule?.taskDueWithinH ?? '');
+  const [taskApproval, setTaskApproval] = useState(rule ? (rule.task_requires_approval ?? rule.taskRequiresApproval ?? true) : true);
+  const policyTouched = useRef(false);
+  const touchPolicy = (fn) => (v) => { policyTouched.current = true; fn(v); };
   const [enabled, setEnabled] = useState(rule ? rule.enabled !== false : true);
   // True once the user has typed a name, so the auto-suggested name stops
   // following the target picker and never overwrites their words.
@@ -140,11 +156,22 @@ export default function AlarmRuleDialog({
   }, [selectedTarget]);
 
   // ── Validation (the same rule the server applies) ─────────────────────────
-  const limitMsg = limitError(minValue, maxValue);
+  const isQuality = kind === 'quality';
+  const effTargetType = selectedTarget?.targetType ?? rule?.target_type ?? rule?.targetType;
+  const limitMsg = isQuality
+    ? (!(Number(staleAfterS) >= 5 && Number(staleAfterS) <= 86400)
+        ? 'Comms-loss needs a limit between 5 and 86400 seconds'
+        : effTargetType !== 'param'
+          ? 'A comms-loss rule watches a node parameter that a PLC tag is bound to'
+          : null)
+    : limitError(minValue, maxValue);
   const targetOk = !!selectedTarget || orphanTarget;
   const canSave = !saving && !removing && targetOk && name.trim() !== '' && !limitMsg;
 
   const toLimit = (v) => (v === '' || v == null ? null : Number(v));
+  // A comms-loss rule carries no value limits, whatever the boxes once held.
+  const wireMin = isQuality ? null : toLimit(minValue);
+  const wireMax = isQuality ? null : toLimit(maxValue);
 
   const save = async (e) => {
     e?.preventDefault();
@@ -152,12 +179,22 @@ export default function AlarmRuleDialog({
     setSaving(true);
     setError(null);
     try {
+      // A value rule sends only its limits — the server settles high / low /
+      // range from them, exactly as before Phase 1. Only the comms-loss rule
+      // names its kind and carries a time limit.
       const base = {
         name: name.trim(),
-        minValue: toLimit(minValue),
-        maxValue: toLimit(maxValue),
+        minValue: wireMin,
+        maxValue: wireMax,
+        ...(isQuality ? { kind: 'quality', staleAfterS: Number(staleAfterS) } : {}),
         severity,
         enabled,
+        ...(policyTouched.current || (!editing && createTask) ? {
+          createTask,
+          taskAssigneeRole: createTask ? taskRole : null,
+          taskRequiresApproval: createTask ? taskApproval : true,
+          taskDueWithinH: createTask && taskDueH !== '' && Number.isFinite(Number(taskDueH)) ? Number(taskDueH) : null,
+        } : {}),
       };
       if (editing) {
         // Target fields go on the wire only when the selection actually moved,
@@ -213,8 +250,10 @@ export default function AlarmRuleDialog({
       targetType: selectedTarget?.targetType ?? rule?.target_type,
       nodeId: selectedTarget?.nodeId ?? rule?.node_id,
       paramKey: selectedTarget?.paramKey ?? rule?.param_key,
-      minValue: toLimit(minValue),
-      maxValue: toLimit(maxValue),
+      kind: isQuality ? 'quality' : undefined,
+      staleAfterS: isQuality ? Number(staleAfterS) : null,
+      minValue: wireMin,
+      maxValue: wireMax,
     },
     selectedTarget ? { [selectedTarget.nodeId]: selectedTarget.nodeLabel } : undefined
   );
@@ -324,34 +363,60 @@ export default function AlarmRuleDialog({
             maxLength={120}
           />
 
+          {/* ── Kind ───────────────────────────────────────────────────── */}
+          <label style={S.label} htmlFor="alarm-kind">Limit type</label>
+          <select
+            id="alarm-kind"
+            style={S.input}
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+          >
+            <option value="value">Value limit — a minimum, a maximum, or both</option>
+            <option value="quality">Comms loss — the PLC point has gone quiet</option>
+          </select>
+
           {/* ── Limits ─────────────────────────────────────────────────── */}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <label style={S.label} htmlFor="alarm-min">Minimum</label>
+          {isQuality ? (
+            <div>
+              <label style={S.label} htmlFor="alarm-stale">Raise after (seconds without a good sample)</label>
               <input
-                id="alarm-min"
-                type="number" step="any" style={S.input}
-                value={minValue}
-                onChange={(e) => setMinValue(e.target.value)}
-                placeholder="no lower limit"
+                id="alarm-stale"
+                type="number" step="1" min="5" max="86400" style={S.input}
+                value={staleAfterS}
+                onChange={(e) => setStaleAfterS(e.target.value)}
               />
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={S.label} htmlFor="alarm-max">Maximum</label>
-              <input
-                id="alarm-max"
-                type="number" step="any" style={S.input}
-                value={maxValue}
-                onChange={(e) => setMaxValue(e.target.value)}
-                placeholder="no upper limit"
-              />
+          ) : (
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={S.label} htmlFor="alarm-min">Minimum</label>
+                <input
+                  id="alarm-min"
+                  type="number" step="any" style={S.input}
+                  value={minValue}
+                  onChange={(e) => setMinValue(e.target.value)}
+                  placeholder="no lower limit"
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={S.label} htmlFor="alarm-max">Maximum</label>
+                <input
+                  id="alarm-max"
+                  type="number" step="any" style={S.input}
+                  value={maxValue}
+                  onChange={(e) => setMaxValue(e.target.value)}
+                  placeholder="no upper limit"
+                />
+              </div>
             </div>
-          </div>
+          )}
           {limitMsg ? (
             <div style={S.noteBox} role="status">{limitMsg}</div>
           ) : (
             <div style={S.hint}>
-              Set at least one. The alarm raises while the value is outside them.
+              {isQuality
+                ? 'Raises while no good PLC sample has arrived for this long; clears on the next good read. Needs a PLC binding on the target.'
+                : 'Set at least one. A maximum alone is a HIGH rule, a minimum alone a LOW rule, both a RANGE — and a second rule of another kind may share the target, so HIGH-critical can sit beside LOW-warning.'}
             </div>
           )}
 
@@ -371,6 +436,40 @@ export default function AlarmRuleDialog({
             Critical rings the node card red · Warning rings it amber · Info is
             recorded without changing the canvas.
           </div>
+
+          {/* ── Task policy ────────────────────────────────────────────── */}
+          <label style={S.checkRow}>
+            <input type="checkbox" checked={createTask} onChange={touchPolicy((e) => setCreateTask(e.target.checked))} />
+            Raise a maintenance task when this alarm fires
+          </label>
+          {createTask && (
+            <>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={S.label} htmlFor="alarm-task-role">Assign to</label>
+                  <select id="alarm-task-role" style={S.input} value={taskRole} onChange={touchPolicy((e) => setTaskRole(e.target.value))}>
+                    <option value="operator">Least-loaded operator</option>
+                    <option value="engineer">Least-loaded engineer</option>
+                    <option value="manager">A manager</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={S.label} htmlFor="alarm-task-due">Due within (hours)</label>
+                  <input
+                    id="alarm-task-due"
+                    type="number" min="1" max="8760" step="1" style={S.input}
+                    value={taskDueH}
+                    onChange={touchPolicy((e) => setTaskDueH(e.target.value))}
+                    placeholder={severity === 'critical' ? '4' : severity === 'warning' ? '24' : '72'}
+                  />
+                </div>
+              </div>
+              <label style={S.checkRow}>
+                <input type="checkbox" checked={taskApproval} onChange={touchPolicy((e) => setTaskApproval(e.target.checked))} />
+                Needs a manager’s approval to close
+              </label>
+            </>
+          )}
 
           {/* ── Enabled ────────────────────────────────────────────────── */}
           <label style={S.checkRow}>

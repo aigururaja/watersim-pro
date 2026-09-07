@@ -84,6 +84,33 @@ export const PALETTE = [
       { type: 'tank',    label: 'Storage Tank' },
     ]
   },
+  // ── Session 18 — the equipment the ITC sewage treatment plant is built from.
+  // Grouped as the proposal groups it, so an engineer working from the P&ID
+  // finds a vessel under the heading they already have in their head.
+  {
+    category: 'Sewage Treatment Plant',
+    items: [
+      { type: 'oil_grease_trap',   label: 'Oil & Grease Trap (OGT)' },
+      { type: 'equalisation_tank', label: 'Equalisation / Buffer Tank' },
+      { type: 'sbr_reactor',       label: 'SBR Reactor (batch cycle)' },
+      { type: 'sludge_centrifuge', label: 'Decanter Centrifuge' },
+    ]
+  },
+  {
+    category: 'Pressure Filtration',
+    items: [
+      { type: 'multigrade_filter',       label: 'Multigrade Filter (MGF)' },
+      { type: 'activated_carbon_filter', label: 'Activated Carbon Filter (ACF)' },
+      { type: 'micron_filter',           label: 'Micron Cartridge Filter' },
+      { type: 'water_softener',          label: 'Water Softener (SOF)' },
+    ]
+  },
+  {
+    category: 'Instrumentation',
+    items: [
+      { type: 'instrument', label: 'Instrument (FT / LT / pH)' },
+    ]
+  },
 ];
 
 /**
@@ -93,7 +120,7 @@ export const PALETTE = [
  *
  * The chip is a rest-pose render: no `nodeId`, so no live subscription, and
  * `state="rest"` with no snapshot, so every symbol draws its empty-outline
- * form. 26 of these cost 26 static SVGs and zero animations.
+ * form. Each chip costs one static SVG and zero animations.
  */
 function PaletteGlyph({ type }) {
   const Symbol = getSymbol(type);
@@ -154,7 +181,7 @@ export default function UnitOpPalette({ onAddNode }) {
     setRail(v);
     try { localStorage.setItem('ws.paletteRail', v ? '1' : '0'); } catch { /* ignore */ }
   };
-  // Type-to-filter across the 26 items
+  // Type-to-filter across the palette
   const [q, setQ] = useState('');
   const groups = PALETTE
     .map(g => ({ ...g, items: g.items.filter(i => i.label.toLowerCase().includes(q.toLowerCase())) }))

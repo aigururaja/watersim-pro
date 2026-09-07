@@ -7,12 +7,44 @@
  *
  * Fire-and-forget: never throws, never fails the request. If the write fails
  * it is logged at warn level and dropped.
+ *
+ * Two entry points:
+ *   auditLog(req, …)      an action a PERSON took, attributed from the request
+ *   auditSystem({ … })    an action the SYSTEM took — the PLC poller marking a
+ *                         connection stale, the evaluator raising an alarm, the
+ *                         notification worker sending a message. These have no
+ *                         Express request and, before this existed, could not
+ *                         be audited at all: auditLog silently returned when it
+ *                         found no organisation on `req.user`.
+ *
+ * A system entry has user_id NULL and carries `details.source` naming the
+ * component, so the audit page can show "poller" or "alarm-evaluator" where a
+ * user's name would be.
  */
 
 'use strict';
 
 const { pool } = require('../db/pool');
 const logger = require('./logger');
+
+function write(orgId, userId, action, resourceType, resourceId, details, ip) {
+  pool
+    .query(
+      `INSERT INTO audit_logs
+         (organisation_id, user_id, action, resource_type, resource_id, details, ip_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        orgId,
+        userId,
+        String(action).slice(0, 100),
+        resourceType ? String(resourceType).slice(0, 100) : null,
+        resourceId || null,
+        JSON.stringify(details || {}),
+        ip || null,
+      ]
+    )
+    .catch((err) => logger.warn('Audit log write failed', { action, err: err.message }));
+}
 
 /**
  * Record an audit event for the current request.
@@ -33,25 +65,33 @@ function auditLog(req, action, resourceType = null, resourceId = null, details =
     // organisation_id is NOT NULL — without an org there is nothing to attribute.
     if (!orgId) return;
 
-    pool
-      .query(
-        `INSERT INTO audit_logs
-           (organisation_id, user_id, action, resource_type, resource_id, details, ip_address)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          orgId,
-          userId,
-          String(action).slice(0, 100),
-          resourceType ? String(resourceType).slice(0, 100) : null,
-          resourceId || null,
-          JSON.stringify(details || {}),
-          req.ip || null,
-        ]
-      )
-      .catch((err) => logger.warn('Audit log write failed', { action, err: err.message }));
+    // Carry the request id when the middleware set one, so an audit row can be
+    // joined back to the request log line that produced it.
+    const withReq = req.id ? { ...details, requestId: req.id } : details;
+    write(orgId, userId, action, resourceType, resourceId, withReq, req.ip);
   } catch (err) {
     logger.warn('Audit log error', { action, err: err.message });
   }
 }
 
-module.exports = { auditLog };
+/**
+ * Record an audit event the system took on its own, with no request behind it.
+ *
+ * @param {object} entry
+ * @param {string} entry.orgId          organisation the action belongs to (required)
+ * @param {string} entry.source         component name: 'poller' | 'alarm-evaluator' | 'notifier' | …
+ * @param {string} entry.action         e.g. 'plc_connection.stale', 'alarm.raised'
+ * @param {string} [entry.resourceType]
+ * @param {string} [entry.resourceId]
+ * @param {object} [entry.details]
+ */
+function auditSystem({ orgId, source, action, resourceType = null, resourceId = null, details = {} } = {}) {
+  try {
+    if (!orgId || !action) return;
+    write(orgId, null, action, resourceType, resourceId, { ...details, source: String(source || 'system') }, null);
+  } catch (err) {
+    logger.warn('Audit system-log error', { action, err: err.message });
+  }
+}
+
+module.exports = { auditLog, auditSystem };

@@ -4,6 +4,8 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import AppLayout from '../components/layout/AppLayout';
 import PLCConnectionsTab from '../components/plc/PLCConnectionsTab';
+import NotificationsTab from '../components/settings/NotificationsTab';
+import IntegrationsTab from '../components/settings/IntegrationsTab';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -271,7 +273,11 @@ export default function SettingsPage() {
 
   // Per-project settings route (/projects/:projectId/settings) is for cost
   // coefficients — open that tab directly; the org-level route opens permits.
-  const [activeTab, setActiveTab] = useState(projectId ? 'costs' : 'permits');
+  // ?tab=notifications deep-links a tab (the shell and emails point here).
+  const [activeTab, setActiveTab] = useState(() => {
+    try { const t = new URLSearchParams(window.location.search).get('tab'); if (t) return t; } catch { /* no window */ }
+    return projectId ? 'costs' : 'permits';
+  });
 
   const [templates, setTemplates]   = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -401,6 +407,8 @@ export default function SettingsPage() {
             { key: 'permits', label: '📋 Permit Templates' },
             { key: 'costs', label: '💰 Cost Coefficients' },
             { key: 'plc', label: '🔌 PLC Connections' },
+            { key: 'notifications', label: '🔔 Notifications' },
+            ...(canDelete ? [{ key: 'integrations', label: '🔗 Integrations' }] : []),
           ].map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
               padding: '10px 22px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
@@ -494,6 +502,18 @@ export default function SettingsPage() {
         {activeTab === 'plc' && (
           <section style={S.section}>
             <PLCConnectionsTab canEdit={canEdit} showToast={showToast} />
+          </section>
+        )}
+
+        {activeTab === 'notifications' && (
+          <section style={S.section}>
+            <NotificationsTab showToast={showToast} />
+          </section>
+        )}
+
+        {activeTab === 'integrations' && canDelete && (
+          <section style={S.section}>
+            <IntegrationsTab showToast={showToast} />
           </section>
         )}
 
