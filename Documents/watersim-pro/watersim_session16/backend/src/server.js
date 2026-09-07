@@ -124,31 +124,41 @@ app.use(morgan(IS_PROD ? MORGAN_PROD : MORGAN_DEV, {
 }));
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
+// Both limiters are OFF unless their variable is set above 0. The plant asked
+// for them to go on 7 Sep 2026 after two lockouts in an hour: the app polls
+// (live plant, dashboard, alarms), so one screen makes a few requests a
+// second, an office shares one IP, and RATE_LIMIT_MAX=300 shut every page
+// after a routine browse-through. If a flood guard is wanted later, a value
+// in the thousands for RATE_LIMIT_MAX and a small AUTH_RATE_LIMIT_MAX (failed
+// sign-ins only) are the sane settings.
+const limitOf = (name) => Math.max(0, parseInt(process.env[name] || '0', 10) || 0);
+const GLOBAL_LIMIT = limitOf('RATE_LIMIT_MAX');
+const AUTH_LIMIT = limitOf('AUTH_RATE_LIMIT_MAX');
+
 const globalLimiter = rateLimit({
   windowMs:        parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
-  max:             parseInt(process.env.RATE_LIMIT_MAX || '500', 10),
+  max:             Math.max(GLOBAL_LIMIT, 1),
   standardHeaders: true,
   legacyHeaders:   false,
   message:         { error: 'Too many requests, please try again later' },
-  skip:            () => process.env.NODE_ENV === 'test',
+  skip:            () => GLOBAL_LIMIT <= 0 || process.env.NODE_ENV === 'test',
   // Key by real IP (trust proxy = 1 above)
   keyGenerator:    (req) => req.ip,
 });
 
-// Brute-force guard for the auth routes. Only FAILED requests count towards
-// AUTH_RATE_LIMIT_MAX: a successful login, the session refresh every page load
-// makes, and the login page's organisation list must never lock a person out
-// (with a small limit and a shared office IP they did, in minutes). The
-// organisation list has its own, looser limiter in routes/auth.js and is
-// skipped here so the login page keeps its picker even during a lockout.
+// Brute-force guard for the auth routes, when enabled. Only FAILED requests
+// count: a successful login, the session refresh every page load makes, and
+// the login page's organisation list never lock a person out. The
+// organisation list is skipped here outright so the login page keeps its
+// picker even during a lockout.
 const authLimiter = rateLimit({
   windowMs:        15 * 60 * 1000,
-  max:             parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20', 10),
+  max:             Math.max(AUTH_LIMIT, 1),
   standardHeaders: true,
   legacyHeaders:   false,
   skipSuccessfulRequests: true,
   message:         { error: 'Too many auth attempts, please try again later' },
-  skip:            (req) => process.env.NODE_ENV === 'test' || (req.method === 'GET' && req.path === '/organisations'),
+  skip:            (req) => AUTH_LIMIT <= 0 || process.env.NODE_ENV === 'test' || (req.method === 'GET' && req.path === '/organisations'),
   keyGenerator:    (req) => req.ip,
 });
 

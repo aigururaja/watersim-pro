@@ -411,7 +411,7 @@ export default function LivePlantPage() {
 
         {/* Schematic */}
         {effectiveView === 'schematic' && snap && plant && (
-          <div className="flex flex-col lg:flex-row gap-3 items-start">
+          <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-start">
             <div className="flex-1 min-w-0 w-full">
               {canvas ? (
                 <MimicView nodes={canvas.nodes} edges={canvas.edges} states={nodeStates} selected={selectedNode} onSelect={setSelectedNode} height={640} />
@@ -430,7 +430,7 @@ export default function LivePlantPage() {
           <EmptyState icon={Monitor} title="Nothing is bound to a PLC yet"
             description="Bind registry tags to a PLC connection on a flowsheet and this screen fills itself: gauges for analogue points, cards for drives and valves, alarms as they happen." />
         ) : (
-          <div className="flex flex-col lg:flex-row gap-3 items-start">
+          <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-start">
             <div className={`flex-1 min-w-0 w-full grid gap-3 md:grid-cols-2 ${canvas ? '' : '2xl:grid-cols-3'}`} role="list" aria-label="Process areas">
               {areaList.map((a) => {
                 const ids = canvas ? areaNodes.get(a.code) : null;

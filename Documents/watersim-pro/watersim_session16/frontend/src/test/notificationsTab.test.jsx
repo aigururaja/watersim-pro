@@ -170,3 +170,50 @@ describe('NotificationsTab — receivers for every kind of user', () => {
     expect(button).toBeDisabled();
   });
 });
+
+describe('NotificationsTab — Send test goes to the number on screen', () => {
+  const savedMe = (address) => ({ data: {
+    email: { enabled: true, address: 'm@example.com', verified: true },
+    whatsapp: { enabled: true, address, verified: false },
+    login: { email: 'm@example.com', phone: '+919876543210' }, subscriptions: [], providers: providers('meta'),
+  } });
+
+  it('saves an edited WhatsApp number first, then sends the test there', async () => {
+    api.get.mockImplementation(answers('meta'));
+    api.put.mockResolvedValue(savedMe('+916381794189'));
+    api.post.mockResolvedValue({ data: { id: 'o9', channel: 'whatsapp', address: '+916381794189', state: 'sent' } });
+    const toast = vi.fn();
+    render(<NotificationsTab showToast={toast} />);
+    const input = await screen.findByLabelText('WhatsApp number');
+    fireEvent.change(input, { target: { value: '+916381794189' } });
+    fireEvent.click(screen.getByLabelText('Send test WhatsApp'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/notifications/test', { channel: 'whatsapp' }));
+    expect(api.put).toHaveBeenCalledWith('/notifications/me/channels', expect.objectContaining({ whatsapp: { enabled: true, address: '+916381794189' } }));
+    expect(api.put.mock.invocationCallOrder[0]).toBeLessThan(api.post.mock.invocationCallOrder[0]);
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Saved and sent to +916381794189', true));
+  });
+
+  it('sends without saving when nothing on screen changed', async () => {
+    api.get.mockImplementation(answers('meta'));
+    api.post.mockResolvedValue({ data: { id: 'o9', channel: 'whatsapp', address: '+919876543210', state: 'sent' } });
+    const toast = vi.fn();
+    render(<NotificationsTab showToast={toast} />);
+    await screen.findByLabelText('WhatsApp number');
+    fireEvent.click(screen.getByLabelText('Send test WhatsApp'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/notifications/test', { channel: 'whatsapp' }));
+    expect(api.put).not.toHaveBeenCalled();
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Test whatsapp sent to +919876543210', true));
+  });
+
+  it('does not send when the save of the edited number is refused', async () => {
+    api.get.mockImplementation(answers('meta'));
+    api.put.mockRejectedValue({ response: { data: { error: 'Not a valid WhatsApp number' } } });
+    const toast = vi.fn();
+    render(<NotificationsTab showToast={toast} />);
+    const input = await screen.findByLabelText('WhatsApp number');
+    fireEvent.change(input, { target: { value: '12' } });
+    fireEvent.click(screen.getByLabelText('Send test WhatsApp'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Not a valid WhatsApp number', false));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+});

@@ -420,7 +420,7 @@ export default function AlarmsPage() {
       render: (e) => <SeverityPill severity={e.severity} />,
     },
     {
-      key: 'rule', header: 'Rule / Message', flex: 2.4,
+      key: 'rule', header: 'Rule / Message', flex: 2.4, minWidth: 180,
       render: (e) => (
         <div className="min-w-0">
           <div className="font-medium text-gray-800 truncate">{e.ruleName || '—'}</div>
@@ -429,7 +429,7 @@ export default function AlarmsPage() {
       ),
     },
     {
-      key: 'where', header: 'Flowsheet', flex: 1.4,
+      key: 'where', header: 'Flowsheet', flex: 1.4, minWidth: 120,
       render: (e) => (
         <div className="min-w-0">
           {e.projectId && e.flowsheetId ? (

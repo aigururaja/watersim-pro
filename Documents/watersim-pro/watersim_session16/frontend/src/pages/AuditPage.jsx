@@ -137,7 +137,7 @@ function FilterBar({ filters, setFilters, actions }) {
 
       <input
         type="date"
-        className="input py-1.5 text-sm"
+        className="input py-1.5 text-sm w-auto"
         value={filters.from || ''}
         onChange={e => set({ from: e.target.value || undefined })}
         aria-label="From date"
@@ -145,7 +145,7 @@ function FilterBar({ filters, setFilters, actions }) {
       <span className="text-gray-400 text-sm">to</span>
       <input
         type="date"
-        className="input py-1.5 text-sm"
+        className="input py-1.5 text-sm w-auto"
         value={filters.to || ''}
         onChange={e => set({ to: e.target.value || undefined })}
         aria-label="To date"
@@ -275,10 +275,10 @@ export default function AuditPage() {
 
   const columns = useMemo(() => [
     { key: 'when',   header: 'When',   flex: '0 0 150px', width: 150, render: (e) => <When ts={e.createdAt} /> },
-    { key: 'actor',  header: 'Who',    flex: 1.4, render: (e) => <Actor actor={e.actor} /> },
+    { key: 'actor',  header: 'Who',    flex: 1.4, minWidth: 150, render: (e) => <Actor actor={e.actor} /> },
     { key: 'action', header: 'Action', flex: '0 0 190px', width: 190, render: (e) => <ActionPill action={e.action} /> },
     {
-      key: 'resource', header: 'Record', flex: 1.2,
+      key: 'resource', header: 'Record', flex: 1.2, minWidth: 140,
       render: (e) => (
         <div className="min-w-0">
           <div className="text-sm text-gray-800 truncate">{e.resourceType || '—'}</div>
@@ -288,7 +288,7 @@ export default function AuditPage() {
         </div>
       ),
     },
-    { key: 'details', header: 'Details', flex: 2, render: (e) => <Details details={e.details} /> },
+    { key: 'details', header: 'Details', flex: 2, minWidth: 200, render: (e) => <Details details={e.details} /> },
     { key: 'ip', header: 'IP', flex: '0 0 110px', width: 110, render: (e) => <span className="text-xs font-mono text-gray-500">{e.ip || '—'}</span> },
   ], []);
 

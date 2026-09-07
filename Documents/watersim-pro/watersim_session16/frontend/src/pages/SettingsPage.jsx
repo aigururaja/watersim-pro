@@ -402,7 +402,8 @@ export default function SettingsPage() {
         </div>
 
         {/* Tab bar */}
-        <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #E5E7EB', marginBottom: 24 }}>
+        {/* Scrolls sideways on a narrow screen instead of pushing the page wider */}
+        <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #E5E7EB', marginBottom: 24, overflowX: 'auto', whiteSpace: 'nowrap' }} role="tablist" aria-label="Settings sections">
           {[
             { key: 'permits', label: '📋 Permit Templates' },
             { key: 'costs', label: '💰 Cost Coefficients' },
@@ -410,8 +411,8 @@ export default function SettingsPage() {
             { key: 'notifications', label: '🔔 Notifications' },
             ...(canDelete ? [{ key: 'integrations', label: '🔗 Integrations' }] : []),
           ].map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
-              padding: '10px 22px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} role="tab" aria-selected={activeTab === tab.key} style={{
+              padding: '10px 22px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, flexShrink: 0,
               fontWeight: activeTab === tab.key ? 700 : 500,
               color: activeTab === tab.key ? '#1F4E79' : '#6B7280',
               borderBottom: `2px solid ${activeTab === tab.key ? '#1F4E79' : 'transparent'}`,
@@ -774,8 +775,8 @@ const S = {
   th: { padding: '6px 8px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: '#374151', borderBottom: '1px solid #E5E7EB', whiteSpace: 'nowrap' },
   td: { padding: '5px 8px', fontSize: 12, color: '#111' },
 
-  roleTable: { border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden' },
-  roleRow:   { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr' },
+  roleTable: { border: '1px solid #E5E7EB', borderRadius: 8, overflowX: 'auto' },
+  roleRow:   { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', minWidth: 480 },
   roleCell:  { padding: '8px 10px', fontSize: 13, color: '#374151', borderRight: '1px solid #F3F4F6' },
 
   primaryBtn: { background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 38 },

@@ -234,8 +234,8 @@ ROLE_CACHE_TTL_MS=30000
 ROLE_LOOKUP_TIMEOUT_MS=500
 BCRYPT_ROUNDS=12
 RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=300
-AUTH_RATE_LIMIT_MAX=10          # failed auth attempts per client IP per 15 min; successes do not count
+RATE_LIMIT_MAX=0                # 0 = off (default). If set: all API requests per client IP per 15 min — the app polls, use thousands
+AUTH_RATE_LIMIT_MAX=0           # 0 = off (default). If set: failed sign-ins per client IP per 15 min; successes never count
 
 # ── Simulation engine (worker threads — keep ≤ vCPUs) ────────────────────────
 SIMULATION_MAX_CONCURRENT=2
@@ -781,7 +781,7 @@ the backup taken just before the migration (§14) if the schema changed.
 | PDF/Excel export 500; log says `Failed to spawn … python` | `PYTHON_BIN` wrong or venv missing packages (§6); test with the one-line import check |
 | PLC protocols listed as "stub" | `requirements-plc.txt` not installed into the venv; the reason is shown on the PLC page |
 | Everyone gets 429 at once | nginx not sending `X-Forwarded-For`, so all clients share one IP in the rate limiter |
-| One person gets 429 ("Too many auth attempts") after a few sign-ins, and the login page shows a text box instead of the organisation list | `AUTH_RATE_LIMIT_MAX` failed attempts per client IP per 15 minutes; an office behind one NAT shares the count. Until the build of 7 Sep 2026 every auth call counted (the session refresh on each page load, the organisation list, successful logins); now only failures do and the list is outside that limiter. The lock clears after 15 minutes, or at once with `systemctl restart watersim-backend` |
+| 429 "Too many auth attempts" or "Too many requests" for one person or one office | A rate limit is set (`AUTH_RATE_LIMIT_MAX` / `RATE_LIMIT_MAX`, both off at 0 since 7 Sep 2026): the count is per client IP, so an office behind one NAT shares it, and the app polls. Set them to 0 (§8) or in the thousands; `systemctl restart watersim-backend` clears the count at once |
 | A route you know exists returns 404 after an update | backend not restarted after `git pull`; `systemctl restart watersim-backend` |
 | Browser shows the old UI after an update | `index.html` cached; the `expires -1` rule in §12.2 prevents it going forward, hard-refresh once |
 | `npm ci` fails with lockfile errors | run it from `/opt/watersim/app` (repo root) with `--workspace=…`, never inside `backend/` or `frontend/` |

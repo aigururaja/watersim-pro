@@ -116,28 +116,52 @@ export default function NotificationsTab({ showToast }) {
   }, [canPolicy]);
   useEffect(() => { load(); }, [load]);
 
+  /** PUT the channel form; returns the saved state. Throws on failure (the caller decides the toast). */
+  const putChannels = async () => {
+    const body = {
+      email: { enabled: form.email.enabled, ...(form.email.address.trim() ? { address: form.email.address.trim() } : {}) },
+      ...(form.whatsapp.address || !form.whatsapp.enabled ? { whatsapp: { enabled: form.whatsapp.enabled, ...(form.whatsapp.address ? { address: form.whatsapp.address.trim() } : {}) } } : {}),
+    };
+    const { data } = await api.put('/notifications/me/channels', body);
+    setMe(data);
+    return data;
+  };
+  const saveError = (err) => err.response?.data?.details?.[0]?.msg || err.response?.data?.error || 'Could not save';
+
   const saveChannels = async () => {
     setBusy('save');
     try {
-      const body = {
-        email: { enabled: form.email.enabled, ...(form.email.address.trim() ? { address: form.email.address.trim() } : {}) },
-        ...(form.whatsapp.address || !form.whatsapp.enabled ? { whatsapp: { enabled: form.whatsapp.enabled, ...(form.whatsapp.address ? { address: form.whatsapp.address.trim() } : {}) } } : {}),
-      };
-      const { data } = await api.put('/notifications/me/channels', body);
-      setMe(data);
+      await putChannels();
       showToast?.('Notification channels saved');
     } catch (err) {
-      showToast?.(err.response?.data?.details?.[0]?.msg || err.response?.data?.error || 'Could not save', false);
+      showToast?.(saveError(err), false);
     } finally { setBusy(null); }
+  };
+
+  /** True when the field for this channel differs from what the server has — a test must go to what is typed, not to the old address. */
+  const channelDirty = (channel) => {
+    const typed = (form[channel]?.address || '').trim();
+    const saved = me?.[channel]?.address || '';
+    return typed !== saved || form[channel]?.enabled !== me?.[channel]?.enabled;
   };
 
   const sendTest = async (channel) => {
     setBusy(`test:${channel}`);
     setTestResult(null);
     try {
+      // Save first when the field was edited, so the test reaches the number
+      // or address on screen — "Send test" after a change used to go to the
+      // previously saved one.
+      let saved = false;
+      if (channelDirty(channel)) {
+        try { await putChannels(); saved = true; }
+        catch (err) { showToast?.(saveError(err), false); return; }
+      }
       const { data } = await api.post('/notifications/test', { channel });
       setTestResult(data);
-      showToast?.(data.state === 'sent' ? `Test ${channel} sent to ${data.address}` : `Test ${channel}: ${data.state}${data.last_error ? ` — ${data.last_error}` : ''}`, data.state === 'sent');
+      showToast?.(data.state === 'sent'
+        ? `${saved ? 'Saved and sent' : 'Test ' + channel + ' sent'} to ${data.address}`
+        : `Test ${channel}: ${data.state}${data.last_error ? ` — ${data.last_error}` : ''}`, data.state === 'sent');
     } catch (err) {
       showToast?.(err.response?.data?.error || 'Test failed', false);
     } finally { setBusy(null); }
@@ -269,7 +293,7 @@ export default function NotificationsTab({ showToast }) {
                   : ' — used for WhatsApp unless you enter another number above.'}
               </div>
             )}
-            <button onClick={() => sendTest('whatsapp')} disabled={!!busy || !me?.whatsapp?.address} className="btn-secondary text-xs disabled:opacity-50" aria-label="Send test WhatsApp">
+            <button onClick={() => sendTest('whatsapp')} disabled={!!busy || !(form.whatsapp.address.trim() || me?.whatsapp?.address)} className="btn-secondary text-xs disabled:opacity-50" aria-label="Send test WhatsApp">
               {busy === 'test:whatsapp' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send test
             </button>
           </div>

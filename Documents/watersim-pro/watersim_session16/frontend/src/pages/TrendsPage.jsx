@@ -404,7 +404,7 @@ export default function TrendsPage() {
 
         {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</div>}
 
-        <div className="flex flex-col md:flex-row gap-4 items-start">
+        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-start">
           <TagPicker tags={tags} selected={selected} onToggle={toggle} loading={tagsLoading} />
 
           <div ref={colRef} className="flex-1 min-w-0 space-y-3 w-full">

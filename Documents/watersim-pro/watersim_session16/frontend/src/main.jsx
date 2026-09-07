@@ -17,7 +17,11 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      {/* v7_startTransition: a navigation to a page whose chunk is still
+          loading keeps the current page on screen instead of swapping the
+          whole shell for the Suspense loader — the first click on each page
+          used to flash grey. */}
+      <BrowserRouter future={{ v7_startTransition: true }}>
         <App />
       </BrowserRouter>
     </QueryClientProvider>

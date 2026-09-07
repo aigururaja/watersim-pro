@@ -88,16 +88,19 @@ export default function LoginPage() {
   const listed = Array.isArray(orgs) && orgs.length > 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-700 via-brand-600 to-teal-500 flex items-start md:items-center justify-center p-4 py-8 overflow-y-auto">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/20 backdrop-blur mb-4">
-            <Droplets className="w-9 h-9 text-white" />
+    // `m-auto` on the column centres it when there is room and, when the
+    // viewport is shorter than the form (small screens, browser zoom), lets it
+    // start at the top and scroll — flex centring alone clips the top off.
+    <div className="min-h-[100dvh] bg-gradient-to-br from-brand-700 via-brand-600 to-teal-500 flex flex-col">
+      <div className="w-full max-w-md m-auto px-4 py-6 sm:py-10">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/20 backdrop-blur mb-3">
+            <Droplets className="w-8 h-8 sm:w-9 sm:h-9 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">WaterSim Pro</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">WaterSim Pro</h1>
           <p className="text-blue-100 mt-1 text-sm">Process Simulation Platform</p>
         </div>
-        <div className="card p-8 shadow-2xl ws-page-enter">
+        <div className="card p-6 sm:p-8 shadow-2xl ws-page-enter">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in to your account</h2>
           {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700" role="alert">{error}</div>}
           <form onSubmit={handleSubmit} className="space-y-4" aria-label="Sign in form" noValidate>

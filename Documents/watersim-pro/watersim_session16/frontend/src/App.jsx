@@ -1,28 +1,31 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import AccessibilityProvider from './components/AccessibilityProvider';
+import { PAGE_LOADERS, prefetchPages } from './pagePrefetch';
 
-// Code-split every page — each route loads its own chunk on demand.
-const LoginPage      = lazy(() => import('./pages/LoginPage'));
-const RegisterPage   = lazy(() => import('./pages/RegisterPage'));
-const DashboardPage  = lazy(() => import('./pages/DashboardPage'));
-const ProjectsPage   = lazy(() => import('./pages/ProjectsPage'));
-const ProjectPage    = lazy(() => import('./pages/ProjectPage'));
-const CanvasPage     = lazy(() => import('./pages/CanvasPage'));
-const SettingsPage   = lazy(() => import('./pages/SettingsPage'));
-const ReportPage     = lazy(() => import('./pages/ReportPage'));
-const AdminPage      = lazy(() => import('./pages/AdminPage'));
-const ReportsPage    = lazy(() => import('./pages/ReportsPage'));
-const ComparisonPage = lazy(() => import('./pages/ComparisonPage'));
-const AlarmsPage     = lazy(() => import('./pages/AlarmsPage'));
-const AuditPage      = lazy(() => import('./pages/AuditPage'));
-const TrendsPage     = lazy(() => import('./pages/TrendsPage'));
-const TasksPage      = lazy(() => import('./pages/TasksPage'));
-const LivePlantPage  = lazy(() => import('./pages/LivePlantPage'));
-const TwinPage       = lazy(() => import('./pages/TwinPage'));
+// Code-split every page — each route loads its own chunk on demand, and
+// pagePrefetch.js warms them all once the browser is idle so the first click
+// on a page does not wait behind a loader.
+const LoginPage      = lazy(PAGE_LOADERS.LoginPage);
+const RegisterPage   = lazy(PAGE_LOADERS.RegisterPage);
+const DashboardPage  = lazy(PAGE_LOADERS.DashboardPage);
+const ProjectsPage   = lazy(PAGE_LOADERS.ProjectsPage);
+const ProjectPage    = lazy(PAGE_LOADERS.ProjectPage);
+const CanvasPage     = lazy(PAGE_LOADERS.CanvasPage);
+const SettingsPage   = lazy(PAGE_LOADERS.SettingsPage);
+const ReportPage     = lazy(PAGE_LOADERS.ReportPage);
+const AdminPage      = lazy(PAGE_LOADERS.AdminPage);
+const ReportsPage    = lazy(PAGE_LOADERS.ReportsPage);
+const ComparisonPage = lazy(PAGE_LOADERS.ComparisonPage);
+const AlarmsPage     = lazy(PAGE_LOADERS.AlarmsPage);
+const AuditPage      = lazy(PAGE_LOADERS.AuditPage);
+const TrendsPage     = lazy(PAGE_LOADERS.TrendsPage);
+const TasksPage      = lazy(PAGE_LOADERS.TasksPage);
+const LivePlantPage  = lazy(PAGE_LOADERS.LivePlantPage);
+const TwinPage       = lazy(PAGE_LOADERS.TwinPage);
 
 function PageLoader({ label = 'Loading WaterSim Pro…' }) {
   return (
@@ -48,6 +51,9 @@ function PublicRoute({ children }) {
 }
 
 function AppRoutes() {
+  // Warm every page chunk after the first paint (not under test: vitest has
+  // no chunks to warm and the imports would only add noise).
+  useEffect(() => (import.meta.env?.MODE === 'test' ? undefined : prefetchPages()), []);
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>

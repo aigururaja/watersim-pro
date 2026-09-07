@@ -8,16 +8,18 @@ const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 router.use(cookieParser());
 
-// Failed sign-ins and registrations only: a successful login never eats into
+// Off unless AUTH_RATE_LIMIT_MAX is set above 0 (see server.js). When on,
+// failed sign-ins and registrations only: a successful login never eats into
 // the budget, so a team behind one office IP is not locked out by using the app.
+const AUTH_LIMIT = Math.max(0, parseInt(process.env.AUTH_RATE_LIMIT_MAX || '0', 10) || 0);
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: Math.max(AUTH_LIMIT, 1),
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
   message: { error: 'Too many auth attempts, please try again later' },
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: () => AUTH_LIMIT <= 0 || process.env.NODE_ENV === 'test',
   keyGenerator: (req) => req.ip,
 });
 
@@ -47,15 +49,16 @@ const changePasswordRules = [
     .withMessage('Password must be at least 8 characters with uppercase, lowercase, and a digit'),
 ];
 
-// The login page reads the organisation list once per visit. Looser than the
-// auth limiter so a reload never eats into the sign-in budget, still capped.
+// The login page reads the organisation list once per visit. Follows the same
+// switch; when on, looser than the auth limiter so a reload never eats into
+// the sign-in budget, still capped.
 const listLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60,
+  max: Math.max(AUTH_LIMIT * 3, 1),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later' },
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: () => AUTH_LIMIT <= 0 || process.env.NODE_ENV === 'test',
   keyGenerator: (req) => req.ip,
 });
 
