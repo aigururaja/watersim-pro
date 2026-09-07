@@ -15,6 +15,22 @@ import { Droplets, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const SLUG_KEY = 'ws.orgSlug';
 const OTHER = '__other__';
+
+/**
+ * The sentence to show for a failed sign-in. The API answers most failures
+ * with { error: { message } }; the rate limiter answers 429 with a bare
+ * { error: 'Too many auth attempts…' } string, and a person locked out must
+ * read that rather than "Login failed" and keep retrying into the lock.
+ */
+export function loginErrorMessage(err) {
+  const status = err?.response?.status;
+  const body = err?.response?.data?.error;
+  if (body && typeof body === 'object' && body.message) return body.message;
+  if (typeof body === 'string' && body.trim()) return status === 429 ? `${body}. Wait about 15 minutes before the next attempt.` : body;
+  if (status === 429) return 'Too many sign-in attempts from this network. Wait about 15 minutes and try again.';
+  if (!err?.response) return 'Could not reach the server. Check your connection and try again.';
+  return 'Login failed. Please try again.';
+}
 const readSlug = () => { try { return localStorage.getItem(SLUG_KEY) || ''; } catch { return ''; } };
 const writeSlug = (slug) => { try { localStorage.setItem(SLUG_KEY, slug); } catch { /* private mode */ } };
 
@@ -65,7 +81,7 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true); setError('');
     try { await login(form); writeSlug(form.orgSlug); navigate('/dashboard'); }
-    catch (err) { setError(err.response?.data?.error?.message || 'Login failed. Please try again.'); }
+    catch (err) { setError(loginErrorMessage(err)); }
     finally { setLoading(false); }
   };
 

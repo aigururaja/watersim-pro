@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import LoginPage from '../pages/LoginPage';
+import LoginPage, { loginErrorMessage } from '../pages/LoginPage';
 import { authService } from '../services/auth.service';
 
 const login = vi.fn();
@@ -102,6 +102,23 @@ describe('LoginPage organisation picker', () => {
     expect(screen.queryByRole('button', { name: /Choose from the list|Enter its ID/ })).toBeNull();
     await userEvent.type(orgField(), 'itc-stp');
     expect(orgField().value).toBe('itc-stp');
+  });
+
+  it('shows the rate limiter\'s own message on 429 instead of the generic failure', async () => {
+    authService.organisations.mockResolvedValue(ORGS);
+    login.mockRejectedValue({ response: { status: 429, data: { error: 'Too many auth attempts, please try again later' } } });
+    mount();
+    const select = await loaded();
+    await userEvent.selectOptions(select, 'itc-stp');
+    await userEvent.type(screen.getByLabelText('Email address'), 'ops@itc.test');
+    await userEvent.type(screen.getByLabelText('Password'), 'Secret123');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Too many auth attempts, please try again later. Wait about 15 minutes');
+    // The usual shape still reads the nested message; no response at all reads as unreachable.
+    expect(loginErrorMessage({ response: { status: 401, data: { error: { message: 'Invalid credentials' } } } })).toBe('Invalid credentials');
+    expect(loginErrorMessage(new Error('Network Error'))).toMatch(/Could not reach the server/);
+    expect(loginErrorMessage({ response: { status: 500, data: {} } })).toBe('Login failed. Please try again.');
   });
 
   it('a remembered ID that is not in the list stays typed', async () => {

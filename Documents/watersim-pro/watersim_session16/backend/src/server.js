@@ -135,11 +135,20 @@ const globalLimiter = rateLimit({
   keyGenerator:    (req) => req.ip,
 });
 
+// Brute-force guard for the auth routes. Only FAILED requests count towards
+// AUTH_RATE_LIMIT_MAX: a successful login, the session refresh every page load
+// makes, and the login page's organisation list must never lock a person out
+// (with a small limit and a shared office IP they did, in minutes). The
+// organisation list has its own, looser limiter in routes/auth.js and is
+// skipped here so the login page keeps its picker even during a lockout.
 const authLimiter = rateLimit({
   windowMs:        15 * 60 * 1000,
   max:             parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20', 10),
+  standardHeaders: true,
+  legacyHeaders:   false,
+  skipSuccessfulRequests: true,
   message:         { error: 'Too many auth attempts, please try again later' },
-  skip:            () => process.env.NODE_ENV === 'test',
+  skip:            (req) => process.env.NODE_ENV === 'test' || (req.method === 'GET' && req.path === '/organisations'),
   keyGenerator:    (req) => req.ip,
 });
 
