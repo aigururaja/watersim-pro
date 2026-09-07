@@ -190,6 +190,14 @@ On a small server, build the frontend on your workstation instead (same two
 `tar -czf dist.tgz -C frontend/dist . && scp dist.tgz server:/tmp/` then
 `sudo tar -xzf /tmp/dist.tgz -C /var/www/watersim`.
 
+**Building from Git Bash on Windows:** prefix the build with
+`MSYS_NO_PATHCONV=1`. Git Bash rewrites an environment value that looks like
+a POSIX path, so `VITE_API_BASE=/api/v1` reaches Vite as
+`C:/Program Files/Git/api/v1`, the bundle's axios base becomes that string,
+and every API call fails in the browser before it is sent ("Login failed"
+with nothing in the server log). Check the result before uploading:
+`grep -c 'Program Files' frontend/dist/assets/index-*.js` must print 0.
+
 Do not leave a `backend/.env` from a dev checkout on the server. `dotenv`
 loads it from the working directory; it cannot override variables systemd
 already set, but it can silently supply ones you forgot.
