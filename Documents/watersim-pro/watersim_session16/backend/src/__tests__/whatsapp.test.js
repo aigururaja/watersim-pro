@@ -285,8 +285,8 @@ describe('template catalogue', () => {
     expect(calls[1].url).toMatch(/after=c1/);
     expect(calls[0].opts.headers.Authorization).toBe('Bearer EAAtest');
     expect(r.templates).toEqual([
-      { id: '1', name: 'watersim_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', type: 'TEXT', body: '*{{1}}*\n{{2}}', params: 2, mappedTo: ['*'] },
-      { id: '2', name: 'hello_world', status: 'APPROVED', category: 'UTILITY', language: 'en_US', type: 'TEXT', body: 'Welcome and goodbye', params: 0, mappedTo: [] },
+      { id: '1', name: 'watersim_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', type: 'TEXT', body: '*{{1}}*\n{{2}}', params: 2, reason: null, mappedTo: ['*'] },
+      { id: '2', name: 'hello_world', status: 'APPROVED', category: 'UTILITY', language: 'en_US', type: 'TEXT', body: 'Welcome and goodbye', params: 0, reason: null, mappedTo: [] },
     ]);
     const again = await whatsapp.listTemplates();
     expect(again.cached).toBe(true);

@@ -30,9 +30,12 @@
  *     message to the business. Everything else — every alarm that wakes an
  *     engineer at night — must be an approved template. Every WaterSim
  *     template takes two body parameters: {{1}} the subject line and {{2}} the
- *     details on one line. Register one UTILITY template (say `watersim_alert`
- *     with the body "*{{1}}*" / "{{2}}") and map it as "*"; per-event
- *     templates are optional refinements.
+ *     details on one line. The templates themselves — the wording Meta
+ *     reviews, and the WHATSAPP_TEMPLATES mapping to set once they are
+ *     APPROVED — live in ../whatsappTemplates.js; scripts/whatsapp-templates.js
+ *     submits them. Meta counts the rendered body (the template's fixed text
+ *     plus both values) against 1024 characters, so {{2}} is trimmed to what
+ *     the template leaves (templateParams).
  *   - Meta answers 200 as soon as it accepts a message; that is not delivery.
  *     The outcome arrives later on the webhook (sent → delivered → read, or
  *     failed with a reason) and notifications/inbound.js writes it onto the
@@ -42,6 +45,7 @@
 
 const crypto = require('crypto');
 const logger = require('../../utils/logger');
+const catalogue = require('../whatsappTemplates');
 
 const GRAPH = 'https://graph.facebook.com';
 const E164 = /^\+[1-9]\d{6,14}$/;
@@ -173,6 +177,23 @@ function details(body, subject) {
   return lines.join(' · ') || String(subject || '-');
 }
 
+/**
+ * The template for a message and the two body parameters it takes — what
+ * sendMeta posts and what previews show. Meta counts the rendered body (the
+ * template's fixed text plus both values) against 1024 characters, so the
+ * details are trimmed to what the template leaves; a template WaterSim did
+ * not write is assumed to carry 300 characters of its own.
+ */
+function templateParams({ subject, body, eventType }) {
+  const name = templateFor(eventType);
+  if (!name) return { name: null, params: [] };
+  const known = catalogue.byName(name);
+  const p1 = param(subject, 200);
+  const fixed = known ? catalogue.fixedLength(known) : 300;
+  const p2 = param(details(body, subject), Math.max(120, catalogue.LIMITS.body - fixed - p1.length));
+  return { name, params: [p1, p2] };
+}
+
 // ── Meta errors ──────────────────────────────────────────────────────────────
 
 // Codes that mean "later": throttling, pairing limits, Meta downtime.
@@ -208,16 +229,13 @@ function metaError(status, error = {}) {
 
 async function sendMeta({ to, subject, body, eventType }) {
   const e = env().meta;
-  const name = templateFor(eventType);
+  const { name, params } = templateParams({ subject, body, eventType });
   const message = name
     ? {
       messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'template',
       template: {
         name, language: { code: e.lang },
-        components: [{ type: 'body', parameters: [
-          { type: 'text', text: param(subject, 200) },
-          { type: 'text', text: param(details(body, subject), 1024) },
-        ] }],
+        components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }],
       },
     }
     : {
@@ -301,7 +319,7 @@ async function listTemplates({ force = false } = {}) {
   let after = null;
   for (let page = 0; page < 20; page++) {
     const u = new URL(`${GRAPH}/${e.version}/${encodeURIComponent(e.wabaId)}/message_templates`);
-    u.searchParams.set('fields', 'name,status,category,language,components,id');
+    u.searchParams.set('fields', 'name,status,category,language,components,id,rejected_reason');
     u.searchParams.set('limit', '100');
     if (after) u.searchParams.set('after', after);
     const res = await fetchImpl(u.toString(), { headers: { Authorization: `Bearer ${e.token}` }, signal: AbortSignal.timeout(25_000) });
@@ -316,6 +334,7 @@ async function listTemplates({ force = false } = {}) {
         type: header ? String(header.format || 'TEXT').toUpperCase() : 'TEXT',
         body: body?.text || '',
         params: body?.text ? new Set(body.text.match(/\{\{\d+\}\}/g) || []).size : 0,
+        reason: t.rejected_reason && t.rejected_reason !== 'NONE' ? t.rejected_reason : null,
       });
     }
     after = data.paging?.cursors?.after;
@@ -380,6 +399,6 @@ function parseWebhook(payload) {
 
 module.exports = {
   channel: 'whatsapp', send, configured, provider, setFetch,
-  normalizePhone, toE164, templates, templateFor, details, param, metaError,
+  normalizePhone, toE164, templates, templateFor, templateParams, details, param, metaError,
   listTemplates, verifyWebhook, signatureOk, parseWebhook, E164,
 };

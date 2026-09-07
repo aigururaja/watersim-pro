@@ -323,17 +323,36 @@ Configuration:
    receipts stay with the CRM.
 2. **App secret** (App settings → Basic) into `WHATSAPP_APP_SECRET`, so every
    webhook body is checked against its `X-Hub-Signature-256`.
-3. **Template.** Meta delivers plain text only to a person who wrote to the
+3. **Templates.** Meta delivers plain text only to a person who wrote to the
    number in the last 24 hours; every alarm outside that window needs an
-   approved template. Create one UTILITY template named `watersim_alert`
-   (language en_US) whose body is `*{{1}}*` on the first line and `{{2}}` on
-   the second (sample values: "Alarm: TSS high" / "TSS 50 exceeded max 30 ·
-   Flowsheet: ITC STP"). When Meta shows it APPROVED, set
-   `WHATSAPP_TEMPLATES={"*":"watersim_alert"}` and restart. Per-event
-   templates use the event type as the key (`"alarm.":"watersim_alarm"`);
-   every template must take exactly two body parameters. Settings →
-   Notifications → "Check Meta templates" lists the account's templates with
-   their status.
+   approved template. WaterSim's four UTILITY templates —
+   `watersim_alarm_raised`, `watersim_alarm_cleared`, `watersim_task_update`
+   and the default `watersim_alert` — are written in
+   `backend/src/notifications/whatsappTemplates.js` to Meta's review rules (a
+   body may not begin or end with a variable, every variable needs sample
+   text, header ≤ 60 characters, UTILITY wording only). Submit them from
+   `backend/` with the environment loaded (`watersim-node` from §9 on the
+   server, plain `node` with `backend/.env` on a workstation):
+
+   ```bash
+   node scripts/whatsapp-templates.js preview   # what each event will say on the phone
+   node scripts/whatsapp-templates.js submit    # creates them on the WhatsApp Business Account for review
+   node scripts/whatsapp-templates.js list      # PENDING → APPROVED, or REJECTED with Meta's reason
+   ```
+
+   (`json` prints the payloads to paste into WhatsApp Manager → Message
+   templates by hand.) Review usually takes minutes, at most a day. When
+   every template shows APPROVED, set
+
+   ```
+   WHATSAPP_TEMPLATES={"*":"watersim_alert","alarm.raised":"watersim_alarm_raised","alarm.cleared":"watersim_alarm_cleared","task.":"watersim_task_update"}
+   ```
+
+   and restart. Keys are an event type, a prefix ending in a dot, or `*`;
+   every template must take exactly two body parameters ({{1}} subject,
+   {{2}} details). Settings → Notifications → "Check Meta templates" shows the
+   account's templates with their status; a REJECTED one is edited in
+   WhatsApp Manager, or deleted there and submitted again.
 4. **Every kind of user.** Admin → Users gives each member a WhatsApp number
    as they are invited or edited (a 10-digit Indian number is stored as
    +91…). Settings → Notifications → Receivers then shows every active member
@@ -341,7 +360,10 @@ Configuration:
    person a test, and "Install the default policy for every role" gives
    viewer, operator, engineer, manager and admin their rows in one click
    (existing rows are kept). Each person can still change their own under
-   My channels. A person verifies their number by sending "hi" once to the
+   My channels. Login email and profile mobile (Users page) are separate
+   from the receiver email and WhatsApp number (Notifications): the receiver
+   addresses default to them but may differ, and neither side overwrites
+   the other. A person verifies their number by sending "hi" once to the
    plant's WhatsApp number from that phone, which also opens the 24-hour
    window so "Send test" works before the template is approved.
 
@@ -644,14 +666,17 @@ set -a; . /etc/watersim/backend.env; set +a
 SRC="${DATABASE_URL#sqlite:}"
 export PATH=/opt/watersim/node/bin:$PATH
 rm -f "$DIR"/*.partial
-# The schema's CHECK constraints call REGEXP, which SQLite only knows once a
-# connection registers it (the application does); VACUUM INTO re-reads the
-# schema, so the backup connection must register it as well.
+# The schema calls functions only the application registers — REGEXP in CHECK
+# constraints, NOW() and uuid_generate_v4() in column DEFAULTs. VACUUM INTO
+# re-reads the schema, so the backup connection registers them as well.
 node --disable-warning=ExperimentalWarning -e '
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(process.argv[1], { readOnly: true });
   db.function("regexp", { deterministic: true }, (re, s) =>
     (re == null || s == null ? null : (new RegExp(String(re)).test(String(s)) ? 1 : 0)));
+  db.function("NOW", () => new Date().toISOString());
+  db.function("uuid_generate_v4", () => require("crypto").randomUUID());
+  db.function("gen_random_uuid", () => require("crypto").randomUUID());
   db.exec("VACUUM INTO " + "\x27" + process.argv[2].replace(/\x27/g, "\x27\x27") + "\x27");
   db.close();
 ' "$SRC" "$OUT.partial"
