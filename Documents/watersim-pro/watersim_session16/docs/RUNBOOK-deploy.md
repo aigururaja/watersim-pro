@@ -233,12 +233,12 @@ cp .env.prod.example .env.prod
 #   IMAGE_TAG                  local
 chmod 600 .env.prod
 
-# nginx/proxy.conf hardcodes the example domain in FOUR places — two
+# nginx/proxy.conf hardcodes dt.inferconautomation.com in FOUR places — two
 # `server_name` lines and the two `ssl_certificate` paths. It is a mounted file,
 # not templated, so compose will not substitute PUBLIC_HOST for you. Miss this
 # and the proxy container crash-loops looking for certs under
-# /etc/letsencrypt/live/app.watersim.example.com/ that certbot never issued.
-sed -i 's/app\.watersim\.example\.com/app.example.com/g' nginx/proxy.conf
+# /etc/letsencrypt/live/dt.inferconautomation.com/ that certbot never issued.
+sed -i 's/dt\.inferconautomation\.com/app.example.com/g' nginx/proxy.conf   # only when deploying under another domain
 grep -n 'server_name\|ssl_certificate' nginx/proxy.conf     # confirm all four
 
 # TLS FIRST — nginx will not start without certs, and certbot's webroot renewal
