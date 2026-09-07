@@ -568,10 +568,15 @@ OUT="$DIR/watersim-$TS.db"
 set -a; . /etc/watersim/backend.env; set +a
 SRC="${DATABASE_URL#sqlite:}"
 export PATH=/opt/watersim/node/bin:$PATH
-rm -f "$OUT.partial"
+rm -f "$DIR"/*.partial
+# The schema's CHECK constraints call REGEXP, which SQLite only knows once a
+# connection registers it (the application does); VACUUM INTO re-reads the
+# schema, so the backup connection must register it as well.
 node --disable-warning=ExperimentalWarning -e '
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(process.argv[1], { readOnly: true });
+  db.function("regexp", { deterministic: true }, (re, s) =>
+    (re == null || s == null ? null : (new RegExp(String(re)).test(String(s)) ? 1 : 0)));
   db.exec("VACUUM INTO " + "\x27" + process.argv[2].replace(/\x27/g, "\x27\x27") + "\x27");
   db.close();
 ' "$SRC" "$OUT.partial"
