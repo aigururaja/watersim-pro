@@ -51,7 +51,7 @@ export default function RegisterPage() {
           <h1 className="text-3xl font-bold text-white">WaterSim Pro</h1>
           <p className="text-blue-100 mt-1 text-sm">Register your organisation</p>
         </div>
-        <div className="card p-8 shadow-2xl">
+        <div className="card p-8 shadow-2xl ws-page-enter">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Create your organisation</h2>
           {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
           <form onSubmit={handleSubmit} className="space-y-4">

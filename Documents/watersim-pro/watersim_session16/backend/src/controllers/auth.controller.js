@@ -321,4 +321,20 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, refresh, logout, logoutAll, me, changePassword };
+/**
+ * GET /api/auth/organisations
+ * The organisations a person can sign in to — slug and name only, so the
+ * login page can offer a picker instead of asking for the slug from memory.
+ * Public and rate-limited like login; it reveals nothing the slug field did
+ * not already expect a person to know.
+ */
+const listOrganisations = async (req, res, next) => {
+  try {
+    const rows = await OrgModel.listActive();
+    res.json({ success: true, data: rows.map((o) => ({ slug: o.slug, name: o.name })) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { register, login, refresh, logout, logoutAll, me, changePassword, listOrganisations };

@@ -12,9 +12,10 @@
  * Pages that are not yet built by their phase point at the closest existing
  * page, so nothing in the nav is a dead link during the rollout.
  */
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useReducedMotion } from '../AccessibilityProvider';
 import {
   Droplets, LayoutDashboard, FolderOpen, FileText, Settings,
   LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck, Bell,
@@ -311,6 +312,25 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
   // Close mobile drawer on route change
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
 
+  // Page transition: the content fades and settles into place on every route
+  // change (and on first paint), and the scroller returns to the top. It is a
+  // CSS animation restarted by hand rather than a keyed remount, so a page
+  // whose params change keeps its component instance and state. Reduced
+  // motion — the OS preference or the ws.motion override — shows the page at
+  // once instead (the stylesheet's reduced-motion rule catches the OS case
+  // even without JS).
+  const reducedMotion = useReducedMotion();
+  const pageRef = useRef(null);
+  const mainRef = useRef(null);
+  useEffect(() => {
+    if (typeof mainRef.current?.scrollTo === 'function') mainRef.current.scrollTo({ top: 0 });
+    const el = pageRef.current;
+    if (!el || reducedMotion) return;
+    el.classList.remove('ws-page-enter');
+    void el.offsetWidth; // flush the removal so the class re-applies as a fresh animation
+    el.classList.add('ws-page-enter');
+  }, [location.pathname, reducedMotion]);
+
   // Close drawer on resize to desktop
   useEffect(() => {
     const fn = () => { if (window.innerWidth >= 768) setDrawerOpen(false); };
@@ -405,8 +425,10 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
         </header>
 
         {/* Page content — bottom padding for mobile bottom nav */}
-        <main id="main-content" tabIndex="-1" className="flex-1 overflow-auto pb-16 md:pb-0 h-full" aria-label="Page content">
-          {children}
+        <main ref={mainRef} id="main-content" tabIndex="-1" className="flex-1 overflow-auto pb-16 md:pb-0 h-full" aria-label="Page content">
+          <div ref={pageRef} data-page={location.pathname} className={`h-full ${reducedMotion ? '' : 'ws-page-enter'}`}>
+            {children}
+          </div>
         </main>
       </div>
 

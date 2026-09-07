@@ -133,3 +133,17 @@ describe('POST /api/v1/auth/logout', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('GET /api/v1/auth/organisations', () => {
+  if (SKIP) return it.skip('No DB — skipping auth tests');
+
+  it('lists the organisations a person can sign in to — slug and name only, no token needed', async () => {
+    const res = await request(app).get('/api/v1/auth/organisations');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    const mine = res.body.data.find((o) => o.slug === slug);
+    expect(mine).toEqual({ slug, name: 'Auth Test Org' });
+    for (const o of res.body.data) expect(Object.keys(o).sort()).toEqual(['name', 'slug']);
+  });
+});

@@ -17,6 +17,14 @@ const OrgModel = {
     return result.rows[0] || null;
   },
 
+  /** Every organisation a person may sign in to — slug and name only, for the login page's picker. */
+  async listActive() {
+    const result = await query(
+      'SELECT slug, name FROM organisations WHERE is_active = TRUE ORDER BY LOWER(name), slug'
+    );
+    return result.rows;
+  },
+
   async create({ name, slug }) {
     const result = await query(
       `INSERT INTO organisations (name, slug)

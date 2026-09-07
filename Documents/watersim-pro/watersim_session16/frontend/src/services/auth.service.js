@@ -20,4 +20,9 @@ export const authService = {
     const res = await api.get('/auth/me');
     return res.data.data.user;
   },
+  /** The organisations a person can sign in to: [{ slug, name }] — public, for the login page's picker. */
+  async organisations() {
+    const res = await api.get('/auth/organisations');
+    return Array.isArray(res.data?.data) ? res.data.data : [];
+  },
 };

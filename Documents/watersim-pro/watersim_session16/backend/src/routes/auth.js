@@ -44,6 +44,19 @@ const changePasswordRules = [
     .withMessage('Password must be at least 8 characters with uppercase, lowercase, and a digit'),
 ];
 
+// The login page reads the organisation list once per visit. Looser than the
+// auth limiter so a reload never eats into the sign-in budget, still capped.
+const listLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => req.ip,
+});
+
+router.get('/organisations',    listLimiter,                authController.listOrganisations);
 router.post('/register',        authLimiter, registerRules, authController.register);
 router.post('/login',           authLimiter, loginRules,    authController.login);
 router.post('/refresh',                                     authController.refresh);
