@@ -5,6 +5,8 @@
  *
  *   GET    /notifications/me                 — my channels, my effective subscriptions, provider status
  *   PUT    /notifications/me/channels        — { email: {enabled, address?}, whatsapp: {enabled, address} }
+ *                                              the RECEIVER addresses; they default to the login email and
+ *                                              profile mobile but may differ, and never write back to them
  *   POST   /notifications/test               — { channel, userId? } → a test message to me (or, manager+, to a receiver), sent now
  *   GET    /notifications/receivers          — every active member with their email and WhatsApp addresses (manager+)
  *   PUT    /notifications/receivers/:userId  — set a member's addresses and channels for them (manager+)
@@ -69,6 +71,8 @@ async function sendMe(req, res, next) {
     res.json({
       email: { enabled: byChannel.email ? byChannel.email.enabled : true, address: byChannel.email?.address || u.rows[0]?.email || null, verified: byChannel.email?.verified ?? true },
       whatsapp: { enabled: byChannel.whatsapp ? byChannel.whatsapp.enabled : !!u.rows[0]?.phone_e164, address: byChannel.whatsapp?.address || u.rows[0]?.phone_e164 || null, verified: byChannel.whatsapp?.verified ?? false },
+      // The profile's own contact details, for the page to show alongside.
+      login: { email: u.rows[0]?.email || null, phone: u.rows[0]?.phone_e164 || null },
       subscriptions: subs.rows.map(fmtSub),
       providers: worker.providerStatus(),
     });
@@ -89,7 +93,10 @@ const CHANNEL_BODY = [
 
 /**
  * Save { email: {enabled, address?}, whatsapp: {enabled, address?} } for a user.
- * A changed WhatsApp number is no longer verified. Returns a 422 body, or null.
+ * These are the receiver addresses: they start out as the login email and the
+ * profile mobile, but a person may want alarms elsewhere, so they are stored on
+ * the channel row and never written back to the profile. A changed WhatsApp
+ * number is no longer verified. Returns a 422 body, or null.
  */
 async function saveChannels(uid, input) {
   for (const channel of CHANNELS) {
@@ -112,7 +119,6 @@ async function saveChannels(uid, input) {
          verified = CASE WHEN notification_channels.address = EXCLUDED.address THEN notification_channels.verified ELSE FALSE END`,
       [uid, channel, address, enabled]
     );
-    if (channel === 'whatsapp') await query('UPDATE users SET phone_e164 = $2 WHERE id = $1', [uid, address]);
   }
   return null;
 }
@@ -156,7 +162,7 @@ async function listReceivers(orgId) {
     const hears = subs.filter((x) => x.user_id === u.id || x.role === u.role)
       .map((x) => ({ eventType: x.event_type, minSeverity: x.min_severity, channels: x.channels }));
     return {
-      id: u.id, name: `${u.first_name} ${u.last_name}`, role: u.role, login: u.email, lastLoginAt: u.last_login_at,
+      id: u.id, name: `${u.first_name} ${u.last_name}`, role: u.role, login: u.email, mobile: u.phone_e164 || null, lastLoginAt: u.last_login_at,
       email, whatsapp: wa, hears,
       reachable: { email: !!(email.enabled && email.address), whatsapp: !!(wa.enabled && wa.address) },
     };

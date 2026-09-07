@@ -1,8 +1,9 @@
 /**
  * NotificationsTab — the Settings panel for Phase 2 notifications.
  *
- *   My channels    email on/off (login address by default), WhatsApp number,
- *                  "send test" per channel with the delivery result shown.
+ *   My channels    the RECEIVER email and WhatsApp number — they start as the
+ *                  login email and profile mobile but may differ, and editing
+ *                  them never changes the login — with "send test" per channel.
  *   Policy         who hears what: (role | user) × event type × minimum
  *                  severity → channels. Read by everyone, edited by managers
  *                  and admins (capability notify.policy). One click installs
@@ -119,7 +120,7 @@ export default function NotificationsTab({ showToast }) {
     setBusy('save');
     try {
       const body = {
-        email: { enabled: form.email.enabled },
+        email: { enabled: form.email.enabled, ...(form.email.address.trim() ? { address: form.email.address.trim() } : {}) },
         ...(form.whatsapp.address || !form.whatsapp.enabled ? { whatsapp: { enabled: form.whatsapp.enabled, ...(form.whatsapp.address ? { address: form.whatsapp.address.trim() } : {}) } } : {}),
       };
       const { data } = await api.put('/notifications/me/channels', body);
@@ -237,7 +238,13 @@ export default function NotificationsTab({ showToast }) {
               <input type="checkbox" checked={form.email.enabled} onChange={(e) => setForm((f) => ({ ...f, email: { ...f.email, enabled: e.target.checked } }))} className="accent-brand-600" />
               <Mail className="w-4 h-4 text-gray-500" /> Email
             </label>
-            <div className="text-xs text-gray-500">Sent to <span className="font-mono">{form.email.address || 'your login address'}</span>.</div>
+            <input className="input py-1.5 text-sm w-full font-mono" type="email" placeholder={me?.login?.email || 'you@example.com'} value={form.email.address}
+              onChange={(e) => setForm((f) => ({ ...f, email: { ...f.email, address: e.target.value } }))} aria-label="Notification email address" />
+            <div className="text-xs text-gray-500" data-testid="login-email">
+              {me?.login?.email && form.email.address.trim() && form.email.address.trim().toLowerCase() !== me.login.email
+                ? <>Notifications go to the address above; you still sign in as <span className="font-mono">{me.login.email}</span>.</>
+                : <>Same as your login email — enter another address to receive notifications elsewhere.</>}
+            </div>
             <button onClick={() => sendTest('email')} disabled={!!busy} className="btn-secondary text-xs disabled:opacity-50" aria-label="Send test email">
               {busy === 'test:email' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send test
             </button>
@@ -254,6 +261,14 @@ export default function NotificationsTab({ showToast }) {
                 ? 'Verified — this number has replied to the plant’s WhatsApp number.'
                 : 'Send “hi” to the plant’s WhatsApp number once from this phone: that verifies the number and opens a 24-hour window for plain-text messages.'}
             </div>
+            {me?.login?.phone && (
+              <div className="text-xs text-gray-500" data-testid="profile-mobile">
+                Mobile on your profile: <span className="font-mono">{me.login.phone}</span>
+                {form.whatsapp.address && form.whatsapp.address !== me.login.phone
+                  ? ' — WhatsApp messages go to the number above instead.'
+                  : ' — used for WhatsApp unless you enter another number above.'}
+              </div>
+            )}
             <button onClick={() => sendTest('whatsapp')} disabled={!!busy || !me?.whatsapp?.address} className="btn-secondary text-xs disabled:opacity-50" aria-label="Send test WhatsApp">
               {busy === 'test:whatsapp' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send test
             </button>
@@ -362,7 +377,7 @@ export default function NotificationsTab({ showToast }) {
         <section aria-label="Receivers" className="space-y-2">
           <h3 className="text-sm font-semibold text-gray-900">
             Receivers
-            <span className="ml-2 text-xs font-normal text-gray-500">every active member by role — set the addresses here, or let each person set their own</span>
+            <span className="ml-2 text-xs font-normal text-gray-500">every active member by role — the receiver addresses may differ from the login email and mobile shown under each name; an admin changes those under Users</span>
           </h3>
           <div className="overflow-x-auto card">
             <table className="w-full text-xs">
@@ -372,7 +387,11 @@ export default function NotificationsTab({ showToast }) {
               <tbody>
                 {receivers.map((r) => (
                   <tr key={r.id} className="border-t border-gray-100 align-top" data-receiver={r.id}>
-                    <td className="px-3 py-2"><div className="font-medium text-gray-900">{r.name}</div><div className="text-gray-500 capitalize">{r.role}</div></td>
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-gray-900">{r.name}</div>
+                      <div className="text-gray-500 capitalize">{r.role}</div>
+                      <div className="text-[10px] text-gray-400 font-mono" data-testid={`profile-${r.id}`}>login {r.login}{r.mobile ? ` · mobile ${r.mobile}` : ''}</div>
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
                         <input type="checkbox" checked={!!r.email.enabled} onChange={(e) => editReceiver(r.id, 'email', { enabled: e.target.checked })} aria-label={`Email for ${r.name}`} className="accent-brand-600" />

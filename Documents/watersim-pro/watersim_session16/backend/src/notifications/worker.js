@@ -33,10 +33,13 @@ const asObject = (p) => (p && typeof p === 'object' ? p : (() => { try { return 
 
 /**
  * Claim due rows (or one specific row) and mark them 'sending'.
- * "Due" is judged against this process's clock with a second of slack rather
- * than the database's NOW(): SQLite's default timestamp and the JS clock can
- * differ by a millisecond, which left a row inserted and drained in the same
- * instant (the settings page's "send test", a retry) unclaimed.
+ * A row is due when EITHER clock says so: the database's NOW() — the clock
+ * that stamps DEFAULT next_attempt_at and a manual retry — or this process's,
+ * with a second of slack. The two are not the same clock on SQLite (a default
+ * can round a millisecond ahead of Date.now(); a monotonic NOW() can run ahead
+ * of wall time after a burst of writes), and judging by one alone left a row
+ * inserted and drained in the same instant unclaimed, silently. On Postgres
+ * NOW() is the server's time, the same clock as the default.
  */
 async function claim({ onlyId = null, limit = BATCH } = {}) {
   const due = new Date(Date.now() + DUE_SLACK_MS);
@@ -44,7 +47,7 @@ async function claim({ onlyId = null, limit = BATCH } = {}) {
     `UPDATE notification_outbox AS o SET state = 'sending', attempts = o.attempts + 1
       WHERE o.id IN (
         SELECT id FROM notification_outbox
-         WHERE state IN ('pending', 'failed') AND next_attempt_at <= $2 ${onlyId ? 'AND id = $3' : ''}
+         WHERE state IN ('pending', 'failed') AND (next_attempt_at <= NOW() OR next_attempt_at <= $2) ${onlyId ? 'AND id = $3' : ''}
          ORDER BY created_at
          LIMIT $1
          FOR UPDATE SKIP LOCKED)

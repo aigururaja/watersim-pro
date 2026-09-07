@@ -250,7 +250,11 @@ a manager sees every active member's email and WhatsApp under Settings →
 Notifications → Receivers (`/api/v1/notifications/receivers`), edits them,
 sends each a test, and installs the default policy for all five roles in one
 click (`POST /api/v1/notifications/subscriptions/defaults`). Each person can
-still change their own addresses under My channels. The Tasks board is at
+still change their own addresses under My channels. The login email and the
+profile mobile (Admin → Users; `email` and `phone` on the members API) are
+separate from the receiver email and WhatsApp number: the receiver addresses
+start out equal to them but may be set to anything else, and changing one side
+never changes the other. The Tasks board is at
 `/tasks`; the organisation's policy is under Settings → Notifications.
 
 On every authenticated request the user's **current** role and active flag are

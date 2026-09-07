@@ -570,7 +570,7 @@ describe('receivers', () => {
     expect(put.body.whatsapp).toMatchObject({ enabled: true, address: '+919876543211', verified: false });
     expect(put.body.email.address).toBe('viewer.alt@test.example');
     expect(put.body.reachable).toEqual({ email: true, whatsapp: true });
-    expect((await query('SELECT phone_e164 FROM users WHERE id = $1', [viewer.id])).rows[0].phone_e164).toBe('+919876543211');
+    expect((await query('SELECT phone_e164 FROM users WHERE id = $1', [viewer.id])).rows[0].phone_e164).toBeNull(); // the profile mobile is a separate thing
     const me = await viewer.agent.get('/api/v1/notifications/me');
     expect(me.body.whatsapp.address).toBe('+919876543211');
     expect(me.body.email.address).toBe('viewer.alt@test.example');
@@ -633,5 +633,50 @@ describe('receivers', () => {
     expect(cleared.body.phone).toBeNull();
     rx = await manager.agent.get('/api/v1/notifications/receivers');
     expect(rx.body.receivers.find((x) => x.id === inv.body.id).reachable.whatsapp).toBe(false);
+  });
+});
+
+// ── Login email and mobile on the profile; receiver addresses on the channel ──
+describe('profile and receiver addresses differ', () => {
+  test('a person sets a receiver email and WhatsApp that differ from the login and mobile; the outbox uses them', async () => {
+    const me0 = await operator.agent.get('/api/v1/notifications/me');
+    expect(me0.body.login.email).toBe(operator.email);
+    const mobile = me0.body.login.phone;
+    const put = await operator.agent.put('/api/v1/notifications/me/channels')
+      .send({ email: { enabled: true, address: 'ops.alerts@test.example' }, whatsapp: { enabled: true, address: '+919876543299' } });
+    expect(put.status).toBe(200);
+    expect(put.body.email.address).toBe('ops.alerts@test.example');
+    expect(put.body.whatsapp.address).toBe('+919876543299');
+    expect(put.body.login).toEqual({ email: operator.email, phone: mobile }); // untouched
+    const u = (await query('SELECT email, phone_e164 FROM users WHERE id = $1', [ids.operator])).rows[0];
+    expect(u.email).toBe(operator.email);
+    expect(u.phone_e164).toBe(mobile);
+
+    const r = await emit('notification.test', { orgId, onlyUsers: [ids.operator], dedupeKey: `pv|${Date.now()}` });
+    expect(r.queued).toBe(2);
+    const rows = (await query(`SELECT channel, address FROM notification_outbox WHERE user_id = $1 AND event_type = 'notification.test' ORDER BY created_at DESC LIMIT 2`, [ids.operator])).rows;
+    expect(rows.map((x) => x.address).sort()).toEqual(['+919876543299', 'ops.alerts@test.example']);
+
+    const rx = await manager.agent.get('/api/v1/notifications/receivers');
+    expect(rx.body.receivers.find((x) => x.id === ids.operator)).toMatchObject({
+      login: operator.email, mobile, email: { address: 'ops.alerts@test.example' }, whatsapp: { address: '+919876543299' },
+    });
+  });
+
+  test('an admin changes the login email and mobile without touching the receiver addresses', async () => {
+    const newLogin = uniq('maint.operator.renamed');
+    const up = await admin.patch(`/api/v1/admin/members/${ids.operator}`).send({ email: newLogin.toUpperCase(), phone: '+919800000099' });
+    expect(up.status).toBe(200);
+    expect(up.body.email).toBe(newLogin);
+    expect(up.body.phone).toBe('+919800000099');
+    const me = await operator.agent.get('/api/v1/notifications/me');
+    expect(me.body.login).toEqual({ email: newLogin, phone: '+919800000099' });
+    expect(me.body.email.address).toBe('ops.alerts@test.example');
+    expect(me.body.whatsapp.address).toBe('+919876543299');
+    expect((await admin.patch(`/api/v1/admin/members/${ids.operator}`).send({ email: manager.email })).status).toBe(409);
+    expect((await admin.patch(`/api/v1/admin/members/${ids.operator}`).send({ email: 'nope' })).status).toBe(422);
+    expect((await admin.patch(`/api/v1/admin/members/${ids.operator}`).send({ email: newLogin })).status).toBe(200); // own address again is fine
+    const list = await admin.get('/api/v1/admin/members');
+    expect(list.body.find((m) => m.id === ids.operator)).toMatchObject({ email: newLogin, phone: '+919800000099' });
   });
 });

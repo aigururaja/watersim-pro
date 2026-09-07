@@ -142,10 +142,10 @@ function InviteModal({ onClose, onCreated }) {
             </div>
 
             <div>
-              <label className="label" htmlFor="inv-phone">WhatsApp number</label>
+              <label className="label" htmlFor="inv-phone">Mobile number</label>
               <input id="inv-phone" type="tel" className="input font-mono" value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 or 98765 43210" />
-              <p className="text-xs text-gray-500 mt-1">Optional. Alarms and tasks reach them on WhatsApp as well as by email; they can change it later under Settings → Notifications.</p>
+              <p className="text-xs text-gray-500 mt-1">Optional. WhatsApp notifications go here unless a different receiver number is set under Settings → Notifications; the receiver email likewise defaults to the login email.</p>
             </div>
 
             {/* Role picker */}
@@ -209,6 +209,7 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
     lastName:  member.lastName,
     role:      member.role,
     isActive:  member.isActive,
+    email:     member.email || '',
     phone:     member.phone || '',
   });
   const [saving, setSaving] = useState(false);
@@ -220,7 +221,7 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
     setError('');
     setSaving(true);
     try {
-      const { data } = await api.patch(`/admin/members/${member.id}`, { ...form, phone: form.phone.trim() || null });
+      const { data } = await api.patch(`/admin/members/${member.id}`, { ...form, email: form.email.trim(), phone: form.phone.trim() || null });
       onSaved(data);
     } catch (err) {
       setError(err.response?.data?.error || 'Update failed');
@@ -262,10 +263,17 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
             </div>
 
             <div>
-              <label className="label" htmlFor="em-phone">WhatsApp number</label>
+              <label className="label" htmlFor="em-email">Login email</label>
+              <input id="em-email" type="email" className="input" value={form.email} required
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+              <p className="text-xs text-gray-500 mt-1">How they sign in. Their notification email may be a different address, set under Settings → Notifications.</p>
+            </div>
+
+            <div>
+              <label className="label" htmlFor="em-phone">Mobile number</label>
               <input id="em-phone" type="tel" className="input font-mono" value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 or 98765 43210" />
-              <p className="text-xs text-gray-500 mt-1">Leave empty to remove it. A changed number needs verifying again (a reply from the phone).</p>
+              <p className="text-xs text-gray-500 mt-1">Their profile mobile; leave empty to remove it. WhatsApp notifications use it unless a different receiver number is set under Settings → Notifications → Receivers.</p>
             </div>
 
             {/* Role */}

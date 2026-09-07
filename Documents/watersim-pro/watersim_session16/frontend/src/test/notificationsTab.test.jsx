@@ -32,13 +32,13 @@ const providers = (provider) => ({
 
 const RECEIVERS = [
   { id: 'u1', name: 'Maya Manager', role: 'manager', login: 'm@example.com', email: { enabled: true, address: 'm@example.com', verified: true }, whatsapp: { enabled: true, address: '+919876543210', verified: true }, hears: [{ eventType: 'alarm.raised', minSeverity: 'critical', channels: ['email', 'whatsapp'] }], reachable: { email: true, whatsapp: true } },
-  { id: 'u2', name: 'Vikram Viewer', role: 'viewer', login: 'v@example.com', email: { enabled: true, address: 'v@example.com', verified: true }, whatsapp: { enabled: false, address: null, verified: false }, hears: [], reachable: { email: true, whatsapp: false } },
+  { id: 'u2', name: 'Vikram Viewer', role: 'viewer', login: 'v@example.com', mobile: '+919800000004', email: { enabled: true, address: 'v@example.com', verified: true }, whatsapp: { enabled: false, address: null, verified: false }, hears: [], reachable: { email: true, whatsapp: false } },
 ];
 
 function answers(provider = 'meta', { verified = false, missing = ['viewer:alarm.raised'] } = {}) {
   const p = providers(provider);
   return (url) => {
-    if (url === '/notifications/me') return Promise.resolve({ data: { email: { enabled: true, address: 'm@example.com', verified: true }, whatsapp: { enabled: true, address: '+919876543210', verified }, subscriptions: [], providers: p } });
+    if (url === '/notifications/me') return Promise.resolve({ data: { email: { enabled: true, address: 'm@example.com', verified: true }, whatsapp: { enabled: true, address: '+919876543210', verified }, login: { email: 'm@example.com', phone: '+919876543210' }, subscriptions: [], providers: p } });
     if (url === '/notifications/events') return Promise.resolve({ data: { events: [{ type: 'alarm.raised', label: 'Alarm raised' }], channels: ['email', 'whatsapp'] } });
     if (url === '/notifications/subscriptions') return Promise.resolve({ data: { subscriptions: [], defaults: [], missingDefaults: missing } });
     if (url === '/notifications/receivers') return Promise.resolve({ data: { receivers: RECEIVERS, providers: p } });
@@ -89,6 +89,22 @@ describe('NotificationsTab — WhatsApp through Meta', () => {
     expect(bad.querySelector('td.text-red-600')).not.toBeNull();
   });
 
+  it('lets a person receive at an address other than the login, and says which is which', async () => {
+    api.get.mockImplementation(answers('meta'));
+    api.put.mockResolvedValue({ data: { email: { enabled: true, address: 'alerts@example.com', verified: true }, whatsapp: { enabled: true, address: '+919876543210', verified: false }, login: { email: 'm@example.com', phone: '+919876543210' }, subscriptions: [], providers: providers('meta') } });
+    const toast = vi.fn();
+    render(<NotificationsTab showToast={toast} />);
+    const input = await screen.findByLabelText('Notification email address');
+    expect(input).toHaveValue('m@example.com');
+    expect(screen.getByTestId('login-email')).toHaveTextContent('Same as your login email');
+    expect(screen.getByTestId('profile-mobile')).toHaveTextContent('Mobile on your profile: +919876543210 — used for WhatsApp');
+    fireEvent.change(input, { target: { value: 'alerts@example.com' } });
+    expect(screen.getByTestId('login-email')).toHaveTextContent('you still sign in as m@example.com');
+    fireEvent.click(screen.getByLabelText('Save channels'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/notifications/me/channels', expect.objectContaining({ email: { enabled: true, address: 'alerts@example.com' } })));
+    expect(toast).toHaveBeenCalledWith('Notification channels saved');
+  });
+
   it('says a verified number is verified', async () => {
     api.get.mockImplementation(answers('meta', { verified: true }));
     render(<NotificationsTab showToast={vi.fn()} />);
@@ -117,6 +133,7 @@ describe('NotificationsTab — receivers for every kind of user', () => {
     expect(rows[0]).toHaveTextContent('Maya Manager');
     expect(rows[0].querySelector('[data-verified="yes"]')).not.toBeNull();
     expect(rows[1]).toHaveTextContent('nothing yet — add a policy row for every viewer');
+    expect(within(rows[1]).getByTestId('profile-u2')).toHaveTextContent('login v@example.com · mobile +919800000004');
     // No number, no WhatsApp test.
     expect(within(section).getByLabelText('Test WhatsApp to Vikram Viewer')).toBeDisabled();
     expect(within(section).getByLabelText('Save receiver Vikram Viewer')).toBeDisabled();
