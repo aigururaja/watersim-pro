@@ -30,28 +30,25 @@ const ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
 const ORG = { name: 'ITC — Sewage Treatment Plant', slug: 'itc-stp' };
 
 const USERS = [
-  { email: 'admin@itc-stp.local', password: 'Admin1234!', first: 'Plant', last: 'Administrator', role: 'admin' },
+  // Every kind of user has a phone number, so each role can be reached on
+  // WhatsApp as well as by email (Settings → Notifications → Receivers).
+  { email: 'admin@itc-stp.local', password: 'Admin1234!', first: 'Plant', last: 'Administrator', role: 'admin', phone: '+919800000000' },
   // The manager is the role that approves maintenance tasks and acknowledges
   // critical alarms (Phase 2). It needs migration 009 to have committed before
   // this seed runs — which it has, because migrations always run first.
   { email: 'manager@itc-stp.local', password: 'Manager1!', first: 'Plant', last: 'Manager', role: 'manager', phone: '+919800000001' },
   { email: 'engineer@itc-stp.local', password: 'Engineer1!', first: 'Process', last: 'Engineer', role: 'engineer', phone: '+919800000002' },
   { email: 'operator@itc-stp.local', password: 'Operator1!', first: 'Shift', last: 'Operator', role: 'operator', phone: '+919800000003' },
+  { email: 'viewer@itc-stp.local', password: 'Viewer123!', first: 'Plant', last: 'Viewer', role: 'viewer', phone: '+919800000004' },
 ];
 
 /**
- * Who hears what (Phase 2). Role rows name the role exactly. The assignee of a
- * task always hears about their own assignment regardless of this table.
+ * Who hears what (Phase 2): the platform's default policy, one set of rows per
+ * role (notifications/defaults.js), so viewer, operator, engineer, manager and
+ * admin each hear what their role needs. The assignee of a task always hears
+ * about their own assignment regardless of this table.
  */
-const SUBSCRIPTIONS = [
-  { role: 'manager',  eventType: 'alarm.raised',   minSeverity: 'critical', channels: ['email', 'whatsapp'] },
-  { role: 'manager',  eventType: 'task.completed', minSeverity: 'info',     channels: ['email', 'whatsapp'] },
-  { role: 'manager',  eventType: 'task.created',   minSeverity: 'critical', channels: ['email'] },
-  { role: 'engineer', eventType: 'alarm.raised',   minSeverity: 'warning',  channels: ['email'] },
-  { role: 'engineer', eventType: 'task.rejected',  minSeverity: 'info',     channels: ['email', 'whatsapp'] },
-  { role: 'engineer', eventType: 'task.approved',  minSeverity: 'info',     channels: ['email'] },
-  { role: 'operator', eventType: 'alarm.',         minSeverity: 'warning',  channels: ['email'] },
-];
+const { DEFAULT_POLICY, installDefaultPolicy } = require('../notifications/defaults');
 
 /**
  * Alarm rules from the narrative's own setpoints.
@@ -428,16 +425,8 @@ async function seedItcStp(query, log = console.log) {
      WHERE organisation_id = $1 AND flowsheet_id = $2 AND severity IN ('critical', 'warning')
   `, [org.id, flowsheet.id]);
   let subCount = 0;
-  for (const s of SUBSCRIPTIONS) {
-    const r = await query(`
-      INSERT INTO notification_subscriptions (organisation_id, role, event_type, min_severity, channels, created_by)
-      SELECT $1, $2, $3, $4, $5::text[], $6
-       WHERE NOT EXISTS (SELECT 1 FROM notification_subscriptions
-                          WHERE organisation_id = $1 AND role = $2 AND event_type = $3)
-    `, [org.id, s.role, s.eventType, s.minSeverity, s.channels, admin.id]);
-    subCount += r.rowCount;
-  }
-  log(`   ✔  Notifications : ${subCount} policy rows added (${SUBSCRIPTIONS.length} defined); critical + warning rules raise tasks`);
+  subCount = (await installDefaultPolicy(org.id, admin.id)).added;
+  log(`   ✔  Notifications : ${subCount} policy rows added (${DEFAULT_POLICY.length} defined, every role); critical + warning rules raise tasks`);
 
   // ── The twin: its own project, imported from the plant, running every 30 s ─
   const twinFlowsheet = await ensureTwinProject(query, org, admin, project, flowsheet, log);
@@ -494,4 +483,4 @@ async function ensureTwinProject(query, org, admin, project, flowsheet, log) {
   return f;
 }
 
-module.exports = { seedItcStp, ORG, USERS, ALARM_RULES, SUBSCRIPTIONS };
+module.exports = { seedItcStp, ORG, USERS, ALARM_RULES, DEFAULT_POLICY };

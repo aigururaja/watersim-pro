@@ -5,7 +5,10 @@
  *
  *   GET    /notifications/me                 — my channels, my effective subscriptions, provider status
  *   PUT    /notifications/me/channels        — { email: {enabled, address?}, whatsapp: {enabled, address} }
- *   POST   /notifications/test               — { channel } → a test message to me, sent now
+ *   POST   /notifications/test               — { channel, userId? } → a test message to me (or, manager+, to a receiver), sent now
+ *   GET    /notifications/receivers          — every active member with their email and WhatsApp addresses (manager+)
+ *   PUT    /notifications/receivers/:userId  — set a member's addresses and channels for them (manager+)
+ *   POST   /notifications/subscriptions/defaults — install the default policy for every role (manager+)
  *   GET    /notifications/events             — the event-type catalogue
  *   GET    /notifications/subscriptions      — the organisation's policy
  *   POST   /notifications/subscriptions      — add a policy row               (manager+ · notify.policy)
@@ -21,9 +24,10 @@ const express = require('express');
 const { body, param, query: qv, validationResult } = require('express-validator');
 const { query } = require('../db/pool');
 const { authenticate, requireCapability } = require('../middleware/auth');
-const { ROLES } = require('../auth/roles');
+const { ROLES, can } = require('../auth/roles');
 const { auditLog } = require('../utils/audit');
 const { emit, EVENT_TYPES, CHANNELS } = require('../notifications');
+const { DEFAULT_POLICY, installDefaultPolicy, missingDefaults } = require('../notifications/defaults');
 const worker = require('../notifications/worker');
 const whatsapp = require('../notifications/adapters/whatsapp');
 
@@ -72,8 +76,8 @@ async function sendMe(req, res, next) {
 }
 router.get('/me', sendMe);
 
-// ── PUT /notifications/me/channels ───────────────────────────────────────────
-router.put('/me/channels', [
+// ── Channel addresses (mine, or a receiver's) ────────────────────────────────
+const CHANNEL_BODY = [
   body('email').optional().isObject(),
   body('email.enabled').optional().isBoolean().toBoolean(),
   body('email.address').optional({ nullable: true }).isEmail().normalizeEmail({ gmail_remove_dots: false }),
@@ -81,60 +85,134 @@ router.put('/me/channels', [
   body('whatsapp.enabled').optional().isBoolean().toBoolean(),
   // A bare local number ("98765 43210") becomes E.164 with WHATSAPP_DEFAULT_COUNTRY_CODE.
   body('whatsapp.address').optional({ nullable: true }).customSanitizer((v) => whatsapp.toE164(v) || v).matches(E164).withMessage('WhatsApp number must be E.164 (+919876543210) or a 10-digit local number'),
-], async (req, res, next) => {
+];
+
+/**
+ * Save { email: {enabled, address?}, whatsapp: {enabled, address?} } for a user.
+ * A changed WhatsApp number is no longer verified. Returns a 422 body, or null.
+ */
+async function saveChannels(uid, input) {
+  for (const channel of CHANNELS) {
+    const c = input[channel];
+    if (!c) continue;
+    const cur = await query('SELECT address, enabled FROM notification_channels WHERE user_id = $1 AND channel = $2', [uid, channel]);
+    const fallback = channel === 'email'
+      ? (await query('SELECT email FROM users WHERE id = $1', [uid])).rows[0]?.email
+      : (await query('SELECT phone_e164 FROM users WHERE id = $1', [uid])).rows[0]?.phone_e164;
+    const address = c.address ?? cur.rows[0]?.address ?? fallback ?? null;
+    const enabled = c.enabled ?? cur.rows[0]?.enabled ?? true;
+    if (!address) {
+      if (enabled && channel === 'whatsapp') return { error: 'Validation failed', details: [{ msg: 'a WhatsApp number is needed to enable WhatsApp', path: 'whatsapp.address' }] };
+      continue;
+    }
+    await query(
+      `INSERT INTO notification_channels (user_id, channel, address, enabled)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, channel) DO UPDATE SET address = EXCLUDED.address, enabled = EXCLUDED.enabled,
+         verified = CASE WHEN notification_channels.address = EXCLUDED.address THEN notification_channels.verified ELSE FALSE END`,
+      [uid, channel, address, enabled]
+    );
+    if (channel === 'whatsapp') await query('UPDATE users SET phone_e164 = $2 WHERE id = $1', [uid, address]);
+  }
+  return null;
+}
+
+// ── PUT /notifications/me/channels ───────────────────────────────────────────
+router.put('/me/channels', CHANNEL_BODY, async (req, res, next) => {
   if (vErr(req, res)) return;
   try {
     const uid = userId(req);
-    for (const channel of CHANNELS) {
-      const c = req.body[channel];
-      if (!c) continue;
-      const cur = await query('SELECT address, enabled FROM notification_channels WHERE user_id = $1 AND channel = $2', [uid, channel]);
-      const fallback = channel === 'email'
-        ? (await query('SELECT email FROM users WHERE id = $1', [uid])).rows[0]?.email
-        : (await query('SELECT phone_e164 FROM users WHERE id = $1', [uid])).rows[0]?.phone_e164;
-      const address = c.address ?? cur.rows[0]?.address ?? fallback ?? null;
-      const enabled = c.enabled ?? cur.rows[0]?.enabled ?? true;
-      if (!address) {
-        if (enabled && channel === 'whatsapp') return res.status(422).json({ error: 'Validation failed', details: [{ msg: 'a WhatsApp number is needed to enable WhatsApp', path: 'whatsapp.address' }] });
-        continue;
-      }
-      await query(
-        `INSERT INTO notification_channels (user_id, channel, address, enabled)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (user_id, channel) DO UPDATE SET address = EXCLUDED.address, enabled = EXCLUDED.enabled`,
-        [uid, channel, address, enabled]
-      );
-      if (channel === 'whatsapp') await query('UPDATE users SET phone_e164 = $2 WHERE id = $1', [uid, address]);
-    }
+    const problem = await saveChannels(uid, req.body);
+    if (problem) return res.status(422).json(problem);
     auditLog(req, 'notification.channels.update', 'user', uid, { channels: Object.keys(req.body) });
     return sendMe(req, res, next); // answer with the same shape GET /me gives
   } catch (err) { next(err); }
 });
 
-// ── POST /notifications/test ─────────────────────────────────────────────────
-router.post('/test', [body('channel').isIn(CHANNELS)], async (req, res, next) => {
+// ── Receivers: every active member, as the outbox would reach them ───────────
+// So a manager can set up email and WhatsApp for every role from one table
+// instead of waiting for each person to visit their own settings.
+async function listReceivers(orgId) {
+  const { rows: users } = await query(
+    `SELECT id, email, phone_e164, first_name, last_name, role, last_login_at FROM users
+      WHERE organisation_id = $1 AND is_active = TRUE ORDER BY role, first_name, last_name`,
+    [orgId]
+  );
+  if (!users.length) return [];
+  const { rows: chans } = await query(
+    'SELECT user_id, channel, address, enabled, verified FROM notification_channels WHERE user_id = ANY($1::uuid[])',
+    [users.map((u) => u.id)]
+  );
+  const { rows: subs } = await query(
+    'SELECT user_id, role, event_type, min_severity, channels FROM notification_subscriptions WHERE organisation_id = $1 AND enabled = TRUE',
+    [orgId]
+  );
+  const prefs = new Map();
+  for (const c of chans) { if (!prefs.has(c.user_id)) prefs.set(c.user_id, {}); prefs.get(c.user_id)[c.channel] = c; }
+  return users.map((u) => {
+    const p = prefs.get(u.id) || {};
+    const email = { enabled: p.email ? p.email.enabled : true, address: p.email?.address || u.email, verified: p.email?.verified ?? true };
+    const wa = { enabled: p.whatsapp ? p.whatsapp.enabled : !!u.phone_e164, address: p.whatsapp?.address || u.phone_e164 || null, verified: p.whatsapp?.verified ?? false };
+    const hears = subs.filter((x) => x.user_id === u.id || x.role === u.role)
+      .map((x) => ({ eventType: x.event_type, minSeverity: x.min_severity, channels: x.channels }));
+    return {
+      id: u.id, name: `${u.first_name} ${u.last_name}`, role: u.role, login: u.email, lastLoginAt: u.last_login_at,
+      email, whatsapp: wa, hears,
+      reachable: { email: !!(email.enabled && email.address), whatsapp: !!(wa.enabled && wa.address) },
+    };
+  });
+}
+
+router.get('/receivers', requireCapability('notify.policy'), async (req, res, next) => {
+  try {
+    res.json({ receivers: await listReceivers(orgId(req)), providers: worker.providerStatus() });
+  } catch (err) { next(err); }
+});
+
+router.put('/receivers/:userId', requireCapability('notify.policy'), [param('userId').isUUID(), ...CHANNEL_BODY], async (req, res, next) => {
   if (vErr(req, res)) return;
   try {
+    const u = await query('SELECT id FROM users WHERE id = $1 AND organisation_id = $2 AND is_active = TRUE', [req.params.userId, orgId(req)]);
+    if (!u.rows[0]) return res.status(404).json({ error: 'Member not found' });
+    const problem = await saveChannels(req.params.userId, req.body);
+    if (problem) return res.status(422).json(problem);
+    auditLog(req, 'notification.receiver.update', 'user', req.params.userId, { channels: Object.keys(req.body) });
+    const all = await listReceivers(orgId(req));
+    res.json(all.find((r) => r.id === req.params.userId));
+  } catch (err) { next(err); }
+});
+
+// ── POST /notifications/test ─────────────────────────────────────────────────
+router.post('/test', [body('channel').isIn(CHANNELS), body('userId').optional({ nullable: true }).isUUID()], async (req, res, next) => {
+  if (vErr(req, res)) return;
+  try {
+    const me = userId(req);
+    const target = req.body.userId || me;
+    if (target !== me) {
+      if (!can(req.user.role, 'notify.policy')) return res.status(403).json({ error: 'Only a manager or admin can send a test to someone else' });
+      const u = await query('SELECT id FROM users WHERE id = $1 AND organisation_id = $2 AND is_active = TRUE', [target, orgId(req)]);
+      if (!u.rows[0]) return res.status(404).json({ error: 'Member not found' });
+    }
     const queued = await emit('notification.test', {
-      orgId: orgId(req), severity: 'info', onlyUsers: [userId(req)],
-      dedupeKey: `test|${userId(req)}|${Date.now()}`,
+      orgId: orgId(req), severity: 'info', onlyUsers: [target],
+      dedupeKey: `test|${target}|${Date.now()}`,
     });
     // Only the requested channel; the other's row is dropped before sending.
     const { rows } = await query(
       `DELETE FROM notification_outbox WHERE user_id = $1 AND event_type = 'notification.test' AND channel <> $2 AND state = 'pending' RETURNING id`,
-      [userId(req), req.body.channel]
+      [target, req.body.channel]
     );
     void rows;
     const pending = await query(
       `SELECT id FROM notification_outbox WHERE user_id = $1 AND event_type = 'notification.test' AND channel = $2 AND state = 'pending' ORDER BY created_at DESC LIMIT 1`,
-      [userId(req), req.body.channel]
+      [target, req.body.channel]
     );
     if (!pending.rows[0]) {
-      return res.status(422).json({ error: `No ${req.body.channel} address on your profile — add one first` });
+      return res.status(422).json({ error: target === me ? `No ${req.body.channel} address on your profile — add one first` : `That member has no ${req.body.channel} address, or it is switched off` });
     }
     await worker.drain({ onlyId: pending.rows[0].id });
     const { rows: [row] } = await query('SELECT id, channel, address, state, attempts, last_error, sent_at FROM notification_outbox WHERE id = $1', [pending.rows[0].id]);
-    auditLog(req, 'notification.test', 'notification', row.id, { channel: row.channel, state: row.state });
+    auditLog(req, 'notification.test', 'notification', row.id, { channel: row.channel, state: row.state, userId: target });
     res.json({ ...row, queued: queued.queued, providers: worker.providerStatus() });
   } catch (err) { next(err); }
 });
@@ -147,7 +225,18 @@ router.get('/subscriptions', async (req, res, next) => {
          LEFT JOIN users u ON u.id = s.user_id WHERE s.organisation_id = $1 ORDER BY s.role NULLS LAST, s.event_type`,
       [orgId(req)]
     );
-    res.json({ subscriptions: rows.map(fmtSub) });
+    res.json({ subscriptions: rows.map(fmtSub), defaults: DEFAULT_POLICY, missingDefaults: missingDefaults(rows).map((d) => `${d.role}:${d.eventType}`) });
+  } catch (err) { next(err); }
+});
+
+// ── POST /notifications/subscriptions/defaults ───────────────────────────────
+// One click gives every role its rows (viewer, operator, engineer, manager,
+// admin); rows the organisation already has are left exactly as they are.
+router.post('/subscriptions/defaults', requireCapability('notify.policy'), async (req, res, next) => {
+  try {
+    const result = await installDefaultPolicy(orgId(req), userId(req));
+    auditLog(req, 'notification.policy.defaults', 'organisation', orgId(req), result);
+    res.status(201).json(result);
   } catch (err) { next(err); }
 });
 

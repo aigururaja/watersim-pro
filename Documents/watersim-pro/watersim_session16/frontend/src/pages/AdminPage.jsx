@@ -71,7 +71,7 @@ function Toast({ toast }) {
 // ── InviteModal ───────────────────────────────────────────────────────────────
 
 function InviteModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ email: '', firstName: '', lastName: '', role: 'engineer', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({ email: '', firstName: '', lastName: '', role: 'engineer', phone: '', password: '', confirmPassword: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const firstRef = useRef(null);
@@ -89,6 +89,7 @@ function InviteModal({ onClose, onCreated }) {
         firstName: form.firstName,
         lastName: form.lastName,
         role: form.role,
+        ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
         password: form.password,
       });
       onCreated(data);
@@ -138,6 +139,13 @@ function InviteModal({ onClose, onCreated }) {
               <label className="label" htmlFor="inv-email">Email address *</label>
               <input id="inv-email" type="email" className="input" required value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@example.com" />
+            </div>
+
+            <div>
+              <label className="label" htmlFor="inv-phone">WhatsApp number</label>
+              <input id="inv-phone" type="tel" className="input font-mono" value={form.phone}
+                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 or 98765 43210" />
+              <p className="text-xs text-gray-500 mt-1">Optional. Alarms and tasks reach them on WhatsApp as well as by email; they can change it later under Settings → Notifications.</p>
             </div>
 
             {/* Role picker */}
@@ -201,6 +209,7 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
     lastName:  member.lastName,
     role:      member.role,
     isActive:  member.isActive,
+    phone:     member.phone || '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
@@ -211,7 +220,7 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
     setError('');
     setSaving(true);
     try {
-      const { data } = await api.patch(`/admin/members/${member.id}`, form);
+      const { data } = await api.patch(`/admin/members/${member.id}`, { ...form, phone: form.phone.trim() || null });
       onSaved(data);
     } catch (err) {
       setError(err.response?.data?.error || 'Update failed');
@@ -250,6 +259,13 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
                 <input id="em-lname" className="input" value={form.lastName}
                   onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required />
               </div>
+            </div>
+
+            <div>
+              <label className="label" htmlFor="em-phone">WhatsApp number</label>
+              <input id="em-phone" type="tel" className="input font-mono" value={form.phone}
+                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 or 98765 43210" />
+              <p className="text-xs text-gray-500 mt-1">Leave empty to remove it. A changed number needs verifying again (a reply from the phone).</p>
             </div>
 
             {/* Role */}
@@ -393,7 +409,7 @@ function MemberRow({ member, currentUserId, isAdmin, onEdit, onResetPassword, on
               {member.firstName} {member.lastName}
               {isSelf && <span className="ml-2 text-xs text-brand-600 font-medium">(you)</span>}
             </p>
-            <p className="text-xs text-gray-500 truncate">{member.email}</p>
+            <p className="text-xs text-gray-500 truncate">{member.email}{member.phone ? <span className="font-mono"> · {member.phone}</span> : null}</p>
           </div>
         </div>
       </td>

@@ -5,7 +5,11 @@
  *                  "send test" per channel with the delivery result shown.
  *   Policy         who hears what: (role | user) × event type × minimum
  *                  severity → channels. Read by everyone, edited by managers
- *                  and admins (capability notify.policy).
+ *                  and admins (capability notify.policy). One click installs
+ *                  the default rows for every role.
+ *   Receivers      (managers) every active member with their email and
+ *                  WhatsApp number, editable in place and testable, so all
+ *                  kinds of user are reachable without each visiting here.
  *   Outbox         recent deliveries with state and error; retry from here.
  *
  *   Templates      (managers, Meta) the WhatsApp Business Account's message
@@ -86,6 +90,8 @@ export default function NotificationsTab({ showToast }) {
   const [busy, setBusy] = useState(null);
   const [testResult, setTestResult] = useState(null);
   const [templates, setTemplates] = useState(null);
+  const [receivers, setReceivers] = useState([]);
+  const [missingDefaults, setMissingDefaults] = useState([]);
   const [form, setForm] = useState({ email: { enabled: true, address: '' }, whatsapp: { enabled: false, address: '' } });
   const [newSub, setNewSub] = useState({ target: 'role:engineer', eventType: 'alarm.raised', minSeverity: 'warning', channels: ['email'] });
 
@@ -96,10 +102,12 @@ export default function NotificationsTab({ showToast }) {
       setForm({ email: { enabled: m.data.email.enabled, address: m.data.email.address || '' }, whatsapp: { enabled: m.data.whatsapp.enabled, address: m.data.whatsapp.address || '' } });
       setEvents(e.data.events || []);
       setSubs(s.data.subscriptions || []);
+      setMissingDefaults(s.data.missingDefaults || []);
       setError(null);
       if (canPolicy) {
-        const o = await api.get('/notifications/outbox?limit=50');
+        const [o, rx] = await Promise.all([api.get('/notifications/outbox?limit=50'), api.get('/notifications/receivers')]);
         setOutbox(o.data);
+        setReceivers(rx.data.receivers || []);
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load notification settings');
@@ -163,6 +171,44 @@ export default function NotificationsTab({ showToast }) {
     try { const { data } = await api.post(`/notifications/outbox/${row.id}/retry`); showToast?.(`Retried: ${data.state}`, data.state === 'sent'); await load(); }
     catch (err) { showToast?.(err.response?.data?.error || 'Retry failed', false); }
     finally { setBusy(null); }
+  };
+
+  const installDefaults = async () => {
+    setBusy('defaults');
+    try {
+      const { data } = await api.post('/notifications/subscriptions/defaults');
+      showToast?.(`Default policy: ${data.added} row(s) added, ${data.existing} already there`);
+      await load();
+    } catch (err) {
+      showToast?.(err.response?.data?.error || 'Could not install the default policy', false);
+    } finally { setBusy(null); }
+  };
+
+  const editReceiver = (id, channel, patch) => setReceivers((list) => list.map((r) => (r.id === id ? { ...r, [channel]: { ...r[channel], ...patch }, dirty: true } : r)));
+
+  const saveReceiver = async (r) => {
+    setBusy(`rx:${r.id}`);
+    try {
+      const body = {
+        email: { enabled: r.email.enabled, ...(r.email.address ? { address: r.email.address.trim() } : {}) },
+        ...(r.whatsapp.address || !r.whatsapp.enabled ? { whatsapp: { enabled: r.whatsapp.enabled, ...(r.whatsapp.address ? { address: r.whatsapp.address.replace(/\s+/g, '') } : {}) } } : {}),
+      };
+      const { data } = await api.put(`/notifications/receivers/${r.id}`, body);
+      setReceivers((list) => list.map((x) => (x.id === r.id ? data : x)));
+      showToast?.(`${r.name}: receiver saved`);
+    } catch (err) {
+      showToast?.(err.response?.data?.details?.[0]?.msg || err.response?.data?.error || 'Could not save', false);
+    } finally { setBusy(null); }
+  };
+
+  const testReceiver = async (r, channel) => {
+    setBusy(`rxtest:${r.id}:${channel}`);
+    try {
+      const { data } = await api.post('/notifications/test', { channel, userId: r.id });
+      showToast?.(data.state === 'sent' ? `Test ${channel} sent to ${data.address}` : `Test ${channel}: ${data.state}${data.last_error ? ` — ${data.last_error}` : ''}`, data.state === 'sent');
+    } catch (err) {
+      showToast?.(err.response?.data?.error || 'Test failed', false);
+    } finally { setBusy(null); }
   };
 
   const checkTemplates = async () => {
@@ -232,9 +278,18 @@ export default function NotificationsTab({ showToast }) {
 
       {/* ── Policy ── */}
       <section aria-label="Notification policy" className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-gray-900">Who hears what</h3>
-          <button onClick={load} className="btn-secondary text-xs" aria-label="Reload policy"><RefreshCw className="w-3.5 h-3.5" /></button>
+          <div className="flex items-center gap-2">
+            {canPolicy && (
+              <button onClick={installDefaults} disabled={busy === 'defaults' || !missingDefaults.length} className="btn-secondary text-xs disabled:opacity-50" aria-label="Install the default policy for every role"
+                title={missingDefaults.length ? `Adds: ${missingDefaults.join(', ')}` : 'Every role already has its default rows'}>
+                {busy === 'defaults' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                {missingDefaults.length ? `Install the default policy for every role (${missingDefaults.length} missing)` : 'Default policy installed'}
+              </button>
+            )}
+            <button onClick={load} className="btn-secondary text-xs" aria-label="Reload policy"><RefreshCw className="w-3.5 h-3.5" /></button>
+          </div>
         </div>
         <div className="overflow-x-auto card">
           <table className="w-full text-xs">
@@ -301,6 +356,64 @@ export default function NotificationsTab({ showToast }) {
           </div>
         )}
       </section>
+
+      {/* ── Receivers ── */}
+      {canPolicy && (
+        <section aria-label="Receivers" className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-900">
+            Receivers
+            <span className="ml-2 text-xs font-normal text-gray-500">every active member by role — set the addresses here, or let each person set their own</span>
+          </h3>
+          <div className="overflow-x-auto card">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+                <tr><th className="text-left px-3 py-2">Who</th><th className="text-left px-3 py-2">Email</th><th className="text-left px-3 py-2">WhatsApp</th><th className="text-left px-3 py-2">Hears</th><th className="px-3 py-2" /></tr>
+              </thead>
+              <tbody>
+                {receivers.map((r) => (
+                  <tr key={r.id} className="border-t border-gray-100 align-top" data-receiver={r.id}>
+                    <td className="px-3 py-2"><div className="font-medium text-gray-900">{r.name}</div><div className="text-gray-500 capitalize">{r.role}</div></td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <input type="checkbox" checked={!!r.email.enabled} onChange={(e) => editReceiver(r.id, 'email', { enabled: e.target.checked })} aria-label={`Email for ${r.name}`} className="accent-brand-600" />
+                        <input className="input py-1 text-xs w-52 font-mono" value={r.email.address || ''} onChange={(e) => editReceiver(r.id, 'email', { address: e.target.value })} aria-label={`Email address for ${r.name}`} />
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <input type="checkbox" checked={!!r.whatsapp.enabled} onChange={(e) => editReceiver(r.id, 'whatsapp', { enabled: e.target.checked })} aria-label={`WhatsApp for ${r.name}`} className="accent-brand-600" />
+                        <input className="input py-1 text-xs w-40 font-mono" placeholder="+91… or 10 digits" value={r.whatsapp.address || ''} onChange={(e) => editReceiver(r.id, 'whatsapp', { address: e.target.value })} aria-label={`WhatsApp number for ${r.name}`} />
+                        {r.whatsapp.address && (
+                          <span data-verified={r.whatsapp.verified ? 'yes' : 'no'} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${r.whatsapp.verified ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-gray-500 bg-gray-50 border-gray-200'}`} title={r.whatsapp.verified ? 'This number has replied to the plant’s WhatsApp number' : 'Not yet verified — a reply from the phone verifies it'}>
+                            {r.whatsapp.verified ? 'verified' : 'unverified'}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-gray-500 max-w-[16rem]">
+                      {r.hears?.length
+                        ? r.hears.map((h) => `${h.eventType} (${h.minSeverity}+)`).join(', ')
+                        : <span className="text-amber-700">nothing yet — add a policy row for every {r.role}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      <button onClick={() => saveReceiver(r)} disabled={!!busy || !r.dirty} className="btn-primary text-[11px] py-0.5 px-2 disabled:opacity-50" aria-label={`Save receiver ${r.name}`}>
+                        {busy === `rx:${r.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : null} Save
+                      </button>
+                      <button onClick={() => testReceiver(r, 'email')} disabled={!!busy || !r.reachable?.email} className="ml-1 btn-secondary text-[11px] py-0.5 px-2 disabled:opacity-50" aria-label={`Test email to ${r.name}`} title="Send a test email">
+                        {busy === `rxtest:${r.id}:email` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                      </button>
+                      <button onClick={() => testReceiver(r, 'whatsapp')} disabled={!!busy || !r.reachable?.whatsapp} className="ml-1 btn-secondary text-[11px] py-0.5 px-2 disabled:opacity-50" aria-label={`Test WhatsApp to ${r.name}`} title="Send a test WhatsApp">
+                        {busy === `rxtest:${r.id}:whatsapp` ? <Loader2 className="w-3 h-3 animate-spin" /> : <MessageCircle className="w-3 h-3" />}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!receivers.length && <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400">No active members.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* ── Outbox ── */}
       {canPolicy && outbox && (

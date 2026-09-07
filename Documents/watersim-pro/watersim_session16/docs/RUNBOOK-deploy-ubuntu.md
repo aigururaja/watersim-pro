@@ -334,11 +334,16 @@ Configuration:
    every template must take exactly two body parameters. Settings →
    Notifications → "Check Meta templates" lists the account's templates with
    their status.
-4. **Each person.** Settings → Notifications → WhatsApp number (a 10-digit
-   Indian number is accepted and stored as +91…), then send "hi" once to the
-   plant's WhatsApp number from that phone: that verifies the number and
-   opens the 24-hour window, so "Send test" works before the template is
-   approved.
+4. **Every kind of user.** Admin → Users gives each member a WhatsApp number
+   as they are invited or edited (a 10-digit Indian number is stored as
+   +91…). Settings → Notifications → Receivers then shows every active member
+   with their email and WhatsApp, lets a manager correct them and send each
+   person a test, and "Install the default policy for every role" gives
+   viewer, operator, engineer, manager and admin their rows in one click
+   (existing rows are kept). Each person can still change their own under
+   My channels. A person verifies their number by sending "hi" once to the
+   plant's WhatsApp number from that phone, which also opens the 24-hour
+   window so "Send test" works before the template is approved.
 
 **Email.** A Gmail account sends with an app password (Google account →
 Security → 2-Step Verification → App passwords): `SMTP_USER` is the address,

@@ -31,12 +31,12 @@ const UserModel = {
   /**
    * Create a new user.
    */
-  async create({ organisationId, email, passwordHash, firstName, lastName, role = 'viewer' }) {
+  async create({ organisationId, email, passwordHash, firstName, lastName, role = 'viewer', phoneE164 = null }) {
     const result = await query(
-      `INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, organisation_id, email, first_name, last_name, role, is_active, created_at`,
-      [organisationId, email.toLowerCase(), passwordHash, firstName, lastName, role]
+      `INSERT INTO users (organisation_id, email, password_hash, first_name, last_name, role, phone_e164)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, organisation_id, email, first_name, last_name, role, is_active, created_at, phone_e164`,
+      [organisationId, email.toLowerCase(), passwordHash, firstName, lastName, role, phoneE164]
     );
     return result.rows[0];
   },
@@ -53,7 +53,7 @@ const UserModel = {
    */
   async findByOrganisation(organisationId) {
     const result = await query(
-      `SELECT id, email, first_name, last_name, role, is_active, last_login_at, created_at, updated_at
+      `SELECT id, email, first_name, last_name, role, is_active, last_login_at, created_at, updated_at, phone_e164
        FROM users WHERE organisation_id = $1 ORDER BY created_at ASC`,
       [organisationId]
     );

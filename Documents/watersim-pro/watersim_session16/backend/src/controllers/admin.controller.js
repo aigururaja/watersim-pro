@@ -6,6 +6,7 @@ const { AppError, invalidateRoleCache } = require('../middleware/auth');
 const { auditLog } = require('../utils/audit');
 const logger = require('../utils/logger');
 const { ROLES } = require('../auth/roles');
+const whatsapp = require('../notifications/adapters/whatsapp');
 
 const BCRYPT_ROUNDS = 12;
 // The one role list, shared with the hierarchy and the frontend — see auth/roles.js.
@@ -13,6 +14,18 @@ const VALID_ROLES = ROLES;
 
 /** Single email normalization rule used everywhere email is read or written. */
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+/**
+ * A member's WhatsApp number as E.164 (a 10-digit local number gets the
+ * default country code); null clears it; undefined leaves it alone.
+ */
+function phoneOrThrow(phone) {
+  if (phone === undefined) return undefined;
+  if (phone === null || String(phone).trim() === '') return null;
+  const e164 = whatsapp.toE164(phone);
+  if (!e164) throw new AppError('phone must be a WhatsApp number in E.164 (+919876543210) or a 10-digit local number', 422);
+  return e164;
+}
 
 // ── Organisation ──────────────────────────────────────────────────────────────
 
@@ -74,7 +87,8 @@ const listMembers = async (req, res, next) => {
  */
 const inviteMember = async (req, res, next) => {
   try {
-    const { email, firstName, lastName, role = 'viewer', password } = req.body;
+    const { email, firstName, lastName, role = 'viewer', password, phone } = req.body;
+    const phoneE164 = phoneOrThrow(phone) ?? null;
 
     if (!email || !firstName || !lastName)
       throw new AppError('email, firstName and lastName are required', 422);
@@ -102,9 +116,10 @@ const inviteMember = async (req, res, next) => {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       role,
+      phoneE164,
     });
 
-    auditLog(req, 'member.invite', 'user', user.id, { email: normEmail, role });
+    auditLog(req, 'member.invite', 'user', user.id, { email: normEmail, role, phone: phoneE164 });
     logger.info('Member invited', { userId: user.id, role, by: req.user.sub });
     res.status(201).json(formatUser(user));
   } catch (err) { next(err); }
@@ -118,7 +133,8 @@ const inviteMember = async (req, res, next) => {
 const updateMember = async (req, res, next) => {
   try {
     const { userId } = req.params;
-    const { role, firstName, lastName, isActive } = req.body;
+    const { role, firstName, lastName, isActive, phone } = req.body;
+    const phoneE164 = phoneOrThrow(phone);
 
     // Prevent admin from demoting themselves
     if (userId === req.user.sub && role && role !== 'admin')
@@ -139,6 +155,7 @@ const updateMember = async (req, res, next) => {
     if (firstName  !== undefined) { fields.push(`first_name = $${i++}`); values.push(firstName.trim()); }
     if (lastName   !== undefined) { fields.push(`last_name = $${i++}`);  values.push(lastName.trim()); }
     if (isActive   !== undefined) { fields.push(`is_active = $${i++}`);  values.push(Boolean(isActive)); }
+    if (phone      !== undefined) { fields.push(`phone_e164 = $${i++}`); values.push(phoneE164); }
 
     if (!fields.length) throw new AppError('No fields to update', 422);
 
@@ -172,17 +189,31 @@ const updateMember = async (req, res, next) => {
       const result = await client.query(
         `UPDATE users SET ${fields.join(', ')}
          WHERE id = $${i} AND organisation_id = $${i + 1}
-         RETURNING id, email, first_name, last_name, role, is_active, last_login_at, created_at`,
+         RETURNING id, email, first_name, last_name, role, is_active, last_login_at, created_at, phone_e164`,
         values
       );
       if (result.rowCount !== 1) throw new AppError('User not found', 404);
       return result.rows[0];
     });
 
+    // The member's WhatsApp channel follows the number: a new number must be
+    // verified again (a reply from the phone), a removed number switches it off.
+    if (phone !== undefined) {
+      if (phoneE164) {
+        await query(
+          `UPDATE notification_channels SET verified = CASE WHEN address = $2 THEN verified ELSE FALSE END, address = $2
+            WHERE user_id = $1 AND channel = 'whatsapp'`,
+          [userId, phoneE164]
+        );
+      } else {
+        await query(`UPDATE notification_channels SET enabled = FALSE WHERE user_id = $1 AND channel = 'whatsapp'`, [userId]);
+      }
+    }
+
     // A role or activation change must bite on the member's NEXT request, not
     // when their cached role expires — drop the entry the auth middleware holds.
     if (role !== undefined || isActive !== undefined) invalidateRoleCache(userId);
-    auditLog(req, 'member.update', 'user', userId, { role, firstName, lastName, isActive });
+    auditLog(req, 'member.update', 'user', userId, { role, firstName, lastName, isActive, phone: phoneE164 });
     logger.info('Member updated', { userId, by: req.user.sub });
     res.json(formatUser(updated));
   } catch (err) { next(err); }
@@ -314,6 +345,7 @@ function formatUser(u) {
     isActive:    u.is_active,
     lastLoginAt: u.last_login_at,
     createdAt:   u.created_at,
+    phone:       u.phone_e164 || null,
   };
 }
 

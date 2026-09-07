@@ -243,9 +243,15 @@ receipts and people's replies arrive on `POST /api/v1/webhooks/whatsapp`
 only an approved template is delivered, mapped per event in
 `WHATSAPP_TEMPLATES` (two body parameters: subject, details) and listed with
 its approval under Settings → Notifications. `scripts/notify-live-test.js`
-sends one real test email and WhatsApp from the command line. The Tasks board
-is at `/tasks`; personal channels and the organisation's policy are under
-Settings → Notifications.
+sends one real test email and WhatsApp from the command line. Receivers are
+set up per person for every role: an admin gives each member a WhatsApp number
+on invite or edit (Admin → Users, `phone` on `/api/v1/admin/members`), and
+a manager sees every active member's email and WhatsApp under Settings →
+Notifications → Receivers (`/api/v1/notifications/receivers`), edits them,
+sends each a test, and installs the default policy for all five roles in one
+click (`POST /api/v1/notifications/subscriptions/defaults`). Each person can
+still change their own addresses under My channels. The Tasks board is at
+`/tasks`; the organisation's policy is under Settings → Notifications.
 
 On every authenticated request the user's **current** role and active flag are
 re-read from the database (cached `ROLE_CACHE_TTL_MS`, default 30 s) and

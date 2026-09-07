@@ -541,3 +541,97 @@ describe('WhatsApp via Meta Cloud API', () => {
     delete process.env.WHATSAPP_TEMPLATES;
   });
 });
+
+// ── Receivers: email and WhatsApp set up for every kind of user ──────────────
+describe('receivers', () => {
+  test('a manager sees every active member with their addresses; an engineer cannot', async () => {
+    expect((await engineer.agent.get('/api/v1/notifications/receivers')).status).toBe(403);
+    const r = await manager.agent.get('/api/v1/notifications/receivers');
+    expect(r.status).toBe(200);
+    const roles = r.body.receivers.map((x) => x.role);
+    for (const role of ['admin', 'manager', 'engineer', 'operator', 'viewer']) expect(roles).toContain(role);
+    const op = r.body.receivers.find((x) => x.id === ids.operator);
+    expect(op).toMatchObject({
+      name: 'Maint operator', role: 'operator',
+      email: { enabled: true, address: operator.email },
+      whatsapp: { enabled: true, address: '+919876543210', verified: true },
+      reachable: { email: true, whatsapp: true },
+    });
+    const v = r.body.receivers.find((x) => x.id === viewer.id);
+    expect(v.whatsapp).toMatchObject({ enabled: false, address: null });
+    expect(v.reachable).toEqual({ email: true, whatsapp: false });
+    expect(r.body.providers.whatsapp).toBeDefined();
+  });
+
+  test("a manager sets a viewer's WhatsApp number and email override, and sends them a test", async () => {
+    const put = await manager.agent.put(`/api/v1/notifications/receivers/${viewer.id}`)
+      .send({ whatsapp: { enabled: true, address: '98765 43211' }, email: { enabled: true, address: 'viewer.alt@test.example' } });
+    expect(put.status).toBe(200);
+    expect(put.body.whatsapp).toMatchObject({ enabled: true, address: '+919876543211', verified: false });
+    expect(put.body.email.address).toBe('viewer.alt@test.example');
+    expect(put.body.reachable).toEqual({ email: true, whatsapp: true });
+    expect((await query('SELECT phone_e164 FROM users WHERE id = $1', [viewer.id])).rows[0].phone_e164).toBe('+919876543211');
+    const me = await viewer.agent.get('/api/v1/notifications/me');
+    expect(me.body.whatsapp.address).toBe('+919876543211');
+    expect(me.body.email.address).toBe('viewer.alt@test.example');
+
+    // A bad number, an unknown member, and a stranger's test are refused.
+    expect((await manager.agent.put(`/api/v1/notifications/receivers/${viewer.id}`).send({ whatsapp: { enabled: true, address: '12' } })).status).toBe(422);
+    expect((await manager.agent.put('/api/v1/notifications/receivers/00000000-0000-4000-8000-000000000000').send({ email: { enabled: false } })).status).toBe(404);
+    expect((await engineer.agent.post('/api/v1/notifications/test').send({ channel: 'email', userId: viewer.id })).status).toBe(403);
+
+    // The manager's test to the viewer goes out (dry run) to the number just set.
+    const t = await manager.agent.post('/api/v1/notifications/test').send({ channel: 'whatsapp', userId: viewer.id });
+    expect(t.status).toBe(200);
+    expect(t.body).toMatchObject({ channel: 'whatsapp', address: '+919876543211', state: 'sent' });
+
+    // Switching WhatsApp off makes them unreachable there, and a test says so.
+    const off = await manager.agent.put(`/api/v1/notifications/receivers/${viewer.id}`).send({ whatsapp: { enabled: false } });
+    expect(off.body.reachable.whatsapp).toBe(false);
+    expect((await manager.agent.post('/api/v1/notifications/test').send({ channel: 'whatsapp', userId: viewer.id })).status).toBe(422);
+  });
+
+  test('the default policy gives every role its rows once, and is reported as missing until then', async () => {
+    let subs = await manager.agent.get('/api/v1/notifications/subscriptions');
+    expect(subs.body.defaults.length).toBeGreaterThan(10);
+    expect(subs.body.missingDefaults.length).toBeGreaterThan(0);
+    expect((await engineer.agent.post('/api/v1/notifications/subscriptions/defaults')).status).toBe(403);
+    const first = await manager.agent.post('/api/v1/notifications/subscriptions/defaults');
+    expect(first.status).toBe(201);
+    expect(first.body.added).toBeGreaterThan(0);
+    expect(first.body.added + first.body.existing).toBe(first.body.total);
+    const again = await manager.agent.post('/api/v1/notifications/subscriptions/defaults');
+    expect(again.body).toMatchObject({ added: 0, existing: first.body.total });
+    subs = await manager.agent.get('/api/v1/notifications/subscriptions');
+    expect(subs.body.missingDefaults).toEqual([]);
+    for (const role of ['viewer', 'operator', 'engineer', 'manager', 'admin']) {
+      expect(subs.body.subscriptions.some((s) => s.role === role)).toBe(true);
+    }
+    // The manager's own "alarm." row from earlier is untouched: defaults never overwrite.
+    expect(subs.body.subscriptions.some((s) => s.role === 'manager' && s.eventType === 'alarm.' && s.minSeverity === 'critical')).toBe(true);
+    const rx = await manager.agent.get('/api/v1/notifications/receivers');
+    expect(rx.body.receivers.find((x) => x.id === viewer.id).hears.some((h) => h.eventType === 'alarm.raised')).toBe(true);
+  });
+
+  test('an admin gives a member a number when inviting or editing them', async () => {
+    const email = uniq('maint.phoned');
+    const inv = await admin.post('/api/v1/admin/members').send({ email, firstName: 'Phoned', lastName: 'Viewer', role: 'viewer', password: PW, phone: '98765 43212' });
+    expect(inv.status).toBe(201);
+    expect(inv.body.phone).toBe('+919876543212');
+    expect((await admin.post('/api/v1/admin/members').send({ email: uniq('maint.bad'), firstName: 'B', lastName: 'B', role: 'viewer', password: PW, phone: '12' })).status).toBe(422);
+    let rx = await manager.agent.get('/api/v1/notifications/receivers');
+    expect(rx.body.receivers.find((x) => x.id === inv.body.id).whatsapp).toMatchObject({ enabled: true, address: '+919876543212' });
+
+    const up = await admin.patch(`/api/v1/admin/members/${inv.body.id}`).send({ phone: '+91 98765 43213' });
+    expect(up.status).toBe(200);
+    expect(up.body.phone).toBe('+919876543213');
+    const list = await admin.get('/api/v1/admin/members');
+    expect(list.body.find((m) => m.id === inv.body.id).phone).toBe('+919876543213');
+
+    const cleared = await admin.patch(`/api/v1/admin/members/${inv.body.id}`).send({ phone: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.phone).toBeNull();
+    rx = await manager.agent.get('/api/v1/notifications/receivers');
+    expect(rx.body.receivers.find((x) => x.id === inv.body.id).reachable.whatsapp).toBe(false);
+  });
+});
