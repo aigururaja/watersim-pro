@@ -18,7 +18,7 @@ async def main():
     server = Server()
     await server.init()
     server.set_endpoint(ENDPOINT)
-    server.set_server_name("WaterSim PLC bridge test server")
+    server.set_server_name("SafeKrit PLC bridge test server")
 
     idx = await server.register_namespace("urn:watersim:plc-bridge-test")
     if idx != 2:

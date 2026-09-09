@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Org-level alarm API
+ * SafeKrit — Org-level alarm API
  *
  * Mounted at: /api/v1/alarms
  *

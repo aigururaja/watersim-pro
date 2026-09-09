@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Shared report-data builder
+ * SafeKrit — Shared report-data builder
  *
  * Builds the structured report object from a simulation_runs DB row
  * (joined with flowsheet/project/org/user names). Used by both

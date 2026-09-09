@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Reliability & observability hardening tests (Session 16)
+ * SafeKrit — Reliability & observability hardening tests (Session 16)
  *
  * Covers:
  *  - flowsheet PATCH optimistic concurrency (expectedVersion → 409 / 200)

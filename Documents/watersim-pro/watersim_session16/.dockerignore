@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-# WaterSim Pro — root .dockerignore
+# SafeKrit — root .dockerignore
 # All image builds use the REPO ROOT as build context (npm workspaces
 # monorepo with a single root package-lock.json), so this file governs
 # every backend/frontend dev & prod build.

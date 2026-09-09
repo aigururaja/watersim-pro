@@ -186,7 +186,7 @@ export default function PLCConnectionsTab({ canEdit, showToast }) {
         <div>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#111' }}>🔌 PLC Connections</h2>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#6B7280', maxWidth: 560 }}>
-            Connect WaterSim to plant PLCs / SCADA. Bind node parameters to PLC tags from the
+            Connect SafeKrit to plant PLCs / SCADA. Bind node parameters to PLC tags from the
             canvas parameter panel to stream live process data into simulations.
           </p>
         </div>

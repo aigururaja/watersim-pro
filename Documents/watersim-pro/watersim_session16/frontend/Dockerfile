@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ─────────────────────────────────────────────────────────────
-# WaterSim Pro — Frontend Development Dockerfile (Vite dev server)
+# SafeKrit — Frontend Development Dockerfile (Vite dev server)
 #
 # This is an npm-workspaces monorepo with a SINGLE root package-lock.json.
 # Build context MUST be the repo root:

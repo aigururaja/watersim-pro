@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// WaterSim Pro — e2e smoke test (login → dashboard → project → reports).
+// SafeKrit — e2e smoke test (login → dashboard → project → reports).
 //
 // NEVER EXECUTED YET in this repo: Playwright browsers were deliberately not
 // downloaded during scaffolding. Requires the seeded demo data
@@ -20,7 +20,7 @@ test.describe('smoke: login → dashboard → project → reports', () => {
   test('logs in with the seeded admin and reaches the reports page', async ({ page }) => {
     // ── Login page renders ───────────────────────────────────────────────────
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'WaterSim Pro' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'SafeKrit' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Sign in to your account' })).toBeVisible();
 
     // ── Login with the seeded demo-org admin ─────────────────────────────────

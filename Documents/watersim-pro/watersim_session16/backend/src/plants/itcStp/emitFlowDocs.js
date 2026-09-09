@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — regenerate the ITC STP flow documents.
+ * SafeKrit — regenerate the ITC STP flow documents.
  *
  * Run: npm run plant:flow      (from the repo root)
  *

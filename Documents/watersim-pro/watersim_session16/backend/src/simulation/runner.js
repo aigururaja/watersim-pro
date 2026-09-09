@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Simulation runner (worker-thread execution)
+ * SafeKrit — Simulation runner (worker-thread execution)
  *
  * Runs solver executions off the event loop in worker threads so a heavy
  * flowsheet can never freeze the HTTP server. Design:

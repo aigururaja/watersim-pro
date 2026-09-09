@@ -1,4 +1,4 @@
-# WaterSim Pro — Python dependencies for the PLC bridge
+# SafeKrit — Python dependencies for the PLC bridge
 # (backend/src/plc/bridge/plc_bridge.py — real OPC UA / Siemens S7 /
 # Allen-Bradley EtherNet/IP drivers).
 #

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ComparisonPage
+ * SafeKrit — ComparisonPage
  * Side-by-side comparison of 2–6 completed simulation runs.
  * Highlights best/worst values. Exports to Excel.
  *

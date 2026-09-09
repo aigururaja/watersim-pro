@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — role dashboards
+ * SafeKrit — role dashboards
  *
  * Mounted at: /api/v1/dashboard
  *

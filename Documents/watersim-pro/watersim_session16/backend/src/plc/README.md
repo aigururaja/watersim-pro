@@ -1,6 +1,6 @@
 # PLC driver framework
 
-Live plant data enters WaterSim Pro through **drivers** — one module per
+Live plant data enters SafeKrit through **drivers** — one module per
 industrial protocol, registered in `registry.js`:
 
 | Protocol      | Module                  | Status      |

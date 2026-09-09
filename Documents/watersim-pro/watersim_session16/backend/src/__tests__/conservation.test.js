@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Conservation Invariant Tests  (Session 16)
+ * SafeKrit — Conservation Invariant Tests  (Session 16)
  *
  * Generic invariant harness: for several flowsheets, water and component mass
  * balances must close at the plant boundary:

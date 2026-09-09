@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WaterSim Pro — Period (historian) report
+SafeKrit — Period (historian) report
 Reads JSON from stdin, writes PDF or XLSX bytes to stdout.
 
 Payload (from periodReport.js):
@@ -83,7 +83,7 @@ def build_pdf(data):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm,
                             topMargin=16 * mm, bottomMargin=16 * mm,
-                            title=data.get('title') or 'Plant history report', author='WaterSim Pro')
+                            title=data.get('title') or 'Plant history report', author='SafeKrit')
     story = []
     esc = lambda s: escape(str(s if s is not None else ''))
 
@@ -193,7 +193,7 @@ def build_pdf(data):
         canvas.saveState()
         canvas.setFont('Helvetica', 7)
         canvas.setFillColor(GREY)
-        canvas.drawString(16 * mm, 10 * mm, f"WaterSim Pro · {data.get('org') or ''} · historian report")
+        canvas.drawString(16 * mm, 10 * mm, f"SafeKrit · {data.get('org') or ''} · historian report")
         canvas.drawRightString(W - 16 * mm, 10 * mm, f'Page {doc_.page}')
         canvas.restoreState()
 

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Request ID middleware
+ * SafeKrit — Request ID middleware
  *
  * Accepts an inbound X-Request-Id header (from a load balancer / upstream
  * service) or generates a UUID. The id is:

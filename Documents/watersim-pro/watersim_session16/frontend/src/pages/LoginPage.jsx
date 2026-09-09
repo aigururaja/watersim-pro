@@ -97,7 +97,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/20 backdrop-blur mb-3">
             <Droplets className="w-8 h-8 sm:w-9 sm:h-9 text-white" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">WaterSim Pro</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">SafeKrit</h1>
           <p className="text-blue-100 mt-1 text-sm">Process Simulation Platform</p>
         </div>
         <div className="card p-6 sm:p-8 shadow-2xl ws-page-enter">
@@ -146,7 +146,7 @@ export default function LoginPage() {
             </button>
           </form>
           <p className="mt-6 text-center text-sm text-gray-500">
-            New to WaterSim Pro?{' '}
+            New to SafeKrit?{' '}
             <Link to="/register" className="text-brand-600 font-medium hover:underline">Register your organisation</Link>
           </p>
         </div>

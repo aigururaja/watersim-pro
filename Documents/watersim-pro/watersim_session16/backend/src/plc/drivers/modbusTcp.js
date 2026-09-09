@@ -1,8 +1,8 @@
 /**
- * WaterSim Pro — Modbus TCP driver (dependency-free)
+ * SafeKrit — Modbus TCP driver (dependency-free)
  *
  * A minimal, fully working Modbus TCP client over net.Socket. MBAP framing,
- * with the function codes WaterSim needs:
+ * with the function codes SafeKrit needs:
  *   FC1  read coils            FC3  read holding registers
  *   FC4  read input registers  FC5  write single coil
  *   FC6  write single register FC16 write multiple registers

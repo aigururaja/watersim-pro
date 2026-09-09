@@ -30,7 +30,7 @@ vi.mock('react-router-dom', async () => {
 
 const ORGS = [
   { slug: 'itc-stp', name: 'ITC — Sewage Treatment Plant' },
-  { slug: 'demo', name: 'WaterSim Demo' },
+  { slug: 'demo', name: 'SafeKrit Demo' },
 ];
 
 const mount = () => render(<MemoryRouter><LoginPage /></MemoryRouter>);
@@ -51,7 +51,7 @@ describe('LoginPage organisation picker', () => {
     const select = await loaded();
     expect(select.tagName).toBe('SELECT');
     expect([...select.options].map((o) => o.textContent)).toEqual([
-      'Select your organisation', 'ITC — Sewage Treatment Plant', 'WaterSim Demo', 'Another organisation…',
+      'Select your organisation', 'ITC — Sewage Treatment Plant', 'SafeKrit Demo', 'Another organisation…',
     ]);
     await userEvent.selectOptions(select, 'itc-stp');
     await userEvent.type(screen.getByLabelText('Email address'), 'ops@itc.test');

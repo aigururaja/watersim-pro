@@ -1,5 +1,5 @@
 /**
- * The WhatsApp template catalogue — what WaterSim submits to Meta for review.
+ * The WhatsApp template catalogue — what SafeKrit submits to Meta for review.
  *
  * Pinned: every catalogue entry passes the rules Meta enforces at creation
  * (no variable at the start or end of the body, none back to back, exactly
@@ -43,7 +43,7 @@ describe('catalogue entries', () => {
     expect(new Set(catalogue.TEMPLATES.map((t) => t.name)).size).toBe(catalogue.TEMPLATES.length);
     expect(new Set(catalogue.TEMPLATES.map((t) => t.key)).size).toBe(catalogue.TEMPLATES.length);
     expect(catalogue.FOOTER.length).toBeLessThanOrEqual(catalogue.LIMITS.footer);
-    expect(catalogue.MAPPING['*']).toBe('watersim_alert');
+    expect(catalogue.MAPPING['*']).toBe('safekrit_alert');
   });
 });
 
@@ -83,13 +83,13 @@ describe('MAPPING', () => {
   test('routes every event type to a catalogue template, alarms and tasks to their own', () => {
     process.env.WHATSAPP_TEMPLATES = JSON.stringify(catalogue.MAPPING);
     for (const type of Object.keys(EVENT_TYPES)) expect(catalogue.byName(whatsapp.templateFor(type))).not.toBeNull();
-    expect(whatsapp.templateFor('alarm.raised')).toBe('watersim_alarm_raised');
-    expect(whatsapp.templateFor('alarm.cleared')).toBe('watersim_alarm_cleared');
-    expect(whatsapp.templateFor('task.assigned')).toBe('watersim_task_update');
-    expect(whatsapp.templateFor('task.rejected')).toBe('watersim_task_update');
-    expect(whatsapp.templateFor('twin.drift')).toBe('watersim_alert');
-    expect(whatsapp.templateFor('equipment.counters.daily')).toBe('watersim_alert');
-    expect(whatsapp.templateFor('something.new')).toBe('watersim_alert');
+    expect(whatsapp.templateFor('alarm.raised')).toBe('safekrit_alarm_raised');
+    expect(whatsapp.templateFor('alarm.cleared')).toBe('safekrit_alarm_cleared');
+    expect(whatsapp.templateFor('task.assigned')).toBe('safekrit_task_update');
+    expect(whatsapp.templateFor('task.rejected')).toBe('safekrit_task_update');
+    expect(whatsapp.templateFor('twin.drift')).toBe('safekrit_alert');
+    expect(whatsapp.templateFor('equipment.counters.daily')).toBe('safekrit_alert');
+    expect(whatsapp.templateFor('something.new')).toBe('safekrit_alert');
   });
 });
 
@@ -113,7 +113,7 @@ describe('sample events through the adapter', () => {
     expect(params[0]).toBe(msg.subject); // subjects are short and single-line already
     const shown = catalogue.fill(t, params);
     expect(shown.length).toBeLessThanOrEqual(catalogue.LIMITS.body);
-    expect(shown).not.toMatch(/sent by WaterSim Pro/i); // the footer line is not repeated inside the body
+    expect(shown).not.toMatch(/sent by SafeKrit/i); // the footer line is not repeated inside the body
     expect(shown).toContain(msg.subject);
   });
 
@@ -134,7 +134,7 @@ describe('sample events through the adapter', () => {
     expect(catalogue.fill(t, params).length).toBeLessThanOrEqual(catalogue.LIMITS.body);
   });
 
-  test('a template WaterSim did not write is given a conservative allowance', () => {
+  test('a template SafeKrit did not write is given a conservative allowance', () => {
     process.env.WHATSAPP_TEMPLATES = JSON.stringify({ '*': 'staff_task_assigned_18t5k' });
     const long = 'y'.repeat(2000);
     const { name, params } = whatsapp.templateParams({ subject: 'Hello', body: `Hello\n\n${long}`, eventType: 'notification.test' });

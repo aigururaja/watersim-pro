@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — AppLayout
+ * SafeKrit — AppLayout
  *
  * The application shell. Since Phase 0 of the three-application plan the
  * sidebar is organised into three SURFACES — Operations, Digital Twin,
@@ -145,7 +145,7 @@ function SidebarContent({
           <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
             <Droplets className="w-5 h-5" />
           </div>
-          {expanded && <span className="font-bold text-base truncate">WaterSim Pro</span>}
+          {expanded && <span className="font-bold text-base truncate">SafeKrit</span>}
         </div>
         {mobile && (
           <button onClick={onCloseDrawer}
@@ -362,7 +362,7 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
     ...adminItems, SETTINGS_ITEM,
   ];
   const active = activeItem(everyItem, location.pathname);
-  const title = active?.label || surfaceMeta?.label || 'WaterSim Pro';
+  const title = active?.label || surfaceMeta?.label || 'SafeKrit';
 
   // Mobile bottom bar: the open surface's links (max 5), plus Settings.
   const bottomItems = [...(surfaceMeta?.items || []).slice(0, 4), SETTINGS_ITEM];

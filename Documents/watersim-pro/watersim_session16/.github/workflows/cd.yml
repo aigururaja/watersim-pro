@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# WaterSim Pro — CD Pipeline
+# SafeKrit — CD Pipeline
 # Triggers on push to main (after CI passes).
 # Builds, pushes to GHCR, then SSH-deploys to production server.
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WaterSim Pro — PDF Report Generator
+SafeKrit — PDF Report Generator
 Reads JSON from stdin, writes PDF to stdout.
 
 Dependencies: reportlab, matplotlib
@@ -89,7 +89,7 @@ def on_page(canvas, doc, org_name, report_title):
 
     canvas.setFillColor(colors.white)
     canvas.setFont('Helvetica-Bold', 10)
-    canvas.drawString(1.5*cm, H - 12*mm, 'WaterSim Pro')
+    canvas.drawString(1.5*cm, H - 12*mm, 'SafeKrit')
     canvas.setFont('Helvetica', 9)
     canvas.drawString(1.5*cm, H - 19*mm, report_title[:80])
 
@@ -106,7 +106,7 @@ def on_page(canvas, doc, org_name, report_title):
     canvas.setFillColor(BRAND_GREY)
     canvas.setFont('Helvetica', 7.5)
     canvas.drawString(1.5*cm, 8*mm,
-        f'WaterSim Pro | Generated {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}')
+        f'SafeKrit | Generated {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}')
     canvas.drawRightString(W - 1.5*cm, 8*mm, f'Page {doc.page}')
 
     canvas.restoreState()
@@ -789,7 +789,7 @@ def build_appendix(d, styles, story):
 
     story.append(Spacer(1, 5*mm))
     story.append(Paragraph(
-        'This report was generated automatically by WaterSim Pro. '
+        'This report was generated automatically by SafeKrit. '
         'All results are based on the mathematical models implemented in the simulation engine. '
         'Results should be reviewed by a qualified engineer before use in design or regulatory submissions.',
         styles['Small']
@@ -825,7 +825,7 @@ def build_report(data: dict) -> bytes:
         leftMargin=1.8*cm,
         rightMargin=1.8*cm,
         title=report_title,
-        author='WaterSim Pro',
+        author='SafeKrit',
         subject='Simulation Report',
     )
 

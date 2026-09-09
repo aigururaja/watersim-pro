@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Integrations administration (Phase 5)
+ * SafeKrit — Integrations administration (Phase 5)
  *
  * Mounted at: /api/v1/integrations · admin only (users.manage)
  *

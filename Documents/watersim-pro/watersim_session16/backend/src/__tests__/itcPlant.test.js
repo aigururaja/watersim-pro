@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ITC STP plant definition tests  (Session 18)
+ * SafeKrit — ITC STP plant definition tests  (Session 18)
  *
  * The plant module is a transcription of a commercial proposal plus arithmetic
  * derived from it. Both halves need guarding, for different reasons:

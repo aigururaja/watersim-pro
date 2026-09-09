@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ITC STP canvas layout tests  (Session 18)
+ * SafeKrit — ITC STP canvas layout tests  (Session 18)
  *
  * The flowsheet's node positions are authored by hand, and the canvas draws
  * every node as a FIXED 168 × 116 card — `UnitOpNode` says so at the top of the

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Commissioning scripts (Phase 4)
+ * SafeKrit — Commissioning scripts (Phase 4)
  *
  * The ITC control narrative's sequences, played against a plant in shadow
  * mode. Each narrative step that acts on equipment (open / close / start /

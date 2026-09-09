@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Digital twin API (Phase 4)
+ * SafeKrit — Digital twin API (Phase 4)
  *
  * Mounted at: /api/v1/twin
  *

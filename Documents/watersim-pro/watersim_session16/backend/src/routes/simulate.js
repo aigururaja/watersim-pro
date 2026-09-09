@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Simulation API Routes  (Session 6 — Steps 29–33)
+ * SafeKrit — Simulation API Routes  (Session 6 — Steps 29–33)
  *
  * POST /simulate
  *   mode: 'steady_state' (default) | 'dynamic'
@@ -530,7 +530,7 @@ router.get('/:runId/export/csv', [param('runId').isUUID()], async (req, res, nex
     const row = (...cols) => lines.push(cols.map(esc).join(','));
 
     // Header block
-    row('WaterSim Pro — Simulation Results Export');
+    row('SafeKrit — Simulation Results Export');
     row('Flowsheet', flowsheet_name);
     row('Run ID', runId);
     row('Created by', created_by_name);

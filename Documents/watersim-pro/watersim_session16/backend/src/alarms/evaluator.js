@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Alarm evaluator
+ * SafeKrit — Alarm evaluator
  *
  * Two layers:
  *

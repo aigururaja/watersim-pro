@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — useReport hook
+ * SafeKrit — useReport hook
  * Fetches structured report JSON for a completed simulation run.
  */
 import { useState, useEffect } from 'react';

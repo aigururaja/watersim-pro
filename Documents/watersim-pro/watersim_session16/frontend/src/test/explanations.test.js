@@ -1,7 +1,7 @@
 /**
  * Explanation coverage.
  *
- * WaterSim Pro is meant to be self-explanatory: every unit a user can drop on
+ * SafeKrit is meant to be self-explanatory: every unit a user can drop on
  * the canvas, and every parameter they can edit, must have an ⓘ with real
  * content behind it. These tests fail the build when a new palette entry or a
  * new PARAM_DEFS row is added without documentation.

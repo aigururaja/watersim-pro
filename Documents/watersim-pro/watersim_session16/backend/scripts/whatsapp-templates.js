@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WaterSim's WhatsApp templates on the Meta WhatsApp Business Account —
+ * SafeKrit's WhatsApp templates on the Meta WhatsApp Business Account —
  * submit them for review, watch their status, preview what they will say.
  *
  *   node scripts/whatsapp-templates.js list       catalogue, and each template's review status on the WABA
@@ -85,7 +85,7 @@ async function list() {
     const rows = have.filter((h) => h.name === t.name);
     if (!rows.length) { console.log(`  ${t.name.padEnd(24)} not submitted yet`); continue; }
     for (const r of rows) {
-      const paramNote = r.params !== 2 ? ` (takes ${r.params} parameters — WaterSim sends 2)` : '';
+      const paramNote = r.params !== 2 ? ` (takes ${r.params} parameters — SafeKrit sends 2)` : '';
       console.log(`  ${r.name.padEnd(24)} ${String(r.language).padEnd(6)} ${r.status}${paramNote}${r.reason ? ` — ${r.reason}` : ''}`);
     }
   }
@@ -146,13 +146,38 @@ async function submit() {
   process.exit(failed ? 1 : 0);
 }
 
+/**
+ * delete --only <name> --yes: remove one template (every language of that
+ * name) from the WABA — for retiring a superseded template, e.g. the
+ * watersim_* set after the safekrit_* set was approved and mapped. Refuses
+ * a template the current WHATSAPP_TEMPLATES mapping still points at.
+ */
+async function deleteTemplate() {
+  const e = env();
+  if (!only) fail('delete needs --only <template name>');
+  if (!flag('yes')) fail(`delete removes "${only}" from the WhatsApp Business Account for good — re-run with --yes to confirm`);
+  if (!e.token || !e.wabaId) fail('WHATSAPP_ACCESS_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID must be set in backend/.env');
+  const mapped = Object.values(whatsapp.templates());
+  if (mapped.includes(only)) fail(`"${only}" is still mapped in WHATSAPP_TEMPLATES — change the mapping first`);
+  const have = await onAccount();
+  if (!have.some((h) => h.name === only)) { console.log(`${only}: not on the account`); return; }
+  const u = new URL(`${GRAPH}/${e.version}/${encodeURIComponent(e.wabaId)}/message_templates`);
+  u.searchParams.set('name', only);
+  const res = await fetch(u.toString(), { method: 'DELETE', headers: { Authorization: `Bearer ${e.token}` }, signal: AbortSignal.timeout(25_000) });
+  let data = {};
+  try { data = await res.json(); } catch { /* non-JSON error body */ }
+  if (!res.ok) throw whatsapp.metaError(res.status, data.error || {});
+  console.log(`${only}: deleted (${JSON.stringify(data)})`);
+}
+
 (async () => {
   try {
     if (cmd === 'list') await list();
     else if (cmd === 'preview') preview();
     else if (cmd === 'json') console.log(JSON.stringify(selected().map(payloadFor), null, 2));
     else if (cmd === 'submit') await submit();
-    else fail('usage: node scripts/whatsapp-templates.js list | preview | json | submit [--only <name>] [--dry-run] [--strict-category]');
+    else if (cmd === 'delete') await deleteTemplate();
+    else fail('usage: node scripts/whatsapp-templates.js list | preview | json | submit [--only <name>] [--dry-run] [--strict-category] | delete --only <name> --yes');
   } catch (err) {
     fail(`${cmd} failed: ${err.message}`, 1);
   }

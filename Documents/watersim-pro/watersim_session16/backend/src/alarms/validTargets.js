@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Valid alarm targets
+ * SafeKrit — Valid alarm targets
  *
  * Alarm limits can only be placed on parameters that actually exist. This
  * module derives the complete set of legal targets from a flowsheet's

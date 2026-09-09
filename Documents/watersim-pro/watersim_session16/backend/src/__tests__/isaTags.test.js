@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ISA-5.1 tag conformance  (Session 18)
+ * SafeKrit — ISA-5.1 tag conformance  (Session 18)
  *
  * The plant is tagged to ISA-5.1 and nothing else. That is a requirement, not a
  * style preference, so it is enforced here against the standard's own letter

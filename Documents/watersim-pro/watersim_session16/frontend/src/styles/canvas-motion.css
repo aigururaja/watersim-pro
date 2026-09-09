@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   WaterSim Pro — Canvas motion (spec §5, §6, §7)
+   SafeKrit — Canvas motion (spec §5, §6, §7)
    ─────────────────────────────────────────────────────────────────────────────
    THE SINGLE PLACE `@keyframes` EXIST. Not per component, not injected per
    node. Eleven keyframes total, each declared exactly ONCE:

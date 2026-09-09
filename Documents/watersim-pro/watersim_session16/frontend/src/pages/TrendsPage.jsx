@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — TrendsPage
+ * SafeKrit — TrendsPage
  * Any tag over any window, from the historian. Pick up to eight points from
  * the registry, choose a range and a resolution, and read them as stacked
  * charts with a shared time axis. Export the window as CSV, or as a period

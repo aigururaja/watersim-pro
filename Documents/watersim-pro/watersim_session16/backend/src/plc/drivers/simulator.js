@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Simulator driver (built-in virtual PLC)
+ * SafeKrit — Simulator driver (built-in virtual PLC)
  *
  * No network, no hardware: values are computed from Date.now(), so any number
  * of clients see the same signal. Useful for demos, dev and tests.

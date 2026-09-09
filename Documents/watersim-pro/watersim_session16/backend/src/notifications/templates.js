@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Notification templates
+ * SafeKrit — Notification templates
  *
  * One function per event type, returning { subject, text, html }. `text` is
  * what WhatsApp and the in-app toast carry, so it must stand alone; `html` is
@@ -33,7 +33,7 @@ const when = (ts) => (ts ? new Date(ts).toLocaleString('en-IN', { timeZone: proc
 function wrapHtml(title, lines, footer) {
   return `<!doctype html><html><body style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#111827;margin:0;padding:16px;background:#f9fafb">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px">
-<div style="font-size:12px;color:#6b7280;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">WaterSim Pro</div>
+<div style="font-size:12px;color:#6b7280;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">SafeKrit</div>
 <h2 style="margin:0 0 12px;font-size:17px;color:#1e40af">${esc(title)}</h2>
 ${lines.map((l) => `<p style="margin:0 0 8px;line-height:1.45">${l}</p>`).join('\n')}
 <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">
@@ -46,11 +46,11 @@ ${lines.map((l) => `<p style="margin:0 0 8px;line-height:1.45">${l}</p>`).join('
  * @param {object} ctx  { orgName, appUrl, severity, subject, payload }
  */
 function render(eventType, ctx = {}) {
-  const { orgName = 'WaterSim Pro', appUrl = '', severity = 'info', payload = {} } = ctx;
+  const { orgName = 'SafeKrit', appUrl = '', severity = 'info', payload = {} } = ctx;
   const t = payload.task || null;
   const a = payload.alarm || null;
   const sev = SEV_WORD[severity] || 'Info';
-  const footer = `${orgName} · sent by WaterSim Pro${appUrl ? ` · ${appUrl}` : ''}`;
+  const footer = `${orgName} · sent by SafeKrit${appUrl ? ` · ${appUrl}` : ''}`;
   const taskLink = t && appUrl ? `${appUrl}/tasks?open=${t.id}` : null;
 
   const taskLines = () => [
@@ -107,7 +107,7 @@ function render(eventType, ctx = {}) {
       lines = [payload.message, payload.residual != null ? `Residual ${payload.residual} (z ${payload.z})` : null].filter(Boolean);
       break;
     case 'notification.test':
-      subject = 'WaterSim Pro test message';
+      subject = 'SafeKrit test message';
       lines = [`This is a test from ${orgName}. If you can read it, this channel works.`, `Sent ${when(Date.now())}.`];
       break;
     default:

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Cost Estimation Module  (Session 6 — Step 29; honesty pass Session 16;
+ * SafeKrit — Cost Estimation Module  (Session 6 — Step 29; honesty pass Session 16;
  *                                         per-unit CAPEX model Session 16)
  *
  * Estimates annual operating costs AND installed capital cost for a wastewater

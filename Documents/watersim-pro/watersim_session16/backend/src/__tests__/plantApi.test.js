@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Plant definition API tests  (Session 18)
+ * SafeKrit — Plant definition API tests  (Session 18)
  *
  * The /plant routes serve a static transcription: no database, no organisation
  * scope. That makes them testable without a DB, which is why the auth check is

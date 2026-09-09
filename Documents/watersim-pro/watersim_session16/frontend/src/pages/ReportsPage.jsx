@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ReportsPage
+ * SafeKrit — ReportsPage
  * Org-wide simulation report history. Lists completed runs across all
  * flowsheets, allows saving/bookmarking, filtering by project/mode/compliance,
  * links to full report, PDF and Excel export, and opens the comparison picker.

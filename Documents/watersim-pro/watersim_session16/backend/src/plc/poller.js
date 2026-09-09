@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — PLC poller
+ * SafeKrit — PLC poller
  *
  * Started from server.js after listen, stopped in shutdown. Every tick it
  * loads enabled read/read_write bindings joined with enabled connections,

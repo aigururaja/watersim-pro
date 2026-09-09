@@ -6,7 +6,7 @@
  * the same environment names, the same phone normalisation, free text inside
  * the 24-hour customer-service window and a pre-approved template outside it.
  * The WhatsApp Business Account Infercon registered for the CRM therefore
- * sends for WaterSim too — the same phone number id and system-user token,
+ * sends for SafeKrit too — the same phone number id and system-user token,
  * no second registration.
  *
  * Env (Meta — chosen when set, or when WHATSAPP_PROVIDER=meta):
@@ -17,7 +17,7 @@
  *   WHATSAPP_DEFAULT_COUNTRY_CODE  prepended to bare local numbers (91)
  *   WHATSAPP_TEMPLATES             JSON, event type → approved template name;
  *                                  "*" is the default and "alarm." a prefix:
- *                                  {"*":"watersim_alert","alarm.":"watersim_alarm"}
+ *                                  {"*":"safekrit_alert","alarm.":"watersim_alarm"}
  *   WHATSAPP_TEMPLATE_LANG         the templates' language code (en_US)
  *   WHATSAPP_VERIFY_TOKEN          webhook handshake (routes/webhooks.js)
  *   WHATSAPP_APP_SECRET            webhook signature check (optional)
@@ -28,7 +28,7 @@
  * Meta's rules that shape this file:
  *   - Free-form text may only be sent within 24 h of the recipient's last
  *     message to the business. Everything else — every alarm that wakes an
- *     engineer at night — must be an approved template. Every WaterSim
+ *     engineer at night — must be an approved template. Every SafeKrit
  *     template takes two body parameters: {{1}} the subject line and {{2}} the
  *     details on one line. The templates themselves — the wording Meta
  *     reviews, and the WHATSAPP_TEMPLATES mapping to set once they are
@@ -173,7 +173,7 @@ function param(s, max = 1024) {
 function details(body, subject) {
   const lines = String(body || '').split('\n').map((l) => l.trim()).filter(Boolean);
   if (lines.length && subject && lines[0] === String(subject).trim()) lines.shift();
-  if (lines.length > 1 && /sent by WaterSim Pro/i.test(lines[lines.length - 1])) lines.pop();
+  if (lines.length > 1 && /sent by SafeKrit/i.test(lines[lines.length - 1])) lines.pop();
   return lines.join(' · ') || String(subject || '-');
 }
 
@@ -181,7 +181,7 @@ function details(body, subject) {
  * The template for a message and the two body parameters it takes — what
  * sendMeta posts and what previews show. Meta counts the rendered body (the
  * template's fixed text plus both values) against 1024 characters, so the
- * details are trimmed to what the template leaves; a template WaterSim did
+ * details are trimmed to what the template leaves; a template SafeKrit did
  * not write is assumed to carry 300 characters of its own.
  */
 function templateParams({ subject, body, eventType }) {
@@ -200,7 +200,7 @@ function templateParams({ subject, body, eventType }) {
 const TRANSIENT = new Set([1, 2, 4, 17, 32, 80007, 130429, 131048, 131056, 133004, 133005, 133006]);
 const HINT = {
   131047: 'the recipient has not messaged this number in the last 24 h, so only an approved template may be sent — register one and set WHATSAPP_TEMPLATES',
-  132000: 'the template takes a different number of parameters — WaterSim sends two ({{1}} subject, {{2}} details)',
+  132000: 'the template takes a different number of parameters — SafeKrit sends two ({{1}} subject, {{2}} details)',
   132001: 'the template does not exist in this language, or is not approved yet',
   132012: 'a template parameter does not match the format Meta approved',
   132015: 'the template is paused by Meta (quality rating)',

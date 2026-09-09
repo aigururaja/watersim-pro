@@ -26,7 +26,7 @@ vi.mock('../services/api', () => {
 
 const providers = (provider) => ({
   email: { ok: false, reason: 'SMTP_HOST is not set' },
-  whatsapp: { ok: true, provider, reason: provider === 'meta' ? 'template watersim_alert' : undefined },
+  whatsapp: { ok: true, provider, reason: provider === 'meta' ? 'template safekrit_alert' : undefined },
   dryRun: false,
 });
 
@@ -51,7 +51,7 @@ function answers(provider = 'meta', { verified = false, missing = ['viewer:alarm
     }
     if (url.startsWith('/notifications/whatsapp/templates')) {
       return Promise.resolve({ data: { ok: true, provider: 'meta', templates: [
-        { id: '1', name: 'watersim_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', params: 2, mappedTo: ['*'] },
+        { id: '1', name: 'safekrit_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', params: 2, mappedTo: ['*'] },
         { id: '2', name: 'staff_task_assigned_18t5k', status: 'APPROVED', category: 'UTILITY', language: 'en_US', params: 2, mappedTo: [] },
         { id: '3', name: 'hello_world', status: 'PENDING', category: 'UTILITY', language: 'en_US', params: 0, mappedTo: ['task.'] },
       ] } });
@@ -66,7 +66,7 @@ describe('NotificationsTab — WhatsApp through Meta', () => {
   it('names the provider, shows delivery receipts, and lists the templates on request', async () => {
     api.get.mockImplementation(answers('meta'));
     render(<NotificationsTab showToast={vi.fn()} />);
-    await waitFor(() => expect(screen.getByLabelText('Provider status')).toHaveTextContent('WhatsApp (Meta Cloud API): template watersim_alert'));
+    await waitFor(() => expect(screen.getByLabelText('Provider status')).toHaveTextContent('WhatsApp (Meta Cloud API): template safekrit_alert'));
 
     const outbox = await screen.findByLabelText('Outbox');
     expect(within(outbox).getAllByText('sent')).toHaveLength(2);
@@ -78,9 +78,9 @@ describe('NotificationsTab — WhatsApp through Meta', () => {
     const section = screen.getByLabelText('WhatsApp templates');
     expect(section.querySelector('table')).toBeNull();
     fireEvent.click(within(section).getByLabelText('Check Meta templates'));
-    await waitFor(() => expect(section.querySelector('[data-template="watersim_alert"]')).not.toBeNull());
+    await waitFor(() => expect(section.querySelector('[data-template="safekrit_alert"]')).not.toBeNull());
     expect(api.get).toHaveBeenCalledWith('/notifications/whatsapp/templates?refresh=true');
-    const row = section.querySelector('[data-template="watersim_alert"]');
+    const row = section.querySelector('[data-template="safekrit_alert"]');
     expect(row.querySelector('[data-status]').dataset.status).toBe('APPROVED');
     expect(row).toHaveTextContent('*');
     // A mapped template with the wrong parameter count is called out.

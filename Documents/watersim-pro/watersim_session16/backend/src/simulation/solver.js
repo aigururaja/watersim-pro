@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Steady-State Solver  (Session 4 — Step 19; graph/mass-balance rework Session 16)
+ * SafeKrit — Steady-State Solver  (Session 4 — Step 19; graph/mass-balance rework Session 16)
  *
  * Supports:
  *   - Linear process trains

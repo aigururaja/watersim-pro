@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * WaterSim Pro — seed the CMMS asset register from the tag registry (Phase 5)
+ * SafeKrit — seed the CMMS asset register from the tag registry (Phase 5)
  *
  *   node scripts/sync-cmms-assets.js --org itc-stp [--dry-run]
  *
  * One CMMS asset per equipment loop (asset_code = the ISA loop tag, e.g.
- * RFP-P-201), one sub-asset per unit (RFP-P-201/1). The WaterSim ids ride in
+ * RFP-P-201), one sub-asset per unit (RFP-P-201/1). The SafeKrit ids ride in
  * `custom_fields.watersim` so neither schema changes. Lookups (type, make)
  * are resolved by name on the CMMS side.
  *

@@ -2,7 +2,7 @@
   "name": "watersim-pro",
   "version": "0.1.0",
   "private": true,
-  "description": "WaterSim Pro — Web-Based Wastewater & Water Purification Process Simulation Platform",
+  "description": "SafeKrit — Web-Based Wastewater & Water Purification Process Simulation Platform",
   "workspaces": [
     "backend",
     "frontend"

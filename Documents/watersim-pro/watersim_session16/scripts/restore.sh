@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# WaterSim Pro — Database restore (docker compose deployment)
+# SafeKrit — Database restore (docker compose deployment)
 #
 # Usage:   ./scripts/restore.sh <path-to-dump>
 # Example: ./scripts/restore.sh backups/watersim-20260903-023000.dump

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Solver Graph-Ordering & Honesty Tests  (Session 16)
+ * SafeKrit — Solver Graph-Ordering & Honesty Tests  (Session 16)
  *
  * Regression coverage for:
  *   - false-recycle misclassification of feed-forward branch-and-merge DAGs

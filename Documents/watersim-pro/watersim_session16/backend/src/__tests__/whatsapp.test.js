@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 const META = { WHATSAPP_PHONE_NUMBER_ID: '1234567890', WHATSAPP_ACCESS_TOKEN: 'EAAtest' };
-const BODY = '[CRITICAL] Alarm: TSS high\n\nTSS 50 exceeded max 30\nFlowsheet: ITC STP\n\nITC · sent by WaterSim Pro · https://dt.example';
+const BODY = '[CRITICAL] Alarm: TSS high\n\nTSS 50 exceeded max 30\nFlowsheet: ITC STP\n\nITC · sent by SafeKrit · https://dt.example';
 
 /** A fetch stand-in that records calls and answers with `reply`. */
 function fakeFetch(reply = { ok: true, status: 200, body: { messages: [{ id: 'wamid.1' }] } }) {
@@ -94,8 +94,8 @@ describe('provider choice', () => {
   test('Meta configured says which templates are mapped', () => {
     Object.assign(process.env, META);
     expect(whatsapp.configured()).toMatchObject({ ok: true, provider: 'meta', reason: expect.stringMatching(/text only/) });
-    process.env.WHATSAPP_TEMPLATES = '{"*":"watersim_alert"}';
-    expect(whatsapp.configured().reason).toBe('template watersim_alert');
+    process.env.WHATSAPP_TEMPLATES = '{"*":"safekrit_alert"}';
+    expect(whatsapp.configured().reason).toBe('template safekrit_alert');
   });
 
   test('dry run is ok whatever is set', () => {
@@ -106,16 +106,16 @@ describe('provider choice', () => {
 
 describe('templates', () => {
   test('exact name, then the longest prefix, then "*"', () => {
-    process.env.WHATSAPP_TEMPLATES = '{"*":"watersim_alert","alarm.":"watersim_alarm","alarm.cleared":"watersim_clear"}';
+    process.env.WHATSAPP_TEMPLATES = '{"*":"safekrit_alert","alarm.":"watersim_alarm","alarm.cleared":"watersim_clear"}';
     expect(whatsapp.templateFor('alarm.raised')).toBe('watersim_alarm');
     expect(whatsapp.templateFor('alarm.cleared')).toBe('watersim_clear');
-    expect(whatsapp.templateFor('task.assigned')).toBe('watersim_alert');
-    expect(whatsapp.templateFor('notification.test')).toBe('watersim_alert');
+    expect(whatsapp.templateFor('task.assigned')).toBe('safekrit_alert');
+    expect(whatsapp.templateFor('notification.test')).toBe('safekrit_alert');
   });
 
   test('a bare name is the default; broken JSON maps nothing', () => {
-    process.env.WHATSAPP_TEMPLATES = 'watersim_alert';
-    expect(whatsapp.templates()).toEqual({ '*': 'watersim_alert' });
+    process.env.WHATSAPP_TEMPLATES = 'safekrit_alert';
+    expect(whatsapp.templates()).toEqual({ '*': 'safekrit_alert' });
     process.env.WHATSAPP_TEMPLATES = '{oops';
     expect(whatsapp.templates()).toEqual({});
     expect(whatsapp.templateFor('alarm.raised')).toBeNull();
@@ -273,9 +273,9 @@ describe('template catalogue', () => {
     Object.assign(process.env, META);
     expect((await whatsapp.listTemplates()).ok).toBe(false);
     process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = 'WABA1';
-    process.env.WHATSAPP_TEMPLATES = '{"*":"watersim_alert"}';
+    process.env.WHATSAPP_TEMPLATES = '{"*":"safekrit_alert"}';
     const page = (n) => (n === 1
-      ? { ok: true, status: 200, body: { data: [{ id: '1', name: 'watersim_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', components: [{ type: 'BODY', text: '*{{1}}*\n{{2}}' }] }], paging: { cursors: { after: 'c1' }, next: 'https://graph.facebook.com/next' } } }
+      ? { ok: true, status: 200, body: { data: [{ id: '1', name: 'safekrit_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', components: [{ type: 'BODY', text: '*{{1}}*\n{{2}}' }] }], paging: { cursors: { after: 'c1' }, next: 'https://graph.facebook.com/next' } } }
       : { ok: true, status: 200, body: { data: [{ id: '2', name: 'hello_world', status: 'APPROVED', category: 'UTILITY', language: 'en_US', components: [{ type: 'HEADER', format: 'TEXT', text: 'Hello' }, { type: 'BODY', text: 'Welcome and goodbye' }] }], paging: { cursors: { after: 'c2' } } } });
     const calls = fakeFetch(page);
     const r = await whatsapp.listTemplates({ force: true });
@@ -285,7 +285,7 @@ describe('template catalogue', () => {
     expect(calls[1].url).toMatch(/after=c1/);
     expect(calls[0].opts.headers.Authorization).toBe('Bearer EAAtest');
     expect(r.templates).toEqual([
-      { id: '1', name: 'watersim_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', type: 'TEXT', body: '*{{1}}*\n{{2}}', params: 2, reason: null, mappedTo: ['*'] },
+      { id: '1', name: 'safekrit_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', type: 'TEXT', body: '*{{1}}*\n{{2}}', params: 2, reason: null, mappedTo: ['*'] },
       { id: '2', name: 'hello_world', status: 'APPROVED', category: 'UTILITY', language: 'en_US', type: 'TEXT', body: 'Welcome and goodbye', params: 0, reason: null, mappedTo: [] },
     ]);
     const again = await whatsapp.listTemplates();
@@ -298,21 +298,21 @@ describe('email adapter', () => {
   test('accepts the CRM and CMMS variable names, and assumes Gmail for a Gmail user', () => {
     expect(email.configured().ok).toBe(false);
     Object.assign(process.env, { SMTP_USER: 'ops@gmail.com', SMTP_PASSWORD: 'app-password' });
-    expect(email.configured()).toEqual({ ok: true, reason: 'smtp.gmail.com:587 as WaterSim Pro <ops@gmail.com>' });
+    expect(email.configured()).toEqual({ ok: true, reason: 'smtp.gmail.com:587 as SafeKrit <ops@gmail.com>' });
     for (const k of ['SMTP_USER', 'SMTP_PASSWORD']) delete process.env[k];
     Object.assign(process.env, { SMTP_SERVER: 'mail.example.com', SMTP_USERNAME: 'u', SMTP_PASSWORD: 'p', FROM_EMAIL: 'stp@example.com', SMTP_FROM_NAME: 'ITC STP' });
     expect(email.configured().reason).toBe('mail.example.com:587 as ITC STP <stp@example.com>');
   });
 
   test('an HTML body goes out as html with a text alternative; plain text as text', async () => {
-    Object.assign(process.env, { SMTP_HOST: 'mail.example.com', SMTP_USER: 'u', SMTP_PASS: 'p', SMTP_FROM: 'WaterSim Pro <no-reply@example.com>' });
+    Object.assign(process.env, { SMTP_HOST: 'mail.example.com', SMTP_USER: 'u', SMTP_PASS: 'p', SMTP_FROM: 'SafeKrit <no-reply@example.com>' });
     const sent = [];
     email.setTransportFactory(() => ({ sendMail: async (m) => { sent.push(m); return { messageId: '<id@example>' }; } }));
-    const html = '<!doctype html><html><body><h2>Alarm &amp; task</h2><p>TSS 50 exceeded max 30</p><p>Open: https://dt.example/tasks</p><hr><div>ITC · sent by WaterSim Pro</div></body></html>';
+    const html = '<!doctype html><html><body><h2>Alarm &amp; task</h2><p>TSS 50 exceeded max 30</p><p>Open: https://dt.example/tasks</p><hr><div>ITC · sent by SafeKrit</div></body></html>';
     const r = await email.send({ address: 'eng@example.com', subject: 'S', body: html });
     expect(r.providerId).toBe('<id@example>');
-    expect(sent[0]).toMatchObject({ from: 'WaterSim Pro <no-reply@example.com>', to: 'eng@example.com', subject: 'S', html });
-    expect(sent[0].text).toBe('Alarm & task\nTSS 50 exceeded max 30\nOpen: https://dt.example/tasks\n\nITC · sent by WaterSim Pro');
+    expect(sent[0]).toMatchObject({ from: 'SafeKrit <no-reply@example.com>', to: 'eng@example.com', subject: 'S', html });
+    expect(sent[0].text).toBe('Alarm & task\nTSS 50 exceeded max 30\nOpen: https://dt.example/tasks\n\nITC · sent by SafeKrit');
     await email.send({ address: 'eng@example.com', subject: 'S', body: 'just words' });
     expect(sent[1].text).toBe('just words');
     expect(sent[1].html).toBeUndefined();

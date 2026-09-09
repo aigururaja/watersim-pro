@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Simulation Engine Tests  (Session 4 — Step 22)
+ * SafeKrit — Simulation Engine Tests  (Session 4 — Step 22)
  *
  * Tests cover:
  *  - Linear train (no recycle)
@@ -202,7 +202,7 @@ describe('POST /simulate — integration', () => {
     const csvRes = await agent.get(`${url()}/${runId}/export/csv`);
     expect(csvRes.status).toBe(200);
     expect(csvRes.headers['content-type']).toMatch(/text\/csv/);
-    expect(csvRes.text).toContain('WaterSim Pro');
+    expect(csvRes.text).toContain('SafeKrit');
     expect(csvRes.text).toContain('INFLUENT / EFFLUENT QUALITY');
   });
 

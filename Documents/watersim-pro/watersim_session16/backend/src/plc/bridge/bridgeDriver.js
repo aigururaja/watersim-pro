@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — factory for Python-bridge-backed PLC drivers
+ * SafeKrit — factory for Python-bridge-backed PLC drivers
  *
  * Builds the shared parts of the OPC UA / S7 / EtherNet/IP drivers: a
  * createClient() whose client owns one plc_bridge.py child process and speaks

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Plain-language report layer tests  (Session 17)
+ * SafeKrit — Plain-language report layer tests  (Session 17)
  *
  * buildPlainSummary() turns a report JSON into the "In plain words" section
  * shown first in the report page, the PDF and the Excel workbook. It runs on

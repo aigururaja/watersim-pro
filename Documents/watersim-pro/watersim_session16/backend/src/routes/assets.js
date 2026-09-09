@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Asset read API for the CMMS boundary (Phase 5)
+ * SafeKrit — Asset read API for the CMMS boundary (Phase 5)
  *
  * Mounted at: /api/v1/assets · versioned, keyset-paged, served to an API key
  * with the scope or to a logged-in admin.
@@ -12,7 +12,7 @@
  *
  * `:tag` is the loop tag (RFP-P-201) or a unit (RFP-P-201/1, URL-encoded).
  * Asset identity across the boundary: the loop tag is the CMMS's asset_code,
- * a unit is a sub-asset, and the WaterSim ids ride in `watersim` for the
+ * a unit is a sub-asset, and the SafeKrit ids ride in `watersim` for the
  * CMMS's custom_fields.
  */
 'use strict';

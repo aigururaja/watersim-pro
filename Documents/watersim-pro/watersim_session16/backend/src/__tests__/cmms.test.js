@@ -94,7 +94,7 @@ describe('API keys', () => {
 });
 
 describe('asset read API', () => {
-  test('lists loops as assets with sub-assets and WaterSim ids; an admin may read it too', async () => {
+  test('lists loops as assets with sub-assets and SafeKrit ids; an admin may read it too', async () => {
     const r = await withKey(readKey)('/api/v1/assets?area=RFP');
     expect(r.status).toBe(200);
     expect(r.body.apiVersion).toBe('v1');

@@ -410,7 +410,7 @@ describe('WhatsApp via Meta Cloud API', () => {
   const queueRow = async (eventType = 'notification.test') => (await query(
     `INSERT INTO notification_outbox (organisation_id, user_id, channel, address, event_type, template, subject, body)
      VALUES ($1, $2, 'whatsapp', '+919876543210', $3, $3, 'Test subject', $4) RETURNING id`,
-    [orgId, ids.operator, eventType, 'Test subject\n\nline one\nline two\n\nOrg · sent by WaterSim Pro']
+    [orgId, ids.operator, eventType, 'Test subject\n\nline one\nline two\n\nOrg · sent by SafeKrit']
   )).rows[0].id;
   const rowOf = async (id) => (await query('SELECT state, last_error, payload FROM notification_outbox WHERE id = $1', [id])).rows[0];
 
@@ -428,7 +428,7 @@ describe('WhatsApp via Meta Cloud API', () => {
   });
 
   test('a mapped event goes out as the template with two body parameters, and the outbox says so', async () => {
-    process.env.WHATSAPP_TEMPLATES = '{"*":"watersim_alert","alarm.":"watersim_alarm"}';
+    process.env.WHATSAPP_TEMPLATES = '{"*":"safekrit_alert","alarm.":"watersim_alarm"}';
     const id = await queueRow('alarm.raised');
     expect((await worker.drain({ onlyId: id })).sent).toBe(1);
     expect(calls[0].body.type).toBe('template');
@@ -437,7 +437,7 @@ describe('WhatsApp via Meta Cloud API', () => {
     const box = await manager.agent.get('/api/v1/notifications/outbox?limit=10');
     const mine = box.body.outbox.find((o) => o.id === id);
     expect(mine).toMatchObject({ kind: 'template', providerId: expect.stringMatching(/^wamid\./), delivery: null });
-    expect(box.body.providers.whatsapp).toMatchObject({ ok: true, provider: 'meta', reason: expect.stringMatching(/watersim_alert/) });
+    expect(box.body.providers.whatsapp).toMatchObject({ ok: true, provider: 'meta', reason: expect.stringMatching(/safekrit_alert/) });
     delete process.env.WHATSAPP_TEMPLATES;
   });
 
@@ -522,16 +522,16 @@ describe('WhatsApp via Meta Cloud API', () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: false, provider: 'meta', reason: expect.stringMatching(/WHATSAPP_BUSINESS_ACCOUNT_ID/) });
     process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = 'WABA1';
-    process.env.WHATSAPP_TEMPLATES = '{"*":"watersim_alert"}';
+    process.env.WHATSAPP_TEMPLATES = '{"*":"safekrit_alert"}';
     whatsapp.setFetch(async (url) => { calls.push({ url }); return { ok: true, status: 200, json: async () => ({ data: [
-      { id: '1', name: 'watersim_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', components: [{ type: 'BODY', text: '*{{1}}*\n{{2}}' }] },
+      { id: '1', name: 'safekrit_alert', status: 'APPROVED', category: 'UTILITY', language: 'en_US', components: [{ type: 'BODY', text: '*{{1}}*\n{{2}}' }] },
       { id: '2', name: 'hello_world', status: 'PENDING', category: 'UTILITY', language: 'en_US', components: [{ type: 'HEADER', format: 'TEXT', text: 'Hello' }, { type: 'BODY', text: 'Welcome' }] },
     ], paging: { cursors: { after: 'x' } } }) }; });
     r = await manager.agent.get('/api/v1/notifications/whatsapp/templates?refresh=true');
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: true, provider: 'meta', cached: false });
     expect(calls[0].url).toMatch(/\/v21\.0\/WABA1\/message_templates\?/);
-    expect(r.body.templates.find((t) => t.name === 'watersim_alert')).toMatchObject({ status: 'APPROVED', params: 2, mappedTo: ['*'] });
+    expect(r.body.templates.find((t) => t.name === 'safekrit_alert')).toMatchObject({ status: 'APPROVED', params: 2, mappedTo: ['*'] });
     expect(r.body.templates.find((t) => t.name === 'hello_world')).toMatchObject({ status: 'PENDING', params: 0, mappedTo: [] });
     whatsapp.setFetch(async () => ({ ok: false, status: 400, json: async () => ({ error: { code: 190, message: 'Invalid OAuth access token' } }) }));
     r = await manager.agent.get('/api/v1/notifications/whatsapp/templates?refresh=true');

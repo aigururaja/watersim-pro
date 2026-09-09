@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ReportPage
+ * SafeKrit — ReportPage
  * Full-page simulation report viewer with permit compliance, cost breakdown,
  * effluent quality table, unit operation metrics, and PDF export.
  *
@@ -691,7 +691,7 @@ export default function ReportPage() {
             <p className="text-sm text-gray-500">Default parameters used for all nodes.</p>
           )}
           <p className="text-[10px] text-gray-400 mt-4 border-t border-gray-100 pt-3">
-            This report is generated automatically by WaterSim Pro. Results should be reviewed by a
+            This report is generated automatically by SafeKrit. Results should be reviewed by a
             qualified engineer before use in design or regulatory submissions.
           </p>
         </Section>

@@ -1,4 +1,4 @@
-# WaterSim Pro — Python dependencies for report generation
+# SafeKrit — Python dependencies for report generation
 #
 # Used by src/reports/pdf_report.py (PDF, via reportlab + matplotlib charts)
 # and src/reports/excel_report.py (XLSX, via openpyxl), both spawned through

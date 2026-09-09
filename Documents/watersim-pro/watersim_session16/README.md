@@ -1,4 +1,4 @@
-# WaterSim Pro
+# SafeKrit
 
 > Web-Based Wastewater & Water Purification Process Simulation Platform
 
@@ -185,7 +185,7 @@ raises the comms-loss alarm when a bound point has had no good sample for
 `stale_after_s` seconds.
 
 ## CMMS boundary
-Another system reaches WaterSim Pro with a scoped API key (Settings →
+Another system reaches SafeKrit with a scoped API key (Settings →
 Integrations, shown once): `GET /api/v1/assets[…]` describes every equipment
 loop as an asset with its points, history, counters and events, and
 `POST /api/v1/cmms/work-orders/:externalId/status` lets a work order closed in

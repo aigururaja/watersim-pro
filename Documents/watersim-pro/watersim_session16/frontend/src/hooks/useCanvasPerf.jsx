@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — useCanvasPerf
+ * SafeKrit — useCanvasPerf
  * Session 16: Performance — lightweight FPS counter and render-budget guard
  * for the flowsheet canvas. Activates only in development mode.
  *
@@ -85,7 +85,7 @@ function PerfHud({ nodeCount, edgeCount }) {
 }
 
 /**
- * WaterSim Pro — useCanvasPerf
+ * SafeKrit — useCanvasPerf
  *
  * Usage:
  *   const { nodeCount, edgeCount, PerfOverlay } = useCanvasPerf(nodes, edges);
@@ -100,8 +100,8 @@ export function useCanvasPerf(nodes = [], edges = []) {
   // Warn in console when element count gets large
   useEffect(() => {
     if (!IS_DEV) return;
-    if (nodeCount > 50)  console.warn(`[WaterSim Canvas] Large flowsheet: ${nodeCount} nodes. Consider splitting into sub-flowsheets.`);
-    if (edgeCount > 100) console.warn(`[WaterSim Canvas] High edge count: ${edgeCount}. Performance may degrade.`);
+    if (nodeCount > 50)  console.warn(`[SafeKrit Canvas] Large flowsheet: ${nodeCount} nodes. Consider splitting into sub-flowsheets.`);
+    if (edgeCount > 100) console.warn(`[SafeKrit Canvas] High edge count: ${edgeCount}. Performance may degrade.`);
   }, [nodeCount, edgeCount]);
 
   // Counts change rarely (a node or edge added/removed), so this ref keeps the

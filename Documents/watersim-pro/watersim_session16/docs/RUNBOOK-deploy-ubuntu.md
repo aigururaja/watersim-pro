@@ -1,6 +1,6 @@
 # RUNBOOK — Traditional deployment on Ubuntu (no Docker)
 
-Audience: anyone standing up WaterSim Pro on a single Ubuntu server with
+Audience: anyone standing up SafeKrit on a single Ubuntu server with
 system packages, systemd and nginx — no containers, no Kubernetes.
 Last updated: 2026-09-07.
 
@@ -267,14 +267,14 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASS=
-SMTP_FROM="WaterSim Pro <no-reply@${DOMAIN}>"
+SMTP_FROM="SafeKrit <no-reply@${DOMAIN}>"
 # WhatsApp through Meta's Cloud API — the CRM's business account (§8.1)
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_BUSINESS_ACCOUNT_ID=
 WHATSAPP_API_VERSION=v21.0
 WHATSAPP_DEFAULT_COUNTRY_CODE=91
-WHATSAPP_TEMPLATES={"*":"watersim_alert"}
+WHATSAPP_TEMPLATES={"*":"safekrit_alert"}
 WHATSAPP_TEMPLATE_LANG=en_US
 WHATSAPP_VERIFY_TOKEN=$(openssl rand -hex 16)
 WHATSAPP_APP_SECRET=
@@ -305,7 +305,7 @@ network — both open an SSRF surface.
 
 ### 8.1 WhatsApp (Meta Cloud API) and Gmail
 
-WaterSim sends WhatsApp through the WhatsApp Business Account the enterprise
+SafeKrit sends WhatsApp through the WhatsApp Business Account the enterprise
 CRM already uses, so nothing new is registered with Meta. From the CRM's
 `.env` copy `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN` (a permanent
 system-user token with `whatsapp_business_messaging` and
@@ -325,9 +325,9 @@ Configuration:
    webhook body is checked against its `X-Hub-Signature-256`.
 3. **Templates.** Meta delivers plain text only to a person who wrote to the
    number in the last 24 hours; every alarm outside that window needs an
-   approved template. WaterSim's four UTILITY templates —
-   `watersim_alarm_raised`, `watersim_alarm_cleared`, `watersim_task_update`
-   and the default `watersim_alert` — are written in
+   approved template. SafeKrit's four UTILITY templates —
+   `safekrit_alarm_raised`, `safekrit_alarm_cleared`, `safekrit_task_update`
+   and the default `safekrit_alert` — are written in
    `backend/src/notifications/whatsappTemplates.js` to Meta's review rules (a
    body may not begin or end with a variable, every variable needs sample
    text, header ≤ 60 characters, UTILITY wording only). Submit them from
@@ -345,7 +345,7 @@ Configuration:
    every template shows APPROVED, set
 
    ```
-   WHATSAPP_TEMPLATES={"*":"watersim_alert","alarm.raised":"watersim_alarm_raised","alarm.cleared":"watersim_alarm_cleared","task.":"watersim_task_update"}
+   WHATSAPP_TEMPLATES={"*":"safekrit_alert","alarm.raised":"safekrit_alarm_raised","alarm.cleared":"safekrit_alarm_cleared","task.":"safekrit_task_update"}
    ```
 
    and restart. Keys are an event type, a prefix ending in a dot, or `*`;
@@ -423,7 +423,7 @@ sudo -u watersim -H watersim-node src/seeds/index.js
 ```bash
 sudo tee /etc/systemd/system/watersim-backend.service >/dev/null <<'UNIT'
 [Unit]
-Description=WaterSim Pro API (Node.js)
+Description=SafeKrit API (Node.js)
 Documentation=file:///opt/watersim/app/docs/RUNBOOK-deploy-ubuntu.md
 After=network-online.target
 Wants=network-online.target
@@ -717,7 +717,7 @@ install, migrate, restart. Save it as a script so every update is identical:
 ```bash
 sudo tee /usr/local/bin/watersim-update >/dev/null <<'EOS'
 #!/usr/bin/env bash
-# Update WaterSim Pro from git. Usage: sudo DOMAIN=app.example.com watersim-update [git-ref]
+# Update SafeKrit from git. Usage: sudo DOMAIN=app.example.com watersim-update [git-ref]
 set -euo pipefail
 : "${DOMAIN:?set DOMAIN=<public hostname>}"
 REPO=/opt/watersim/repo

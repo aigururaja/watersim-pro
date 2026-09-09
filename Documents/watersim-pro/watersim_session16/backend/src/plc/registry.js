@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — PLC driver registry
+ * SafeKrit — PLC driver registry
  *
  * Every driver self-describes via its descriptor:
  *   { protocol, label, status: 'available'|'stub', configFields: [...], addressHint }

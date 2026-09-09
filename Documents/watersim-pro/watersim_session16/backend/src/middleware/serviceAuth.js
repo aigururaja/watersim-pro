@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Service authentication (Phase 5)
+ * SafeKrit — Service authentication (Phase 5)
  *
  * Machine callers (the CMMS, an analytics job) present an API key instead of
  * a person's JWT:

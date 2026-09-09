@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ─────────────────────────────────────────────────────────────
-# WaterSim Pro — Backend Development Dockerfile
+# SafeKrit — Backend Development Dockerfile
 #
 # This is an npm-workspaces monorepo with a SINGLE root package-lock.json.
 # Build context MUST be the repo root:

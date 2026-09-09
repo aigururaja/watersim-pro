@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Maintenance tasks: the state machine
+ * SafeKrit — Maintenance tasks: the state machine
  *
  *   open ─assign→ assigned ─start→ in_progress ─complete→ completed ─approve→ approved
  *                                       ▲                       │

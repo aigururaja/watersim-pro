@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Audit read API
+ * SafeKrit — Audit read API
  *
  * Mounted at: /api/v1/audit   (admin only — capability `audit.read`)
  *

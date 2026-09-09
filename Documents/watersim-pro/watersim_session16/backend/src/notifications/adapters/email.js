@@ -11,7 +11,7 @@
  *   SMTP_USE_TLS   STARTTLS on the plain port (default true)
  *   SMTP_USER      (or SMTP_USERNAME)
  *   SMTP_PASS      (or SMTP_PASSWORD)
- *   SMTP_FROM      "WaterSim Pro <no-reply@example.com>", or
+ *   SMTP_FROM      "SafeKrit <no-reply@example.com>", or
  *   SMTP_FROM_EMAIL + SMTP_FROM_NAME (or FROM_EMAIL); a Gmail account must send
  *                  as itself, so the user is the default sender.
  *
@@ -36,11 +36,11 @@ const env = () => {
   const port = parseInt(process.env.SMTP_PORT || '587', 10) || 587;
   const secure = String(process.env.SMTP_SECURE ?? (port === 465 ? 'true' : 'false')) === 'true';
   const useTls = String(process.env.SMTP_USE_TLS ?? 'true').toLowerCase() !== 'false';
-  const fromName = process.env.SMTP_FROM_NAME || 'WaterSim Pro';
+  const fromName = process.env.SMTP_FROM_NAME || 'SafeKrit';
   const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.FROM_EMAIL || '';
   const from = process.env.SMTP_FROM
     || (fromEmail ? `${fromName} <${fromEmail}>` : null)
-    || (user.includes('@') ? `${fromName} <${user}>` : 'WaterSim Pro <no-reply@watersim.local>');
+    || (user.includes('@') ? `${fromName} <${user}>` : 'SafeKrit <no-reply@watersim.local>');
   return {
     host, port, secure, requireTLS: !secure && useTls, user,
     pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '',

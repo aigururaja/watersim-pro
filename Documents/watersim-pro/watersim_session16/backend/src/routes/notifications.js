@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Notifications API
+ * SafeKrit — Notifications API
  *
  * Mounted at: /api/v1/notifications
  *
@@ -348,7 +348,7 @@ router.post('/outbox/:id/retry', requireCapability('notify.policy'), [param('id'
 
 // ── GET /notifications/whatsapp/templates ────────────────────────────────────
 // The templates on the WhatsApp Business Account with Meta's review status, so
-// a manager can see that `watersim_alert` is APPROVED before relying on it.
+// a manager can see that `safekrit_alert` is APPROVED before relying on it.
 router.get('/whatsapp/templates', requireCapability('notify.policy'), async (req, res) => {
   try {
     res.json({ provider: whatsapp.provider(), ...(await whatsapp.listTemplates({ force: req.query.refresh === 'true' })) });

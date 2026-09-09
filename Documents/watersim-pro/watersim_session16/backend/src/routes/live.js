@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Live plant API (Phase 3)
+ * SafeKrit — Live plant API (Phase 3)
  *
  * Mounted at: /api/v1/live
  *

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Comms-loss alarm sweep
+ * SafeKrit — Comms-loss alarm sweep
  *
  * The one alarm that fires when the PLC STOPS talking. A rule of
  * kind = 'quality' names a bound parameter and a `stale_after_s`; the sweep

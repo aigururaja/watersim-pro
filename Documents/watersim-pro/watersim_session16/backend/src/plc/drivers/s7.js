@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Siemens S7 driver (real, via the Python bridge)
+ * SafeKrit — Siemens S7 driver (real, via the Python bridge)
  *
  * Backed by python-snap7 (ISO-on-TCP / RFC1006) through
  * backend/src/plc/bridge/plc_bridge.py. Availability is probed at runtime by

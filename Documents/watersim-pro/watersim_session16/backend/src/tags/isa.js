@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ISA-5.1 tag grammar and validation.
+ * SafeKrit — ISA-5.1 tag grammar and validation.
  *
  * The plant is tagged to ISA-5.1 and nothing else. This module is the single
  * definition of what that means, shared by the tag registry API (which refuses

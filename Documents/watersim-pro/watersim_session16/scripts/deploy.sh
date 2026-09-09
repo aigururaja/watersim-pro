@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# WaterSim Pro — Production Deploy Script (image-pull based, with rollback)
+# SafeKrit — Production Deploy Script (image-pull based, with rollback)
 #
 # Usage:  IMAGE_TAG=<sha-or-latest> ./scripts/deploy.sh
 #         (IMAGE_TAG / IMAGE_ORG may also come from .env.prod; exported env

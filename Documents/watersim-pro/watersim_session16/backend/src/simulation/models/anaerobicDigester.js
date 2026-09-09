@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ADM1-lite Anaerobic Digestion Model  (Session 8 — Step 39)
+ * SafeKrit — ADM1-lite Anaerobic Digestion Model  (Session 8 — Step 39)
  *
  * Implements a steady-state simplification of the IWA Anaerobic Digestion
  * Model No. 1 (ADM1), retaining the four-stage biochemical pathway but

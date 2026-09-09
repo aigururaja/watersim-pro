@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Dynamic (Time-Series) Solver  (Session 5 — Step 24)
+ * SafeKrit — Dynamic (Time-Series) Solver  (Session 5 — Step 24)
  *
  * Wraps the steady-state solver in a time-step loop.
  * At each time step the inlet node's parameters are scaled by

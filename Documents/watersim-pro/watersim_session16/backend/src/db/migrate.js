@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Versioned Database Migration Runner
+ * SafeKrit — Versioned Database Migration Runner
  * ─────────────────────────────────────────────────────────────────────────────
  * Tracks applied migrations in a `schema_migrations` table.
  * Migrations live in backend/src/db/migrations/*.js — each exports { id, up, down }.

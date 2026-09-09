@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Server-side digital twin (Phase 4)
+ * SafeKrit — Server-side digital twin (Phase 4)
  *
  * The loop that runs whether or not a browser is open. On its cadence, for
  * every flowsheet with an enabled twin:

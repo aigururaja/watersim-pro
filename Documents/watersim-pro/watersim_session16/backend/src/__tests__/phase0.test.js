@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Phase 0 foundations  (three-application plan)
+ * SafeKrit — Phase 0 foundations  (three-application plan)
  *
  * What Phase 0 adds and what this suite holds it to:
  *

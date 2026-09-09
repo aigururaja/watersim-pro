@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * WaterSim Pro — Org-Level Reports API
+ * SafeKrit — Org-Level Reports API
  *
  * Mounted at: /api/v1/reports
  *

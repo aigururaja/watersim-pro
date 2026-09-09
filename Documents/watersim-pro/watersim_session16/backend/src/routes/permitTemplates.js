@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Permit Templates API  (Session 6 — Step 32)
+ * SafeKrit — Permit Templates API  (Session 6 — Step 32)
  *
  * Org-level effluent permit limit configuration.
  * Admins and engineers can create/edit templates; operators are read-only.

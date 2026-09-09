@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Stream (process connection)
+ * SafeKrit — Stream (process connection)
  *
  * A Stream carries the state of a process connection between unit operations.
  * All concentrations are mg/L, flows are m³/d, temperatures are °C.

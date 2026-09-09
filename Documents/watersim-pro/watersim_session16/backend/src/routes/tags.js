@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Tag registry API
+ * SafeKrit — Tag registry API
  *
  * Mounted at: /api/v1/tags
  *

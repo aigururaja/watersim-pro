@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — OPC UA driver (real, via the Python bridge)
+ * SafeKrit — OPC UA driver (real, via the Python bridge)
  *
  * Backed by the asyncua package through backend/src/plc/bridge/plc_bridge.py:
  * each client owns one bridge child that keeps a connected asyncua Client on a

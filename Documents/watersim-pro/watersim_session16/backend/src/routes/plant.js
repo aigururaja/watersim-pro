@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Plant definition API
+ * SafeKrit — Plant definition API
  *
  * Mounted at: /api/v1/plant
  *

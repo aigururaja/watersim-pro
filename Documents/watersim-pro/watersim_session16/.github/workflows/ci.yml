@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# WaterSim Pro — CI Pipeline
+# SafeKrit — CI Pipeline
 # Runs on every push and pull request to main / develop.
 #
 # Jobs:

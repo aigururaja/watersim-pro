@@ -24,8 +24,8 @@ const STEPS = [
     icon: Droplets,
     iconBg: 'bg-brand-100',
     iconColor: 'text-brand-600',
-    title: 'Welcome to WaterSim Pro',
-    body: `WaterSim Pro lets you design, simulate, and report on wastewater treatment
+    title: 'Welcome to SafeKrit',
+    body: `SafeKrit lets you design, simulate, and report on wastewater treatment
            processes — all in your browser. Let's take a quick tour so you can get
            started in under 2 minutes.`,
     illustration: 'welcome',
@@ -59,7 +59,7 @@ const STEPS = [
     iconBg: 'bg-green-100',
     iconColor: 'text-green-600',
     title: 'Run a Simulation',
-    body: `Hit "Run Simulation" in the canvas toolbar. WaterSim Pro solves the mass
+    body: `Hit "Run Simulation" in the canvas toolbar. SafeKrit solves the mass
            balance across your flowsheet in seconds. Results appear on each stream and
            unit, and you can generate a full compliance report.`,
     illustration: 'simulate',

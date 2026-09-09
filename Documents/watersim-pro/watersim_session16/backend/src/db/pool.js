@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Database client selector
+ * SafeKrit — Database client selector
  *
  * Every module requires `./db/pool` and gets the same five things:
  * `query(text, params)`, `getClient()`, `withTransaction(fn)`,

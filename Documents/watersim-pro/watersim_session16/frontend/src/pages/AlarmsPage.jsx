@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — AlarmsPage
+ * SafeKrit — AlarmsPage
  * Org-wide alarm event history: every limit breach across every flowsheet,
  * newest first, with filters, acknowledgement, CSV and PDF export.
  *

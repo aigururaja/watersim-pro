@@ -284,7 +284,7 @@ async function start() {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () =>
-    logger.info('WaterSim API running', { port: PORT, env: process.env.NODE_ENV, api: API })
+    logger.info('SafeKrit API running', { port: PORT, env: process.env.NODE_ENV, api: API })
   );
 
   const wss = attachWsServer(server);

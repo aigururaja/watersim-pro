@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Playwright e2e scaffold for WaterSim Pro.
+// Playwright e2e scaffold for SafeKrit.
 //
 // STATUS: scaffold only — this suite has NEVER been executed in this repo
 // (browsers were deliberately not downloaded). Before the first run:

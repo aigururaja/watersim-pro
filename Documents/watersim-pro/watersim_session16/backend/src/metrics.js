@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Prometheus metrics
+ * SafeKrit — Prometheus metrics
  *
  * Exposes:
  *   - default Node.js process metrics (CPU, memory, event-loop lag, GC, ...)

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — TasksPage
+ * SafeKrit — TasksPage
  * The maintenance board: every work item in the organisation by state, with
  * the detail panel where the work actually moves — assign, start, complete,
  * approve or reject, acknowledge a critical alarm — each action gated by the

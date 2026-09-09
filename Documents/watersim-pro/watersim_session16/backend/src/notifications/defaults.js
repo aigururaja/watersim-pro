@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Default notification policy
+ * SafeKrit — Default notification policy
  *
  * One row per (role, event) so that every kind of user hears what their role
  * needs from the first day, on the phone as well as by email where a message

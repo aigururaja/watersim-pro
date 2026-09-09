@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Node manager for one plc_bridge.py child process
+ * SafeKrit — Node manager for one plc_bridge.py child process
  *
  * The real OPC UA / S7 / EtherNet/IP drivers talk to Python (asyncua,
  * python-snap7, pycomm3) through this JSON-line RPC bridge. Each BridgeClient

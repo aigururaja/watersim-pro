@@ -50,7 +50,7 @@ export default function RegisterPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/20 backdrop-blur mb-3">
             <Droplets className="w-8 h-8 sm:w-9 sm:h-9 text-white" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">WaterSim Pro</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">SafeKrit</h1>
           <p className="text-blue-100 mt-1 text-sm">Register your organisation</p>
         </div>
         <div className="card p-6 sm:p-8 shadow-2xl ws-page-enter">

@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Per-Unit CAPEX Model Tests  (Session 16)
+ * SafeKrit — Per-Unit CAPEX Model Tests  (Session 16)
  *
  * Coverage for the power-law capital cost model in costEstimator.js:
  *   - process configuration drives capital: an RO-heavy flowsheet costs

@@ -20,7 +20,7 @@
  *      shaped exactly like a level, which is the worst kind.
  *
  * ⓘ copy, verbatim (§5.4):
- *   "This unit passes flow through unchanged. WaterSim has no tank level model
+ *   "This unit passes flow through unchanged. SafeKrit has no tank level model
  *    — nothing inside this vessel is simulated."
  *
  * What we draw instead is the canvas-wide "not simulated" language: the 45°
@@ -52,7 +52,7 @@ const SIGHT = Object.freeze({ x: 100, w: 6, top: 12, bottom: 52 });
 
 /** ⓘ copy, shipped verbatim per spec §5.4. */
 export const TANK_REFUSAL_COPY =
-  'This unit passes flow through unchanged. WaterSim has no tank level model — '
+  'This unit passes flow through unchanged. SafeKrit has no tank level model — '
   + 'nothing inside this vessel is simulated.';
 
 /** The footer unit. A rate through the vessel — NEVER a level. */

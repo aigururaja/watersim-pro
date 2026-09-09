@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Shadow (commissioning) mode (Phase 4)
+ * SafeKrit — Shadow (commissioning) mode (Phase 4)
  *
  * A PLC connection in `shadow` mode never touches its device. Every write is
  * routed into the built-in simulator's register namespace for that

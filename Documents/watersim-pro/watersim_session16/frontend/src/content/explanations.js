@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — in-app explanation content.
+ * SafeKrit — in-app explanation content.
  *
  * Single source of truth for every ⓘ affordance in the app: the node info modal
  * (canvas + params panel header), the per-parameter InfoTip rows, and the
@@ -253,7 +253,7 @@ export const OP_INFO = {
     what: 'A holding or equalisation tank absorbs the morning and evening peaks so everything downstream sees a flatter, steadier flow. That is what lets a plant be sized for the average day rather than the worst hour.',
     how: 'Like the blower, the tank is a passthrough in this solver: flow and composition leave exactly as they arrived. Nothing is stored, because the steady-state solver has no time dimension in which storage would mean anything, so a volume would have no effect even if you could enter one.',
     watchFor: 'Do not reach for this node to smooth a peak — it does not buffer, in steady state or in the dynamic run. If you need to limit the flow reaching a downstream unit, use a pump capacity or a valve opening, and remember that whatever is held back is reported as blocked flow rather than stored for later.',
-    animation: "This unit passes flow through unchanged. WaterSim has no tank level model — nothing inside this vessel is simulated. What you see instead is the canvas-wide \"not simulated\" language: a 45° hatch and a DASHED operating-level line, because a solid surface line is a promise that a number backs it. If you set volume_m3 the footer prints Q_in ÷ volume_m3 as turnovers per day — a number, never a level. Only this node's inlet and outlet edges move.",
+    animation: "This unit passes flow through unchanged. SafeKrit has no tank level model — nothing inside this vessel is simulated. What you see instead is the canvas-wide \"not simulated\" language: a 45° hatch and a DASHED operating-level line, because a solid surface line is a promise that a number backs it. If you set volume_m3 the footer prints Q_in ÷ volume_m3 as turnovers per day — a number, never a level. Only this node's inlet and outlet edges move.",
   },
 
   // ── Not on the palette, but reachable from saved flowsheets ────────────────

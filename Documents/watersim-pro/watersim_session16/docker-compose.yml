@@ -1,4 +1,4 @@
-# WaterSim Pro — Local Development Stack
+# SafeKrit — Local Development Stack
 # Usage:
 #   docker compose up          # start all services (migrations run automatically)
 #   docker compose up -d       # detached

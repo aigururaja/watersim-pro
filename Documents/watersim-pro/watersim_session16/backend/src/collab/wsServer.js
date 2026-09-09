@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Real-time Collaboration WebSocket Server
+ * SafeKrit — Real-time Collaboration WebSocket Server
  * Mounted on the same HTTP server as Express.
  * Uses the `ws` package (no socket.io dependency).
  *

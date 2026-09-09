@@ -1,6 +1,6 @@
 # RUNBOOK — Database Backup & Restore
 
-Audience: anyone operating a WaterSim Pro deployment.
+Audience: anyone operating a SafeKrit deployment.
 Last updated: 2026-09-03.
 
 The only stateful component is PostgreSQL (`postgres_data` volume / `pgdata`

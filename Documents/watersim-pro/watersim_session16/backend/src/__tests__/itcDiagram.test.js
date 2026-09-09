@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — ITC STP process flow diagram tests  (Session 18)
+ * SafeKrit — ITC STP process flow diagram tests  (Session 18)
  *
  * The whole argument for generating this drawing is that it cannot drift from
  * the plant model. These tests are what makes that true rather than aspirational:

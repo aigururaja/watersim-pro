@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — Flowsheet alarm API
+ * SafeKrit — Flowsheet alarm API
  * Mounted at /api/v1/projects/:projectId/flowsheets/:flowsheetId (same base as
  * simulate and plc-bindings), so the paths are:
  *

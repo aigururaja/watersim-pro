@@ -1,5 +1,5 @@
 /**
- * WaterSim Pro — VirtualTable
+ * SafeKrit — VirtualTable
  * Session 16: Performance — drop-in virtualised replacement for large
  * paginated tables in ReportsPage.
  *

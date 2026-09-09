@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ESLint v9 flat config for the WaterSim Pro monorepo (single root config).
+// ESLint v9 flat config for the SafeKrit monorepo (single root config).
 //
 //   backend/**       → CommonJS, Node globals (+ Jest globals in __tests__)
 //   frontend/src/**  → ESM/JSX, browser globals, react + react-hooks plugins

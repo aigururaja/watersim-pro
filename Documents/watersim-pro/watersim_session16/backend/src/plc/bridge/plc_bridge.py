@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WaterSim Pro - PLC protocol bridge (JSON-line RPC over stdio).
+"""SafeKrit - PLC protocol bridge (JSON-line RPC over stdio).
 
 Spawned by backend/src/plc/bridge/bridgeClient.js - one persistent child per
 Node PLC client (plus short-lived one-shots for probe/test). Wire protocol:
