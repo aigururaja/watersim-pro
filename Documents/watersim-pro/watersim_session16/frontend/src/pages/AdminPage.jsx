@@ -873,7 +873,7 @@ export default function AdminPage() {
 
         {/* Tab bar */}
         <div
-          className="flex border-b border-line"
+          className="flex border-b border-line overflow-x-auto whitespace-nowrap"
           role="tablist"
           aria-label="Admin sections"
           onKeyDown={e => {

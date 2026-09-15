@@ -140,9 +140,9 @@ function SidebarContent({
 
   // Console links: 44px tall, 14px radius, white on ink when active.
   const linkClass = (active) =>
-    `flex items-center gap-3 min-h-[44px] rounded-xl text-sm font-medium transition-colors ${expanded ? 'px-3' : 'justify-center px-0'}
+    `flex items-center gap-3 min-h-[40px] rounded-xl text-sm font-medium transition-colors ${expanded ? 'px-3' : 'justify-center px-0'}
      ${active ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'}`;
-  const groupLabel = 'px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-[0.12em]';
+  const groupLabel = 'px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-[0.12em]';
   const chip = ROLE_CHIP[user?.role] || ROLE_CHIP.viewer;
   const ChipIcon = chip.icon;
   const initials = `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`.toUpperCase() || '?';
