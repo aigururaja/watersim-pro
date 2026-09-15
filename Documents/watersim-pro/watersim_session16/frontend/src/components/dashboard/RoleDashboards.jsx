@@ -34,7 +34,9 @@ export default function RoleDashboard({ data }) {
         {cards.map((s) => {
           const C = SECTION_COMPONENTS[s];
           return (
-            <div key={s} role="listitem" className={C.span === 2 ? 'md:col-span-2' : ''}>
+            {/* min-w-0: a grid item defaults to min-width auto, so one long
+                unwrapped row would widen the whole column past the screen */}
+            <div key={s} role="listitem" className={C.span === 2 ? 'min-w-0 md:col-span-2' : 'min-w-0'}>
               <C data={data[s]} role={data.role} />
             </div>
           );
