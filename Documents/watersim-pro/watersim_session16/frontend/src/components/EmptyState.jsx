@@ -50,12 +50,12 @@ export default function EmptyState({
         <Icon className={`text-brand-400 ${compact ? 'w-5 h-5' : 'w-8 h-8'}`} />
       </div>
 
-      <p className={`font-semibold text-gray-900 ${compact ? 'text-sm' : 'text-base'} mb-1`}>
+      <p className={`font-semibold text-ink ${compact ? 'text-sm' : 'text-base'} mb-1`}>
         {title}
       </p>
 
       {description && (
-        <p className={`text-gray-400 ${compact ? 'text-xs' : 'text-sm'} max-w-xs mb-5`}>
+        <p className={`text-ink-3 ${compact ? 'text-xs' : 'text-sm'} max-w-xs mb-5`}>
           {description}
         </p>
       )}

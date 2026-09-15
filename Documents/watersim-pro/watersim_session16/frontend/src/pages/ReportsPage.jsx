@@ -47,17 +47,17 @@ function CompliancePill({ summary }) {
   const compliant = summary?.compliant;
   const violations = summary?.permit_violations?.length || 0;
   if (compliant === true)
-    return <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-xs font-medium"><CheckCircle2 className="w-3 h-3" />Pass</span>;
+    return <span className="inline-flex items-center gap-1 text-ok bg-ok-soft border border-ok/30 px-2 py-0.5 rounded-full text-xs font-medium"><CheckCircle2 className="w-3 h-3" />Pass</span>;
   if (compliant === false)
-    return <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full text-xs font-medium"><XCircle className="w-3 h-3" />{violations} fail</span>;
-  return <span className="inline-flex items-center gap-1 text-gray-500 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full text-xs"><AlertTriangle className="w-3 h-3" />Unknown</span>;
+    return <span className="inline-flex items-center gap-1 text-danger bg-danger-soft border border-danger/30 px-2 py-0.5 rounded-full text-xs font-medium"><XCircle className="w-3 h-3" />{violations} fail</span>;
+  return <span className="inline-flex items-center gap-1 text-ink-3 bg-ground border border-line px-2 py-0.5 rounded-full text-xs"><AlertTriangle className="w-3 h-3" />Unknown</span>;
 }
 
 function ModePill({ mode }) {
   const label = mode === 'dynamic' ? 'Dynamic' : 'Steady';
   const cls = mode === 'dynamic'
     ? 'text-purple-700 bg-purple-50 border-purple-200'
-    : 'text-blue-700 bg-blue-50 border-blue-200';
+    : 'text-accent-ink bg-accent-soft border-accent/30';
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>{label}</span>;
 }
 
@@ -90,19 +90,19 @@ function SaveModal({ run, onClose, onSaved }) {
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b">
-          <h2 id="save-report-title" className="font-bold text-gray-900">Save report</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X className="w-4 h-4" /></button>
+          <h2 id="save-report-title" className="font-bold text-ink">Save report</h2>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 text-ink-3 hover:text-ink-2 rounded-xl hover:bg-ground"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={handleSave}>
           <div className="px-5 py-4 space-y-3">
-            {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+            {error && <div role="alert" className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-xl px-3 py-2">{error}</div>}
             <div>
               <label className="label" htmlFor="save-label">Label</label>
               <input id="save-label" ref={inputRef} className="input" value={label}
                 onChange={e => setLabel(e.target.value)} maxLength={255} required />
             </div>
             <div>
-              <label className="label" htmlFor="save-notes">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+              <label className="label" htmlFor="save-notes">Notes <span className="text-ink-3 font-normal">(optional)</span></label>
               <textarea id="save-notes" className="input resize-none" rows={3} value={notes}
                 onChange={e => setNotes(e.target.value)} maxLength={2000}
                 placeholder="Why you saved this, key observations…" />
@@ -142,7 +142,7 @@ function RunActions({ run, onSave, onUnsave }) {
         onClick={(e) => { e.stopPropagation(); run.saved ? onUnsave(run) : onSave(run); }}
         aria-label={run.saved ? `Unsave ${run.flowsheetName}` : `Save ${run.flowsheetName}`}
         title={run.saved ? 'Remove from saved' : 'Save report'}
-        className={`p-1.5 rounded-lg transition-colors ${run.saved ? 'text-brand-600 hover:bg-brand-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+        className={`p-1.5 rounded-xl transition-colors ${run.saved ? 'text-brand-600 hover:bg-brand-50' : 'text-ink-3 hover:text-ink-2 hover:bg-ground'}`}
       >
         {run.saved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
       </button>
@@ -152,7 +152,7 @@ function RunActions({ run, onSave, onUnsave }) {
         disabled={downloading}
         aria-label={`Export ${run.flowsheetName} as Excel`}
         title="Export as Excel"
-        className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40"
+        className="p-1.5 text-ink-3 hover:text-ok hover:bg-ok-soft rounded-xl transition-colors disabled:opacity-40"
       >
         {downloading
           ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -162,7 +162,7 @@ function RunActions({ run, onSave, onUnsave }) {
       <Link
         to={`/projects/${run.projectId}/flowsheets/${run.flowsheetId}/simulate/${run.id}/report`}
         aria-label={`Open full report for ${run.flowsheetName}`}
-        className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+        className="p-1.5 text-ink-3 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-colors"
         title="View full report"
         onClick={(e) => e.stopPropagation()}
       >
@@ -188,7 +188,7 @@ function FilterBar({ filters, setFilters, projects }) {
           <option value="">All projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
       {/* Mode */}
@@ -203,7 +203,7 @@ function FilterBar({ filters, setFilters, projects }) {
           <option value="steady_state">Steady state</option>
           <option value="dynamic">Dynamic</option>
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
       {/* Compliance */}
@@ -218,14 +218,14 @@ function FilterBar({ filters, setFilters, projects }) {
           <option value="pass">Pass only</option>
           <option value="fail">Fail only</option>
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
       {/* Clear */}
       {(filters.projectId || filters.mode || filters.compliance) && (
         <button
           onClick={() => setFilters({ page: 1, limit: 30 })}
-          className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+          className="text-xs text-ink-3 hover:text-ink-2 flex items-center gap-1"
         >
           <X className="w-3 h-3" />Clear filters
         </button>
@@ -249,14 +249,14 @@ function CompareBar({ selected, runs, onClear, onCompare, onExcel }) {
   return (
     <div className="fixed bottom-20 md:bottom-6 left-0 right-0 flex justify-center z-40 px-4 pointer-events-none">
       <div className="pointer-events-auto bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
-        <span className="text-sm font-medium text-gray-300">
+        <span className="text-sm font-medium text-line">
           {selected.length} scenario{selected.length > 1 ? 's' : ''} selected
         </span>
         <div className="flex gap-2">
           <button
             onClick={handleExcel}
             disabled={exporting || selected.length < 2}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
           >
             {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <TableIcon className="w-3.5 h-3.5" />}
             Excel
@@ -264,14 +264,14 @@ function CompareBar({ selected, runs, onClear, onCompare, onExcel }) {
           <button
             onClick={onCompare}
             disabled={selected.length < 2}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
           >
             <GitCompare className="w-3.5 h-3.5" />
             Compare
           </button>
           <button
             onClick={onClear}
-            className="flex items-center gap-1 px-2 py-1.5 text-gray-400 hover:text-white rounded-lg transition-colors"
+            className="flex items-center gap-1 px-2 py-1.5 text-ink-3 hover:text-white rounded-xl transition-colors"
             aria-label="Clear selection"
           >
             <X className="w-4 h-4" />
@@ -420,8 +420,8 @@ export default function ReportsPage() {
       key: 'name', header: 'Flowsheet / Project', flex: 2,
       render: (run) => (
         <div>
-          <div className="font-medium text-gray-800 truncate">{run.flowsheetName}</div>
-          <div className="text-xs text-gray-400 truncate">{run.projectName}</div>
+          <div className="font-medium text-ink truncate">{run.flowsheetName}</div>
+          <div className="text-xs text-ink-3 truncate">{run.projectName}</div>
         </div>
       ),
     },
@@ -439,7 +439,7 @@ export default function ReportsPage() {
         const v = run.summary?.bod_removal_pct;
         return v != null
           ? <span className="font-mono text-sm">{Number(v).toFixed(1)}%</span>
-          : <span className="text-gray-400">—</span>;
+          : <span className="text-ink-3">—</span>;
       },
     },
     {
@@ -448,13 +448,13 @@ export default function ReportsPage() {
         const v = run.costSummary?.unit_cost_per_m3;
         return v != null
           ? <span className="font-mono text-sm">${Number(v).toFixed(3)}</span>
-          : <span className="text-gray-400">—</span>;
+          : <span className="text-ink-3">—</span>;
       },
     },
     {
       key: 'completed', header: 'Completed', flex: 1,
       render: (run) => (
-        <span className="text-xs text-gray-500">{fmtDate(run.completedAt)}</span>
+        <span className="text-xs text-ink-3">{fmtDate(run.completedAt)}</span>
       ),
     },
     {
@@ -481,8 +481,8 @@ export default function ReportsPage() {
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Simulation report history, saved bookmarks, and exports</p>
+            <h1 className="text-2xl font-bold text-ink">Reports</h1>
+            <p className="text-sm text-ink-3 mt-0.5">Simulation report history, saved bookmarks, and exports</p>
           </div>
           <div className="flex items-center gap-2">
             {selected.size >= 2 && (
@@ -497,7 +497,7 @@ export default function ReportsPage() {
             <button
               onClick={() => { refresh(); loadSaved(); }}
               aria-label="Refresh reports"
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 text-ink-3 hover:text-ink-2 rounded-xl hover:bg-ground transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -513,7 +513,7 @@ export default function ReportsPage() {
         )}
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200"
+        <div className="flex border-b border-line"
           role="tablist" aria-label="Report views"
           onKeyDown={e => {
             const keys = TABS.map(t => t.key);
@@ -525,11 +525,11 @@ export default function ReportsPage() {
             <button key={t.key} role="tab" aria-selected={tab === t.key}
               onClick={() => setTab(t.key)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-                ${tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                ${tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-3 hover:text-ink-2'}`}>
               {t.key === 'saved' ? <Bookmark className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
               {t.label}
               <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold
-                ${tab === t.key ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'}`}>
+                ${tab === t.key ? 'bg-brand-100 text-brand-700' : 'bg-ground text-ink-2'}`}>
                 {t.count}
               </span>
             </button>
@@ -570,14 +570,14 @@ export default function ReportsPage() {
             {hasMore && <div ref={sentinelRef} className="h-1 w-full" aria-hidden />}
 
             {loadingMore && (
-              <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+              <div className="flex items-center gap-2 text-sm text-ink-3 py-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Loading more…
               </div>
             )}
 
             {!hasMore && runs.length > 0 && (
-              <p className="text-xs text-gray-400 py-2">
+              <p className="text-xs text-ink-3 py-2">
                 All {total.toLocaleString()} report{total !== 1 ? 's' : ''} loaded
               </p>
             )}

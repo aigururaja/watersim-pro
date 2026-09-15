@@ -38,7 +38,7 @@ export default function AlarmsPanel({
   return (
     <div>
       <div style={S.panelHdr}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: '#1F4E79' }}>Alarms</div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: '#16181d' }}>Alarms</div>
         <button style={S.closeBtn} onClick={onClose} aria-label="Close alarms panel">✕</button>
       </div>
 
@@ -165,7 +165,7 @@ const S = {
   section: { padding: '10px 14px', borderBottom: '1px solid #F3F4F6' },
   secHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
   secTitle: { fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 },
-  addBtn: { display: 'inline-flex', alignItems: 'center', gap: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer', marginBottom: 6, flexShrink: 0 },
+  addBtn: { display: 'inline-flex', alignItems: 'center', gap: 4, background: '#EFF6FF', color: '#16181d', border: '1px solid #BFDBFE', borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer', marginBottom: 6, flexShrink: 0 },
   muted: { fontSize: 12, color: '#9CA3AF', fontStyle: 'italic', margin: '2px 0 0' },
   ruleRow: { display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 6, marginBottom: 5 },
   ruleName: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#111827', minWidth: 0 },
@@ -173,7 +173,7 @@ const S = {
   ruleState: { fontSize: 10.5, fontWeight: 600, marginTop: 2, color: '#9CA3AF' },
   ruleMsg: { display: 'block', fontWeight: 400, color: '#374151', marginTop: 1 },
   wouldChip: { display: 'inline-block', marginTop: 3, fontSize: 10.5, fontWeight: 600, color: '#92400E', background: 'transparent', border: '1px dashed #FCD34D', borderRadius: 4, padding: '1px 6px' },
-  editBtn: { background: 'none', border: 'none', color: '#2E75B6', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '2px 4px', flexShrink: 0 },
+  editBtn: { background: 'none', border: 'none', color: '#0f9d8f', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '2px 4px', flexShrink: 0 },
   previewNote: { marginTop: 6, fontSize: 10.5, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '5px 8px' },
   eventRow: { display: 'flex', alignItems: 'flex-start', gap: 7, padding: '5px 0', borderBottom: '1px solid #F8FAFC' },
   sevPill: { fontSize: 9.5, fontWeight: 700, borderRadius: 10, padding: '1px 6px', border: '1px solid', flexShrink: 0, lineHeight: '14px' },

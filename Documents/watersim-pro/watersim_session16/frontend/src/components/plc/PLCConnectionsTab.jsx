@@ -363,7 +363,7 @@ export default function PLCConnectionsTab({ canEdit, showToast }) {
                 Cancel
               </button>
               <button
-                style={{ ...S.btn, background: '#1D4ED8', color: '#fff', opacity: formValid && !saving ? 1 : 0.6 }}
+                style={{ ...S.btn, background: '#16181d', color: '#fff', opacity: formValid && !saving ? 1 : 0.6 }}
                 onClick={handleSave}
                 disabled={!formValid || saving}
               >
@@ -378,7 +378,7 @@ export default function PLCConnectionsTab({ canEdit, showToast }) {
 }
 
 const S = {
-  primaryBtn: { background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 38 },
+  primaryBtn: { background: '#16181d', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 38 },
   outlineBtn: { background: '#fff', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', minHeight: 34 },
   row:        { display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '12px 14px', marginBottom: 10, flexWrap: 'wrap' },
   overlay:    { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },

@@ -506,7 +506,7 @@ export default function AlarmRuleDialog({
               <button
                 type="submit"
                 disabled={!canSave}
-                style={{ ...S.btn, background: '#1D4ED8', color: '#fff', opacity: canSave ? 1 : 0.6 }}
+                style={{ ...S.btn, background: '#16181d', color: '#fff', opacity: canSave ? 1 : 0.6 }}
               >
                 {saving ? 'Saving…' : editing ? 'Save changes' : 'Create alarm'}
               </button>
@@ -532,7 +532,7 @@ const S = {
   btn: { padding: '8px 16px', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 },
   errorBox: { background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12 },
   warnBox: { background: '#FFFBEB', border: '1px solid #FCD34D', color: '#92400E', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12 },
-  noteBox: { background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '3px solid #2E75B6', color: '#374151', borderRadius: 6, padding: '6px 10px', margin: '-4px 0 10px', fontSize: 11.5 },
+  noteBox: { background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '3px solid #0f9d8f', color: '#374151', borderRadius: 6, padding: '6px 10px', margin: '-4px 0 10px', fontSize: 11.5 },
   previewBox: { display: 'flex', alignItems: 'center', gap: 7, background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', margin: '2px 0 14px', fontSize: 12.5, color: '#1E293B', fontWeight: 600 },
   sevDot: { width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
   checkRow: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', margin: '4px 0 12px', cursor: 'pointer' },

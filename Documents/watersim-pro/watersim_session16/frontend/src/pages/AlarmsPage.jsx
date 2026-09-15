@@ -54,8 +54,8 @@ function StatePill({ state }) {
       data-state={active ? 'active' : 'cleared'}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
         active
-          ? 'text-red-700 bg-red-50 border-red-200'
-          : 'text-gray-500 bg-gray-50 border-gray-200'
+          ? 'text-danger bg-danger-soft border-danger/30'
+          : 'text-ink-3 bg-ground border-line'
       }`}
     >
       {active ? <BellRing className="w-3 h-3" /> : <Bell className="w-3 h-3" />}
@@ -72,7 +72,7 @@ function SourceBadge({ source }) {
       data-source={plc ? 'plc' : 'simulation'}
       title={plc ? 'Detected on live PLC data' : 'Detected during a simulation run'}
       className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium ${
-        plc ? 'text-cyan-700 bg-cyan-50' : 'text-blue-700 bg-blue-50'
+        plc ? 'text-cyan-700 bg-cyan-50' : 'text-accent-ink bg-accent-soft'
       }`}
     >
       {plc ? <Radio className="w-3 h-3" /> : <Cpu className="w-3 h-3" />}
@@ -83,11 +83,11 @@ function SourceBadge({ source }) {
 
 /** Relative time with the full local timestamp behind it. */
 function When({ ts }) {
-  if (!ts) return <span className="text-gray-400">—</span>;
+  if (!ts) return <span className="text-ink-3">—</span>;
   return (
-    <span className="text-xs text-gray-500" title={absTime(ts)}>
+    <span className="text-xs text-ink-3" title={absTime(ts)}>
       <span className="block">{relTime(ts)}</span>
-      <span className="block text-[10px] text-gray-400">{absTime(ts)}</span>
+      <span className="block text-[10px] text-ink-3">{absTime(ts)}</span>
     </span>
   );
 }
@@ -113,7 +113,7 @@ function FilterBar({ filters, setFilters, flowsheets }) {
             <option key={f.id} value={f.id}>{f.name}</option>
           ))}
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
       <div className="relative">
@@ -128,7 +128,7 @@ function FilterBar({ filters, setFilters, flowsheets }) {
             <option key={s} value={s}>{severityMeta(s).label}</option>
           ))}
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
       <div className="relative">
@@ -142,7 +142,7 @@ function FilterBar({ filters, setFilters, flowsheets }) {
           <option value="active">Active only</option>
           <option value="cleared">Cleared only</option>
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
       <div className="relative">
@@ -156,10 +156,10 @@ function FilterBar({ filters, setFilters, flowsheets }) {
           <option value="false">Unacknowledged</option>
           <option value="true">Acknowledged</option>
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
-      <label className="flex items-center gap-1.5 text-xs text-gray-500">
+      <label className="flex items-center gap-1.5 text-xs text-ink-3">
         From
         <input
           type="date"
@@ -169,7 +169,7 @@ function FilterBar({ filters, setFilters, flowsheets }) {
           aria-label="Triggered from date"
         />
       </label>
-      <label className="flex items-center gap-1.5 text-xs text-gray-500">
+      <label className="flex items-center gap-1.5 text-xs text-ink-3">
         To
         <input
           type="date"
@@ -183,7 +183,7 @@ function FilterBar({ filters, setFilters, flowsheets }) {
       {dirty && (
         <button
           onClick={() => setFilters({})}
-          className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+          className="text-xs text-ink-3 hover:text-ink-2 flex items-center gap-1"
         >
           <X className="w-3 h-3" />Clear filters
         </button>
@@ -423,8 +423,8 @@ export default function AlarmsPage() {
       key: 'rule', header: 'Rule / Message', flex: 2.4, minWidth: 180,
       render: (e) => (
         <div className="min-w-0">
-          <div className="font-medium text-gray-800 truncate">{e.ruleName || '—'}</div>
-          <div className="text-xs text-gray-500 truncate" title={e.message}>{e.message}</div>
+          <div className="font-medium text-ink truncate">{e.ruleName || '—'}</div>
+          <div className="text-xs text-ink-3 truncate" title={e.message}>{e.message}</div>
         </div>
       ),
     },
@@ -444,7 +444,7 @@ export default function AlarmsPage() {
           ) : (
             <span className="truncate block">{e.flowsheetName || '—'}</span>
           )}
-          <div className="text-xs text-gray-400 truncate">{e.projectName}</div>
+          <div className="text-xs text-ink-3 truncate">{e.projectName}</div>
         </div>
       ),
     },
@@ -457,8 +457,8 @@ export default function AlarmsPage() {
             : e.limitMin != null ? `min ${e.limitMin}` : '—';
         return (
           <div className="font-mono text-xs">
-            <div className="text-gray-800">{e.value ?? '—'}</div>
-            <div className="text-gray-400">{lim}</div>
+            <div className="text-ink">{e.value ?? '—'}</div>
+            <div className="text-ink-3">{lim}</div>
           </div>
         );
       },
@@ -480,13 +480,13 @@ export default function AlarmsPage() {
       render: (e) => {
         if (e.acknowledged) {
           return (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-700" title={absTime(e.acknowledgedAt)}>
+            <span className="inline-flex items-center gap-1 text-xs text-ok" title={absTime(e.acknowledgedAt)}>
               <Check className="w-3.5 h-3.5" />
               {e.acknowledgedByName || 'Acknowledged'}
             </span>
           );
         }
-        if (!canAck) return <span className="text-xs text-gray-400">—</span>;
+        if (!canAck) return <span className="text-xs text-ink-3">—</span>;
         const busy = acking.has(e.id);
         return (
           <button
@@ -528,8 +528,8 @@ export default function AlarmsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Alarms</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h1 className="text-2xl font-bold text-ink">Alarms</h1>
+            <p className="text-sm text-ink-3 mt-0.5">
               Every limit breach across your flowsheets, newest first
             </p>
           </div>
@@ -553,7 +553,7 @@ export default function AlarmsPage() {
             <button
               onClick={load}
               aria-label="Refresh alarms"
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 text-ink-3 hover:text-ink-2 rounded-xl hover:bg-ground transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -561,7 +561,7 @@ export default function AlarmsPage() {
         </div>
 
         {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+          <div role="alert" className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-xl px-4 py-2.5">
             {error}
           </div>
         )}
@@ -581,7 +581,7 @@ export default function AlarmsPage() {
             </button>
             <button
               onClick={() => setSelected(new Set())}
-              className="text-xs text-gray-500 hover:text-gray-700"
+              className="text-xs text-ink-3 hover:text-ink-2"
             >
               Clear selection
             </button>
@@ -635,7 +635,7 @@ export default function AlarmsPage() {
                 : <><ArrowRight className="w-3.5 h-3.5" />Load more ({events.length} of {total})</>}
             </button>
           ) : events.length > 0 && (
-            <p className="text-xs text-gray-400 py-2">
+            <p className="text-xs text-ink-3 py-2">
               All {total.toLocaleString()} alarm event{total !== 1 ? 's' : ''} loaded
             </p>
           )}

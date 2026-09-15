@@ -195,7 +195,7 @@ function UnitCostsTab({ projectId, canEdit, showToast }) {
 
       {/* Overrides count banner */}
       {Object.keys(edits).length > 0 && (
-        <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#92400E' }}>
+        <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 14, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#92400E' }}>
           ⚠ {Object.keys(edits).length} coefficient{Object.keys(edits).length !== 1 ? 's' : ''} override{Object.keys(edits).length === 1 ? 'd' : ''} from global defaults.
           {!dirty && ' All changes saved.'}
           {dirty && ' Unsaved changes — click Save to apply.'}
@@ -212,7 +212,7 @@ function UnitCostsTab({ projectId, canEdit, showToast }) {
             {group.fields.map(f => {
               const overridden = isOverridden(f.key);
               return (
-                <div key={f.key} style={{ background: overridden ? '#FFFBEB' : '#F9FAFB', border: `1px solid ${overridden ? '#FCD34D' : '#E5E7EB'}`, borderRadius: 8, padding: '12px 14px' }}>
+                <div key={f.key} style={{ background: overridden ? '#FFFBEB' : '#F9FAFB', border: `1px solid ${overridden ? '#FCD34D' : '#E5E7EB'}`, borderRadius: 14, padding: '12px 14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{f.label}</label>
                     <span style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>{f.unit}</span>
@@ -255,7 +255,7 @@ function UnitCostsTab({ projectId, canEdit, showToast }) {
 
       {/* Read-only notice for operators */}
       {!canEdit && (
-        <div style={{ background: '#F3F4F6', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: '#6B7280', marginTop: 8 }}>
+        <div style={{ background: '#F3F4F6', borderRadius: 14, padding: '12px 16px', fontSize: 13, color: '#6B7280', marginTop: 8 }}>
           🔒 Operators can view cost coefficients but cannot edit them. Contact an Engineer or Admin to make changes.
         </div>
       )}
@@ -414,8 +414,8 @@ export default function SettingsPage() {
             <button key={tab.key} onClick={() => setActiveTab(tab.key)} role="tab" aria-selected={activeTab === tab.key} style={{
               padding: '10px 22px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, flexShrink: 0,
               fontWeight: activeTab === tab.key ? 700 : 500,
-              color: activeTab === tab.key ? '#1F4E79' : '#6B7280',
-              borderBottom: `2px solid ${activeTab === tab.key ? '#1F4E79' : 'transparent'}`,
+              color: activeTab === tab.key ? '#16181d' : '#6B7280',
+              borderBottom: `2px solid ${activeTab === tab.key ? '#16181d' : 'transparent'}`,
               marginBottom: -2,
             }}>{tab.label}</button>
           ))}
@@ -488,7 +488,7 @@ export default function SettingsPage() {
             ))}
           </div>
           <p style={{ marginTop: 8, fontSize: 12, color: '#9CA3AF' }}>
-            Your current role: <strong style={{ color: '#1D4ED8' }}>{user?.role}</strong>
+            Your current role: <strong style={{ color: '#16181d' }}>{user?.role}</strong>
           </p>
         </section>
 
@@ -755,10 +755,10 @@ const S = {
   sectionSub:    { fontSize: 13, color: '#6B7280', maxWidth: 560 },
 
   status: { color: '#9CA3AF', fontSize: 14, padding: '20px 0' },
-  empty:  { background: '#F9FAFB', border: '1px dashed #E5E7EB', borderRadius: 8, padding: 24, textAlign: 'center', color: '#6B7280', fontSize: 14 },
+  empty:  { background: '#F9FAFB', border: '1px dashed #E5E7EB', borderRadius: 14, padding: 24, textAlign: 'center', color: '#6B7280', fontSize: 14 },
 
   cardGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 14 },
-  card:     { background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 14, transition: 'box-shadow .15s' },
+  card:     { background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 14, transition: 'box-shadow .15s' },
   cardTop:  { display: 'flex', gap: 12, marginBottom: 10 },
   cardTitle:{ fontSize: 14, fontWeight: 700, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 },
   cardDesc: { fontSize: 12, color: '#6B7280', marginTop: 2, marginBottom: 4 },
@@ -775,14 +775,14 @@ const S = {
   th: { padding: '6px 8px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: '#374151', borderBottom: '1px solid #E5E7EB', whiteSpace: 'nowrap' },
   td: { padding: '5px 8px', fontSize: 12, color: '#111' },
 
-  roleTable: { border: '1px solid #E5E7EB', borderRadius: 8, overflowX: 'auto' },
+  roleTable: { border: '1px solid #E5E7EB', borderRadius: 14, overflowX: 'auto' },
   roleRow:   { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', minWidth: 480 },
   roleCell:  { padding: '8px 10px', fontSize: 13, color: '#374151', borderRight: '1px solid #F3F4F6' },
 
-  primaryBtn: { background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 38 },
-  outlineBtn: { background: '#fff', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', minHeight: 34 },
+  primaryBtn: { background: '#16181d', color: '#fff', border: 'none', borderRadius: 20, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 38 },
+  outlineBtn: { background: '#fff', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 20, padding: '6px 12px', fontSize: 12, cursor: 'pointer', minHeight: 34 },
   textBtn:    { background: 'none', border: 'none', color: '#6B7280', fontSize: 12, cursor: 'pointer', padding: '4px 0' },
-  cancelBtn:  { background: '#F9FAFB', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 6, padding: '9px 16px', fontSize: 13, cursor: 'pointer', minHeight: 38 },
+  cancelBtn:  { background: '#F9FAFB', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 20, padding: '9px 16px', fontSize: 13, cursor: 'pointer', minHeight: 38 },
   presetBtn:  { background: '#F0FDF4', color: '#065F46', border: '1px solid #BBF7D0', borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer', marginRight: 6, marginTop: 4, minHeight: 30 },
 
   overlay:   { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 1000 },
@@ -795,7 +795,7 @@ const S = {
 
   field:  { marginBottom: 16 },
   label:  { display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 },
-  input:  { width: '100%', border: '1px solid #D1D5DB', borderRadius: 6, padding: '10px', fontSize: 16 /* prevent iOS zoom */, boxSizing: 'border-box' },
+  input:  { width: '100%', border: '1px solid #D1D5DB', borderRadius: 20, padding: '10px', fontSize: 16 /* prevent iOS zoom */, boxSizing: 'border-box' },
 
   limitsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 },
   limitItem:  { display: 'flex', flexDirection: 'column', gap: 3 },
@@ -803,5 +803,5 @@ const S = {
   limitInput: { width: '100%', border: '1px solid #D1D5DB', borderRadius: 5, padding: '7px', fontSize: 14 },
   unit:       { fontSize: 11, color: '#9CA3AF' },
 
-  toast: { position: 'fixed', bottom: 72, right: 16, color: '#fff', borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 600, zIndex: 2000, boxShadow: '0 4px 12px rgba(0,0,0,.25)', maxWidth: 'calc(100vw - 32px)' },
+  toast: { position: 'fixed', bottom: 72, right: 16, color: '#fff', borderRadius: 14, padding: '10px 18px', fontSize: 13, fontWeight: 600, zIndex: 2000, boxShadow: '0 4px 12px rgba(0,0,0,.25)', maxWidth: 'calc(100vw - 32px)' },
 };

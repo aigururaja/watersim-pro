@@ -53,14 +53,14 @@ export default class ErrorBoundary extends Component {
         aria-live="assertive"
         className="flex flex-col items-center justify-center min-h-[320px] p-8 text-center"
       >
-        <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
+        <div className="w-14 h-14 rounded-2xl bg-danger-soft flex items-center justify-center mb-4">
           <AlertTriangle className="w-7 h-7 text-red-500" aria-hidden="true" />
         </div>
 
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">
+        <h2 className="text-lg font-semibold text-ink mb-1">
           Something went wrong
         </h2>
-        <p className="text-sm text-gray-500 mb-6 max-w-sm">
+        <p className="text-sm text-ink-3 mb-6 max-w-sm">
           {scope} encountered an unexpected error. You can try reloading this section or go back to
           the dashboard.
         </p>
@@ -68,10 +68,10 @@ export default class ErrorBoundary extends Component {
         {/* Dev-mode stack trace */}
         {isDev && this.state.error && (
           <details className="mb-6 w-full max-w-lg text-left">
-            <summary className="text-xs font-mono text-red-600 cursor-pointer hover:text-red-700 mb-1">
+            <summary className="text-xs font-mono text-red-600 cursor-pointer hover:text-danger mb-1">
               Error details (dev only)
             </summary>
-            <pre className="text-xs bg-red-50 border border-red-200 rounded-lg p-3 overflow-x-auto text-red-700 whitespace-pre-wrap break-all">
+            <pre className="text-xs bg-danger-soft border border-danger/30 rounded-xl p-3 overflow-x-auto text-danger whitespace-pre-wrap break-all">
               {this.state.error.toString()}
               {this.state.errorInfo?.componentStack}
             </pre>

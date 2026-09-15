@@ -64,8 +64,8 @@ function Gauge({ tag, name, value, unit, rangeMin, rangeMax, quality = 'unknown'
           </>
         )}
       </svg>
-      <div className="font-mono text-[11px] text-gray-800 -mt-1">{tag}</div>
-      {!compact && <div className="text-[10px] text-gray-500 truncate max-w-[9rem] text-center" title={name}>{name}</div>}
+      <div className="font-mono text-[11px] text-ink -mt-1">{tag}</div>
+      {!compact && <div className="text-[10px] text-ink-3 truncate max-w-[9rem] text-center" title={name}>{name}</div>}
     </div>
   );
 }

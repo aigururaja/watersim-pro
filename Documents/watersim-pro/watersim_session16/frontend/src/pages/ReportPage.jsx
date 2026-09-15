@@ -33,16 +33,16 @@ function calcRemoval(inf, eff) {
 }
 
 function ComplianceBadge({ value, limit }) {
-  if (value == null || limit == null) return <span className="text-gray-400 text-xs">—</span>;
+  if (value == null || limit == null) return <span className="text-ink-3 text-xs">—</span>;
   const pass = Number(value) <= Number(limit);
   if (pass) return (
-    <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold text-xs bg-emerald-50 px-2 py-0.5 rounded-full">
+    <span className="inline-flex items-center gap-1 text-ok font-semibold text-xs bg-ok-soft px-2 py-0.5 rounded-full">
       <CheckCircle2 size={11} /> PASS
     </span>
   );
   const pct = ((Number(value) - Number(limit)) / Number(limit) * 100).toFixed(0);
   return (
-    <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-xs bg-red-50 px-2 py-0.5 rounded-full">
+    <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-xs bg-danger-soft px-2 py-0.5 rounded-full">
       <XCircle size={11} /> +{pct}%
     </span>
   );
@@ -53,15 +53,15 @@ function ComplianceBadge({ value, limit }) {
 function Section({ icon: Icon, title, accent = 'blue', children, collapsible = false }) {
   const [open, setOpen] = useState(true);
   const accents = {
-    blue:  'border-blue-500 bg-blue-50 text-blue-700',
+    blue:  'border-blue-500 bg-accent-soft text-accent-ink',
     cyan:  'border-cyan-500 bg-cyan-50 text-cyan-700',
     green: 'border-green-500 bg-green-50 text-green-700',
-    amber: 'border-amber-500 bg-amber-50 text-amber-700',
-    violet:'border-violet-500 bg-violet-50 text-violet-700',
+    amber: 'border-amber-500 bg-warn-soft text-warn',
+    violet:'border-violet-500 bg-accent-soft text-accent-ink',
   };
   const ac = accents[accent] || accents.blue;
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6 print:shadow-none print:border-gray-300">
+    <section className="bg-white rounded-xl border border-line shadow-sm overflow-hidden mb-6 print:shadow-none print:border-line">
       <div
         className={`flex items-center justify-between px-5 py-3 border-l-4 ${ac} cursor-pointer select-none`}
         onClick={() => collapsible && setOpen(o => !o)}
@@ -81,14 +81,14 @@ function Section({ icon: Icon, title, accent = 'blue', children, collapsible = f
 
 function KPI({ label, value, sub, color = 'blue' }) {
   const colors = {
-    blue:  'bg-blue-50  text-blue-700',
-    green: 'bg-emerald-50 text-emerald-700',
-    amber: 'bg-amber-50  text-amber-700',
-    red:   'bg-red-50    text-red-700',
+    blue:  'bg-accent-soft  text-accent-ink',
+    green: 'bg-ok-soft text-ok',
+    amber: 'bg-warn-soft  text-warn',
+    red:   'bg-danger-soft    text-danger',
     cyan:  'bg-cyan-50   text-cyan-700',
   };
   return (
-    <div className={`rounded-lg p-3 ${colors[color] || colors.blue} flex flex-col gap-0.5`}>
+    <div className={`rounded-xl p-3 ${colors[color] || colors.blue} flex flex-col gap-0.5`}>
       <span className="text-[10px] font-semibold uppercase tracking-widest opacity-70">{label}</span>
       <span className="text-xl font-bold leading-tight">{value}</span>
       {sub && <span className="text-[10px] opacity-60">{sub}</span>}
@@ -102,17 +102,17 @@ function QualityRow({ param, unit, inf, eff, limit, dec = 1 }) {
   const removal = calcRemoval(inf, eff);
   const showCompliance = limit != null && !['Q','pH','temp','DO'].includes(param);
   return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-      <td className="py-2 px-3 text-sm font-medium text-gray-800">{param}</td>
-      <td className="py-2 px-3 text-xs text-gray-500 text-center">{unit}</td>
-      <td className="py-2 px-3 text-sm text-right font-mono text-blue-700">{fmt(inf, dec)}</td>
-      <td className="py-2 px-3 text-sm text-right font-mono text-emerald-700">{fmt(eff, dec)}</td>
-      <td className="py-2 px-3 text-sm text-right font-mono text-gray-500">
+    <tr className="border-b border-line hover:bg-ground transition-colors">
+      <td className="py-2 px-3 text-sm font-medium text-ink">{param}</td>
+      <td className="py-2 px-3 text-xs text-ink-3 text-center">{unit}</td>
+      <td className="py-2 px-3 text-sm text-right font-mono text-accent-ink">{fmt(inf, dec)}</td>
+      <td className="py-2 px-3 text-sm text-right font-mono text-ok">{fmt(eff, dec)}</td>
+      <td className="py-2 px-3 text-sm text-right font-mono text-ink-3">
         {removal != null ? `${removal.toFixed(1)}%` : '—'}
       </td>
-      <td className="py-2 px-3 text-sm text-right font-mono text-gray-600">{limit != null ? fmt(limit, dec) : '—'}</td>
+      <td className="py-2 px-3 text-sm text-right font-mono text-ink-2">{limit != null ? fmt(limit, dec) : '—'}</td>
       <td className="py-2 px-3 text-center">
-        {showCompliance ? <ComplianceBadge value={eff} limit={limit} /> : <span className="text-gray-300 text-xs">—</span>}
+        {showCompliance ? <ComplianceBadge value={eff} limit={limit} /> : <span className="text-line text-xs">—</span>}
       </td>
     </tr>
   );
@@ -125,10 +125,10 @@ function CostBar({ label, value, total, color }) {
   return (
     <div className="mb-3">
       <div className="flex justify-between text-xs mb-1">
-        <span className="font-medium text-gray-700">{label}</span>
-        <span className="text-gray-500">{fmt(value, 0, 'USD/yr')} <span className="text-gray-400">({pct.toFixed(0)}%)</span></span>
+        <span className="font-medium text-ink-2">{label}</span>
+        <span className="text-ink-3">{fmt(value, 0, 'USD/yr')} <span className="text-ink-3">({pct.toFixed(0)}%)</span></span>
       </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-2 bg-ground rounded-full overflow-hidden">
         <div className={`h-2 rounded-full transition-all duration-700 ${color}`} style={{ width: `${Math.max(pct, 1)}%` }} />
       </div>
     </div>
@@ -139,21 +139,21 @@ function CostBar({ label, value, total, color }) {
 
 function PlainJudgmentBadge({ judgment }) {
   if (judgment === 'good') return (
-    <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold text-xs bg-emerald-50 px-2 py-0.5 rounded-full">
+    <span className="inline-flex items-center gap-1 text-ok font-semibold text-xs bg-ok-soft px-2 py-0.5 rounded-full">
       <CheckCircle2 size={11} /> good
     </span>
   );
   if (judgment === 'ok') return (
-    <span className="inline-flex items-center gap-1 text-amber-600 font-semibold text-xs bg-amber-50 px-2 py-0.5 rounded-full">
+    <span className="inline-flex items-center gap-1 text-amber-600 font-semibold text-xs bg-warn-soft px-2 py-0.5 rounded-full">
       ~ OK
     </span>
   );
   if (judgment === 'poor') return (
-    <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-xs bg-red-50 px-2 py-0.5 rounded-full">
+    <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-xs bg-danger-soft px-2 py-0.5 rounded-full">
       <XCircle size={11} /> poor
     </span>
   );
-  return <span className="text-gray-300 text-xs">—</span>;
+  return <span className="text-line text-xs">—</span>;
 }
 
 function PlainSummaryCard({ plain }) {
@@ -167,16 +167,16 @@ function PlainSummaryCard({ plain }) {
   const glossary        = Array.isArray(plain.glossary)        ? plain.glossary        : [];
 
   const bannerClass =
-    verdict.status === 'pass' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-    verdict.status === 'fail' ? 'bg-red-50 text-red-800 border-red-200' :
-                                'bg-gray-50 text-gray-700 border-gray-200';
+    verdict.status === 'pass' ? 'bg-ok-soft text-emerald-800 border-ok/30' :
+    verdict.status === 'fail' ? 'bg-danger-soft text-red-800 border-danger/30' :
+                                'bg-ground text-ink-2 border-line';
   const BannerIcon =
     verdict.status === 'pass' ? CheckCircle2 :
     verdict.status === 'fail' ? XCircle : AlertTriangle;
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6 print:shadow-none print:border-gray-300">
-      <div className="flex items-center gap-2 px-5 py-3 border-l-4 border-blue-500 bg-blue-50 text-blue-700">
+    <section className="bg-white rounded-xl border border-line shadow-sm overflow-hidden mb-6 print:shadow-none print:border-line">
+      <div className="flex items-center gap-2 px-5 py-3 border-l-4 border-blue-500 bg-accent-soft text-accent-ink">
         <FileText size={16} />
         <h2 className="font-semibold text-sm tracking-wide">In plain words</h2>
       </div>
@@ -195,8 +195,8 @@ function PlainSummaryCard({ plain }) {
         {waterStory.length > 0 && (
           <div className="space-y-1.5">
             {waterStory.map((item, i) => (
-              <p key={i} className="text-sm text-gray-700">
-                <span className="font-semibold text-gray-900">{item.label}.</span> {item.text}
+              <p key={i} className="text-sm text-ink-2">
+                <span className="font-semibold text-ink">{item.label}.</span> {item.text}
               </p>
             ))}
           </div>
@@ -215,14 +215,14 @@ function PlainSummaryCard({ plain }) {
               </thead>
               <tbody>
                 {qualityRows.map(r => (
-                  <tr key={r.param} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  <tr key={r.param} className="border-b border-line hover:bg-ground transition-colors">
                     <td className="py-2 px-3">
-                      <p className="text-sm font-medium text-gray-800">{r.friendly}</p>
-                      <p className="text-[10px] text-gray-400 max-w-xs">{r.meaning}</p>
+                      <p className="text-sm font-medium text-ink">{r.friendly}</p>
+                      <p className="text-[10px] text-ink-3 max-w-xs">{r.meaning}</p>
                     </td>
-                    <td className="py-2 px-3 text-sm text-right font-mono text-blue-700">{fmt(r.in, 1)}</td>
-                    <td className="py-2 px-3 text-sm text-right font-mono text-emerald-700">{fmt(r.out, 1)}</td>
-                    <td className="py-2 px-3 text-sm text-right font-mono text-gray-500">
+                    <td className="py-2 px-3 text-sm text-right font-mono text-accent-ink">{fmt(r.in, 1)}</td>
+                    <td className="py-2 px-3 text-sm text-right font-mono text-ok">{fmt(r.out, 1)}</td>
+                    <td className="py-2 px-3 text-sm text-right font-mono text-ink-3">
                       {r.removalPct != null ? `${Number(r.removalPct).toFixed(1)}%` : '—'}
                     </td>
                     <td className="py-2 px-3 text-center"><PlainJudgmentBadge judgment={r.judgment} /></td>
@@ -238,8 +238,8 @@ function PlainSummaryCard({ plain }) {
           <div className="space-y-1.5">
             {complianceStory.map((c, i) => (
               <p key={i} className={`text-sm ${
-                c.severity === 'none' ? 'text-emerald-700' :
-                c.severity === 'low'  ? 'text-amber-700'   : 'text-red-700'}`}>
+                c.severity === 'none' ? 'text-ok' :
+                c.severity === 'low'  ? 'text-warn'   : 'text-danger'}`}>
                 • {c.text}
               </p>
             ))}
@@ -249,12 +249,12 @@ function PlainSummaryCard({ plain }) {
         {/* Treatment steps */}
         {treatmentSteps.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">The journey, step by step</p>
+            <p className="text-xs font-semibold text-ink-3 uppercase tracking-widest mb-2">The journey, step by step</p>
             <ol className="space-y-1.5 list-decimal list-inside">
               {treatmentSteps.map(s => (
-                <li key={s.id} className="text-sm text-gray-700">
-                  <span className="font-semibold text-gray-900">{s.label}</span> — {s.explanation}
-                  {s.keyFact && <span className="italic text-gray-400"> ({s.keyFact})</span>}
+                <li key={s.id} className="text-sm text-ink-2">
+                  <span className="font-semibold text-ink">{s.label}</span> — {s.explanation}
+                  {s.keyFact && <span className="italic text-ink-3"> ({s.keyFact})</span>}
                 </li>
               ))}
             </ol>
@@ -263,24 +263,24 @@ function PlainSummaryCard({ plain }) {
 
         {/* Cost lines */}
         {costLines.length > 0 && (
-          <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+          <div className="bg-ground rounded-xl p-3 space-y-1">
             {costLines.map((line, i) => (
-              <p key={i} className="text-sm text-gray-700">• {line}</p>
+              <p key={i} className="text-sm text-ink-2">• {line}</p>
             ))}
           </div>
         )}
 
         {/* Glossary */}
         {glossary.length > 0 && (
-          <details className="border-t border-gray-100 pt-3">
-            <summary className="text-xs font-semibold text-blue-700 cursor-pointer select-none">
+          <details className="border-t border-line pt-3">
+            <summary className="text-xs font-semibold text-accent-ink cursor-pointer select-none">
               Plain-words dictionary ({glossary.length} terms)
             </summary>
             <dl className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
               {glossary.map(g => (
                 <div key={g.term} className="text-xs">
-                  <dt className="inline font-semibold text-gray-800">{g.term}</dt>
-                  <dd className="inline text-gray-500"> — {g.definition}</dd>
+                  <dt className="inline font-semibold text-ink">{g.term}</dt>
+                  <dd className="inline text-ink-3"> — {g.definition}</dd>
                 </div>
               ))}
             </dl>
@@ -326,20 +326,20 @@ export default function ReportPage() {
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-ground">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        <p className="text-sm text-gray-500">Loading simulation report…</p>
+        <p className="text-sm text-ink-3">Loading simulation report…</p>
       </div>
     </div>
   );
 
   if (error) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-ground">
       <div className="text-center max-w-sm">
         <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-        <p className="font-semibold text-gray-800 mb-1">Report not found</p>
-        <p className="text-sm text-gray-500 mb-4">{error}</p>
+        <p className="font-semibold text-ink mb-1">Report not found</p>
+        <p className="text-sm text-ink-3 mb-4">{error}</p>
         <button onClick={() => navigate(-1)} className="text-sm text-blue-600 hover:underline">
           ← Go back
         </button>
@@ -377,13 +377,13 @@ export default function ReportPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-ground">
       {/* ── Topbar ────────────────────────────────────────────────────────── */}
       <header className="bg-blue-900 text-white px-4 md:px-6 py-3 flex items-center justify-between print:hidden sticky top-0 z-10 shadow-lg gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => navigate(`/projects/${projectId}/flowsheets/${flowsheetId}`)}
-            className="p-1.5 hover:bg-blue-800 rounded-lg transition-colors flex-shrink-0"
+            className="p-1.5 hover:bg-blue-800 rounded-xl transition-colors flex-shrink-0"
           >
             <ArrowLeft size={18} />
           </button>
@@ -402,7 +402,7 @@ export default function ReportPage() {
           <button
             onClick={handleExcel}
             disabled={xlsxLoading}
-            className="flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-500 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors disabled:opacity-60"
+            className="flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-500 px-3 py-2 rounded-xl text-xs md:text-sm font-semibold transition-colors disabled:opacity-60"
           >
             {xlsxLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             <span className="hidden sm:inline">{xlsxLoading ? 'Exporting…' : 'Export Excel'}</span>
@@ -411,7 +411,7 @@ export default function ReportPage() {
           <button
             onClick={handlePdf}
             disabled={pdfLoading}
-            className="flex items-center gap-1.5 bg-white text-blue-900 hover:bg-blue-50 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors disabled:opacity-60"
+            className="flex items-center gap-1.5 bg-white text-blue-900 hover:bg-accent-soft px-3 py-2 rounded-xl text-xs md:text-sm font-semibold transition-colors disabled:opacity-60"
           >
             {pdfLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             <span className="hidden sm:inline">{pdfLoading ? 'Generating PDF…' : 'Export PDF'}</span>
@@ -426,24 +426,24 @@ export default function ReportPage() {
         {data.plain && <PlainSummaryCard plain={data.plain} />}
 
         {/* ── Cover info ──────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+        <div className="bg-white rounded-xl border border-line shadow-sm p-5 mb-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">{data.project_name}</h2>
-              <p className="text-gray-500 text-sm">{data.flowsheet_name}</p>
-              <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-400">
-                <span>Run: <span className="font-mono text-gray-600">{data.run_id?.slice(0, 8)}</span></span>
-                <span>Mode: <span className="text-gray-600">{data.mode?.replace('_', ' ')}</span></span>
-                <span>By: <span className="text-gray-600">{data.created_by}</span></span>
-                <span>Completed: <span className="text-gray-600">{data.completed_at?.slice(0, 19)} UTC</span></span>
+              <h2 className="text-2xl font-extrabold tracking-tight text-ink">{data.project_name}</h2>
+              <p className="text-ink-3 text-sm">{data.flowsheet_name}</p>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-ink-3">
+                <span>Run: <span className="font-mono text-ink-2">{data.run_id?.slice(0, 8)}</span></span>
+                <span>Mode: <span className="text-ink-2">{data.mode?.replace('_', ' ')}</span></span>
+                <span>By: <span className="text-ink-2">{data.created_by}</span></span>
+                <span>Completed: <span className="text-ink-2">{data.completed_at?.slice(0, 19)} UTC</span></span>
               </div>
             </div>
 
             {/* Compliance banner */}
             <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm
-              ${compliant === true  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                compliant === false ? 'bg-red-50 text-red-700 border border-red-200' :
-                                      'bg-gray-50 text-gray-600 border border-gray-200'}`}>
+              ${compliant === true  ? 'bg-ok-soft text-ok border border-ok/30' :
+                compliant === false ? 'bg-danger-soft text-danger border border-danger/30' :
+                                      'bg-ground text-ink-2 border border-line'}`}>
               {compliant === true  ? <CheckCircle2 size={18} /> :
                compliant === false ? <XCircle size={18} /> :
                                      <AlertTriangle size={18} />}
@@ -454,8 +454,8 @@ export default function ReportPage() {
           </div>
 
           {violations.length > 0 && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg">
-              <p className="text-xs font-semibold text-red-700 mb-1.5 flex items-center gap-1">
+            <div className="mt-4 p-3 bg-danger-soft border border-red-100 rounded-xl">
+              <p className="text-xs font-semibold text-danger mb-1.5 flex items-center gap-1">
                 <AlertTriangle size={12} /> Permit Violations
               </p>
               {violations.map((v, i) => (
@@ -464,12 +464,12 @@ export default function ReportPage() {
             </div>
           )}
           {warnings.length > 0 && (
-            <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-              <p className="text-xs font-semibold text-amber-700 mb-1.5 flex items-center gap-1">
+            <div className="mt-3 p-3 bg-warn-soft border border-amber-100 rounded-xl">
+              <p className="text-xs font-semibold text-warn mb-1.5 flex items-center gap-1">
                 <AlertTriangle size={12} /> Simulation Warnings
               </p>
               {warnings.slice(0, 5).map((w, i) => (
-                <p key={i} className="text-xs text-amber-700 mb-0.5">• {w}</p>
+                <p key={i} className="text-xs text-warn mb-0.5">• {w}</p>
               ))}
             </div>
           )}
@@ -539,27 +539,27 @@ export default function ReportPage() {
                 ))}
               </div>
               <div className="space-y-3">
-                <div className="bg-blue-900 text-white rounded-lg p-4">
+                <div className="bg-blue-900 text-white rounded-xl p-4">
                   <p className="text-xs text-blue-300 mb-1">TOTAL ANNUAL OPEX</p>
                   <p className="text-2xl font-bold">{fmt(cost.total_USD_yr, 0, 'USD')}</p>
                   <p className="text-xs text-blue-300 mt-1">per year</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-ground rounded-xl p-3 grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <p className="text-gray-500">Unit cost</p>
-                    <p className="font-semibold text-gray-800">{fmt(cost.cost_per_m3_treated_USD, 3)} USD/m³</p>
+                    <p className="text-ink-3">Unit cost</p>
+                    <p className="font-semibold text-ink">{fmt(cost.cost_per_m3_treated_USD, 3)} USD/m³</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Energy</p>
-                    <p className="font-semibold text-gray-800">{fmt(cost.energy?.total_kWh_yr, 0)} kWh/yr</p>
+                    <p className="text-ink-3">Energy</p>
+                    <p className="font-semibold text-ink">{fmt(cost.energy?.total_kWh_yr, 0)} kWh/yr</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Staff</p>
-                    <p className="font-semibold text-gray-800">{cost.labour?.staff_count ?? '—'} FTE</p>
+                    <p className="text-ink-3">Staff</p>
+                    <p className="font-semibold text-ink">{cost.labour?.staff_count ?? '—'} FTE</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Dry sludge</p>
-                    <p className="font-semibold text-gray-800">{fmt(cost.sludge?.dry_tonnes_yr, 0)} t/yr</p>
+                    <p className="text-ink-3">Dry sludge</p>
+                    <p className="font-semibold text-ink">{fmt(cost.sludge?.dry_tonnes_yr, 0)} t/yr</p>
                   </div>
                 </div>
               </div>
@@ -576,7 +576,7 @@ export default function ReportPage() {
                 const opType  = (ur.paletteType || ur.type || 'unknown').replace(/_/g, ' ');
                 if (!Object.keys(metrics).length) return null;
                 return (
-                  <div key={nodeId} className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div key={nodeId} className="border border-line rounded-xl overflow-hidden">
                     <div className="bg-cyan-50 border-b border-cyan-100 px-3 py-2">
                       <p className="text-xs font-semibold text-cyan-800 capitalize">{opType}</p>
                       <p className="text-[10px] text-cyan-600 font-mono">{nodeId}</p>
@@ -584,9 +584,9 @@ export default function ReportPage() {
                     <table className="w-full text-xs">
                       <tbody>
                         {Object.entries(metrics).map(([k, v], i) => (
-                          <tr key={k} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="py-1.5 px-3 text-gray-600 capitalize">{k.replace(/_/g, ' ')}</td>
-                            <td className="py-1.5 px-3 text-right font-mono text-gray-800">{fmt(v)}</td>
+                          <tr key={k} className={i % 2 === 0 ? 'bg-white' : 'bg-ground'}>
+                            <td className="py-1.5 px-3 text-ink-2 capitalize">{k.replace(/_/g, ' ')}</td>
+                            <td className="py-1.5 px-3 text-right font-mono text-ink">{fmt(v)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -601,7 +601,7 @@ export default function ReportPage() {
         {/* ── Dynamic steps summary ─────────────────────────────────────── */}
         {isDynamic && results.steps?.length > 0 && (
           <Section icon={Activity} title="Dynamic Simulation — Hourly Profile" accent="cyan" collapsible>
-            <p className="text-sm text-gray-600 mb-3">
+            <p className="text-sm text-ink-2 mb-3">
               {results.stepCount ?? results.steps.length} time steps simulated
               {results.profileUsed ? ` (profile: ${results.profileUsed})` : ''}.
             </p>
@@ -616,14 +616,14 @@ export default function ReportPage() {
                 </thead>
                 <tbody>
                   {results.steps.slice(0, 24).map((step, i) => (
-                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="py-1.5 px-2 text-center font-mono text-gray-600">{step.hour ?? i}</td>
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-ground'}>
+                      <td className="py-1.5 px-2 text-center font-mono text-ink-2">{step.hour ?? i}</td>
                       {[
                         step.summary?.influent?.Q,   step.summary?.influent?.BOD,
                         step.summary?.influent?.TN,  step.summary?.effluent?.BOD,
                         step.summary?.effluent?.TN,  step.summary?.effluent?.NH4,
                       ].map((v, j) => (
-                        <td key={j} className="py-1.5 px-2 text-center font-mono text-gray-700">{fmt(v, 1)}</td>
+                        <td key={j} className="py-1.5 px-2 text-center font-mono text-ink-2">{fmt(v, 1)}</td>
                       ))}
                     </tr>
                   ))}
@@ -647,10 +647,10 @@ export default function ReportPage() {
                 </thead>
                 <tbody>
                   {Object.entries(streams).map(([eid, s], i) => (
-                    <tr key={eid} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="py-1.5 px-2 font-mono text-gray-600 text-[10px]">{eid.slice(0, 28)}</td>
+                    <tr key={eid} className={i % 2 === 0 ? 'bg-white' : 'bg-ground'}>
+                      <td className="py-1.5 px-2 font-mono text-ink-2 text-[10px]">{eid.slice(0, 28)}</td>
                       {['Q','BOD','TSS','TN','NH4','NO3','TP'].map(k => (
-                        <td key={k} className="py-1.5 px-2 text-center font-mono text-gray-700">{fmt(s[k], 1)}</td>
+                        <td key={k} className="py-1.5 px-2 text-center font-mono text-ink-2">{fmt(s[k], 1)}</td>
                       ))}
                     </tr>
                   ))}
@@ -676,10 +676,10 @@ export default function ReportPage() {
                   {Object.entries(config.nodeParams).flatMap(([nid, params], gi) =>
                     typeof params === 'object'
                       ? Object.entries(params).map(([pk, pv], i) => (
-                          <tr key={`${nid}-${pk}`} className={(gi + i) % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="py-1.5 px-3 font-mono text-gray-500">{nid}</td>
-                            <td className="py-1.5 px-3 text-gray-700">{pk.replace(/_/g, ' ')}</td>
-                            <td className="py-1.5 px-3 font-mono text-gray-800">{String(pv)}</td>
+                          <tr key={`${nid}-${pk}`} className={(gi + i) % 2 === 0 ? 'bg-white' : 'bg-ground'}>
+                            <td className="py-1.5 px-3 font-mono text-ink-3">{nid}</td>
+                            <td className="py-1.5 px-3 text-ink-2">{pk.replace(/_/g, ' ')}</td>
+                            <td className="py-1.5 px-3 font-mono text-ink">{String(pv)}</td>
                           </tr>
                         ))
                       : []
@@ -688,9 +688,9 @@ export default function ReportPage() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">Default parameters used for all nodes.</p>
+            <p className="text-sm text-ink-3">Default parameters used for all nodes.</p>
           )}
-          <p className="text-[10px] text-gray-400 mt-4 border-t border-gray-100 pt-3">
+          <p className="text-[10px] text-ink-3 mt-4 border-t border-line pt-3">
             This report is generated automatically by SafeKrit. Results should be reviewed by a
             qualified engineer before use in design or regulatory submissions.
           </p>

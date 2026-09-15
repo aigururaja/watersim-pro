@@ -57,19 +57,19 @@ export function measuredState(e) {
 }
 
 export function describeState(e) {
-  if (e.tripped === true) return { label: 'Tripped', tone: 'text-red-700 bg-red-50 border-red-200' };
-  if (e.quality === 'stale') return { label: 'Stale', tone: 'text-amber-700 bg-amber-50 border-amber-200' };
-  if (e.quality === 'bad') return { label: 'Bad read', tone: 'text-red-700 bg-red-50 border-red-200' };
+  if (e.tripped === true) return { label: 'Tripped', tone: 'text-danger bg-danger-soft border-danger/30' };
+  if (e.quality === 'stale') return { label: 'Stale', tone: 'text-warn bg-warn-soft border-warn/30' };
+  if (e.quality === 'bad') return { label: 'Bad read', tone: 'text-danger bg-danger-soft border-danger/30' };
   if (e.opType === 'valve') {
-    if (e.opened === true) return { label: 'Open', tone: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
-    if (e.closed === true) return { label: 'Closed', tone: 'text-gray-700 bg-gray-50 border-gray-200' };
-    if (e.opened === false && e.closed === false) return { label: 'Travelling', tone: 'text-amber-700 bg-amber-50 border-amber-200' };
-    if (e.opened === false && e.closed == null) return { label: 'Closed', tone: 'text-gray-700 bg-gray-50 border-gray-200' };
-    return { label: 'No data', tone: 'text-gray-500 bg-gray-50 border-gray-200' };
+    if (e.opened === true) return { label: 'Open', tone: 'text-ok bg-ok-soft border-ok/30' };
+    if (e.closed === true) return { label: 'Closed', tone: 'text-ink-2 bg-ground border-line' };
+    if (e.opened === false && e.closed === false) return { label: 'Travelling', tone: 'text-warn bg-warn-soft border-warn/30' };
+    if (e.opened === false && e.closed == null) return { label: 'Closed', tone: 'text-ink-2 bg-ground border-line' };
+    return { label: 'No data', tone: 'text-ink-3 bg-ground border-line' };
   }
-  if (e.running === true) return { label: 'Running', tone: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
-  if (e.running === false) return { label: 'Stopped', tone: 'text-gray-700 bg-gray-50 border-gray-200' };
-  return { label: 'No data', tone: 'text-gray-500 bg-gray-50 border-gray-200' };
+  if (e.running === true) return { label: 'Running', tone: 'text-ok bg-ok-soft border-ok/30' };
+  if (e.running === false) return { label: 'Stopped', tone: 'text-ink-2 bg-ground border-line' };
+  return { label: 'No data', tone: 'text-ink-3 bg-ground border-line' };
 }
 
 const fmtValue = (v, dp) => {
@@ -98,28 +98,28 @@ export default function EquipmentCard({ equipment: e, canControl = false, onCont
       onMouseLeave={() => setHover(false)}
     >
       <div className="flex items-center justify-between gap-1">
-        <span className="font-mono text-[11px] font-semibold text-gray-900 truncate" title={e.name}>{e.key}</span>
+        <span className="font-mono text-[11px] font-semibold text-ink truncate" title={e.name}>{e.key}</span>
         <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide border ${st.tone}`}>
           {e.tripped ? <AlertTriangle className="w-2.5 h-2.5" /> : null}{st.label}
         </span>
       </div>
-      <div className="mimic-root my-1 mx-auto rounded-lg bg-[#eef1f4]" style={{ width: 172, height: 100 }}>
+      <div className="mimic-root my-1 mx-auto rounded-xl bg-[#eef1f4]" style={{ width: 172, height: 100 }}>
         <svg viewBox={`0 8 ${NODE_W} ${NODE_H - 16}`} width="172" height="100" aria-hidden="true" focusable="false">
           <MimicSymbol family={family} opType={e.opType} s={s} label={null} />
         </svg>
       </div>
-      <div className="text-[10px] text-gray-500 truncate" title={e.name}>{e.name}</div>
+      <div className="text-[10px] text-ink-3 truncate" title={e.name}>{e.name}</div>
       <div className="flex items-center justify-between mt-1">
-        <span className="inline-flex items-center gap-1 text-[10px] text-gray-400" title={e.at ? `Last read ${new Date(e.at).toLocaleTimeString()}` : 'No sample yet'}>
-          <Radio className={`w-3 h-3 ${e.quality === 'good' ? 'text-emerald-500' : 'text-gray-300'}`} /> measured{e.at ? ` · ${relTime(e.at)}` : ''}
+        <span className="inline-flex items-center gap-1 text-[10px] text-ink-3" title={e.at ? `Last read ${new Date(e.at).toLocaleTimeString()}` : 'No sample yet'}>
+          <Radio className={`w-3 h-3 ${e.quality === 'good' ? 'text-emerald-500' : 'text-line'}`} /> measured{e.at ? ` · ${relTime(e.at)}` : ''}
         </span>
         {canAct && (
           <button
             onClick={() => onControl?.(e, nextAction)}
             className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
               nextAction === 'start' || nextAction === 'open'
-                ? 'text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                : 'text-red-700 border-red-300 hover:bg-red-50'} ${hover ? '' : 'opacity-80'}`}
+                ? 'text-ok border-emerald-300 hover:bg-ok-soft'
+                : 'text-danger border-red-300 hover:bg-danger-soft'} ${hover ? '' : 'opacity-80'}`}
             aria-label={`${nextAction} ${e.key}`}
           >
             {nextAction === 'start' || nextAction === 'open' ? <Play className="w-3 h-3" /> : <Square className="w-3 h-3" />}
@@ -148,10 +148,10 @@ export function InstrumentCard({ tag: t }) {
   return (
     <div className="card p-2 w-[188px] flex-shrink-0" data-tag={t.tag} data-quality={t.quality || 'unknown'}>
       <div className="flex items-center justify-between gap-1">
-        <span className="font-mono text-[11px] font-semibold text-gray-900 truncate" title={t.name}>{t.tag}</span>
+        <span className="font-mono text-[11px] font-semibold text-ink truncate" title={t.name}>{t.tag}</span>
         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${t.quality === 'good' ? 'bg-emerald-500' : t.quality === 'stale' ? 'bg-amber-500' : 'bg-gray-300'}`} title={`PLC ${t.quality || 'unknown'}`} />
       </div>
-      <div className="mimic-root my-1 mx-auto rounded-lg bg-[#eef1f4]" style={{ width: 172, height: 100 }}>
+      <div className="mimic-root my-1 mx-auto rounded-xl bg-[#eef1f4]" style={{ width: 172, height: 100 }}>
         <svg viewBox={`0 8 ${NODE_W} ${NODE_H - 16}`} width="172" height="100" role="img" aria-label={label}>
           {isLevel
             ? <TankSymbol s={{ level: t.value == null ? undefined : Number(t.value) }} label={`lvl-${t.id}`} sub={t.name?.split(' ')[0]} />
@@ -159,8 +159,8 @@ export function InstrumentCard({ tag: t }) {
         </svg>
       </div>
       <div className="flex items-center justify-between text-[10px]">
-        <span className="text-gray-500 truncate" title={t.name}>{t.name}</span>
-        <span className="font-mono text-gray-800 tabular-nums">{fmtValue(t.value)}{unit ? ` ${unit}` : ''}</span>
+        <span className="text-ink-3 truncate" title={t.name}>{t.name}</span>
+        <span className="font-mono text-ink tabular-nums">{fmtValue(t.value)}{unit ? ` ${unit}` : ''}</span>
       </div>
     </div>
   );

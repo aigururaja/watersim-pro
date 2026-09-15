@@ -56,7 +56,7 @@ export default function InfoTip({ label, title, detail, children, panelStyle }) 
       onBlur={() => setHover(false)}
       style={{
         ...S.btn,
-        color: active ? '#2E75B6' : '#9CA3AF',
+        color: active ? '#0f9d8f' : '#9CA3AF',
         background: open ? '#EFF6FF' : 'transparent',
       }}
     >
@@ -123,7 +123,7 @@ const S = {
   panel: {
     background: '#F8FAFC',
     border: '1px solid #E5E7EB',
-    borderLeft: '3px solid #2E75B6',
+    borderLeft: '3px solid #0f9d8f',
     borderRadius: 6,
     padding: '7px 9px',
     margin: '5px 0 2px',
@@ -134,7 +134,7 @@ const S = {
   title: {
     fontWeight: 700,
     fontSize: 11.5,
-    color: '#1F4E79',
+    color: '#16181d',
     marginBottom: 3,
   },
   list: { margin: 0 },

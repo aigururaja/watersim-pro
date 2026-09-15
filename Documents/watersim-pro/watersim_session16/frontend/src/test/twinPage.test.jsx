@@ -86,10 +86,10 @@ describe('TwinPage', () => {
     expect(screen.getByRole('button', { name: 'ITC STP — Full plant' })).toBeInTheDocument();
     const table = await screen.findByRole('region', { name: 'Residuals' });
     const ft = table.querySelector('[data-residual="RFP-FT-201.FT"]');
-    expect(within(ft).getByText(/4\.1/)).toHaveClass('text-red-700');
+    expect(within(ft).getByText(/4\.1/)).toHaveClass('text-danger');
     expect(within(ft).getByText(/⚠/)).toBeInTheDocument();
     const at = table.querySelector('[data-residual="ACF-AT-601.AT"]');
-    expect(within(at).getByText(/0\.4/)).toHaveClass('text-emerald-700');
+    expect(within(at).getByText(/0\.4/)).toHaveClass('text-ok');
     expect(screen.getByText(/Effluent: BOD 8\.2/)).toBeInTheDocument();
   });
 

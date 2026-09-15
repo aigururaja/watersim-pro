@@ -19,11 +19,11 @@ import api from '../services/api';
 // the shared role table so this page cannot describe a role the server does
 // not have; only the icon and colour are presentational.
 const ROLES = [
-  { value: 'admin',    icon: Crown,      color: 'text-red-600    bg-red-50    border-red-200' },
+  { value: 'admin',    icon: Crown,      color: 'text-red-600    bg-danger-soft    border-danger/30' },
   { value: 'manager',  icon: ClipboardCheck, color: 'text-purple-600 bg-purple-50 border-purple-200' },
-  { value: 'engineer', icon: Wrench,     color: 'text-blue-600  bg-blue-50   border-blue-200' },
-  { value: 'operator', icon: HardHat,    color: 'text-amber-600 bg-amber-50  border-amber-200' },
-  { value: 'viewer',   icon: Eye,        color: 'text-gray-600  bg-gray-50   border-gray-200' },
+  { value: 'engineer', icon: Wrench,     color: 'text-blue-600  bg-accent-soft   border-accent/30' },
+  { value: 'operator', icon: HardHat,    color: 'text-amber-600 bg-warn-soft  border-warn/30' },
+  { value: 'viewer',   icon: Eye,        color: 'text-ink-2  bg-ground   border-line' },
 ].map((r) => ({ ...r, label: ROLE_META[r.value].label, desc: ROLE_META[r.value].desc }));
 
 const roleInfo = Object.fromEntries(ROLES.map(r => [r.value, r]));
@@ -45,7 +45,7 @@ function RoleBadge({ role, size = 'sm' }) {
 function StatusBadge({ isActive }) {
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border
-      ${isActive ? 'text-green-700 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-50 border-gray-200'}`}>
+      ${isActive ? 'text-green-700 bg-green-50 border-green-200' : 'text-ink-3 bg-ground border-line'}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-400'}`} aria-hidden="true" />
       {isActive ? 'Active' : 'Inactive'}
     </span>
@@ -107,9 +107,9 @@ function InviteModal({ onClose, onCreated }) {
     >
       <div className="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 id="invite-title" className="text-lg font-bold text-gray-900">Invite team member</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+          <h2 id="invite-title" className="text-lg font-bold text-ink">Invite team member</h2>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 text-ink-3 hover:text-ink-2 rounded-xl hover:bg-ground transition-colors">
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
@@ -117,7 +117,7 @@ function InviteModal({ onClose, onCreated }) {
         <form onSubmit={handleSubmit} className="overflow-y-auto flex-1">
           <div className="px-6 py-4 space-y-4">
             {error && (
-              <div role="alert" className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              <div role="alert" className="px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">
                 {error}
               </div>
             )}
@@ -145,7 +145,7 @@ function InviteModal({ onClose, onCreated }) {
               <label className="label" htmlFor="inv-phone">Mobile number</label>
               <input id="inv-phone" type="tel" className="input font-mono" value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 or 98765 43210" />
-              <p className="text-xs text-gray-500 mt-1">Optional. WhatsApp notifications go here unless a different receiver number is set under Settings → Notifications; the receiver email likewise defaults to the login email.</p>
+              <p className="text-xs text-ink-3 mt-1">Optional. WhatsApp notifications go here unless a different receiver number is set under Settings → Notifications; the receiver email likewise defaults to the login email.</p>
             </div>
 
             {/* Role picker */}
@@ -158,16 +158,16 @@ function InviteModal({ onClose, onCreated }) {
                   return (
                     <label key={r.value}
                       className={`flex items-start gap-2.5 p-3 rounded-xl border-2 cursor-pointer transition-all
-                        ${selected ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
+                        ${selected ? 'border-brand-500 bg-brand-50' : 'border-line hover:border-line'}`}
                     >
                       <input type="radio" name="role" value={r.value} checked={selected} className="sr-only"
                         onChange={() => setForm(f => ({ ...f, role: r.value }))} />
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${r.color.split(' ').slice(0,3).join(' ')}`}>
+                      <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${r.color.split(' ').slice(0,3).join(' ')}`}>
                         <Icon className="w-3.5 h-3.5" aria-hidden="true" />
                       </div>
                       <div>
-                        <p className={`text-sm font-semibold ${selected ? 'text-brand-700' : 'text-gray-800'}`}>{r.label}</p>
-                        <p className="text-xs text-gray-500 leading-tight">{r.desc}</p>
+                        <p className={`text-sm font-semibold ${selected ? 'text-brand-700' : 'text-ink'}`}>{r.label}</p>
+                        <p className="text-xs text-ink-3 leading-tight">{r.desc}</p>
                       </div>
                     </label>
                   );
@@ -189,7 +189,7 @@ function InviteModal({ onClose, onCreated }) {
             </div>
           </div>
 
-          <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <div className="px-6 py-4 border-t border-line flex justify-end gap-3">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
             <button type="submit" disabled={saving} className="btn-primary text-sm" aria-busy={saving}>
               {saving ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />Creating…</> : <><Plus className="w-4 h-4" aria-hidden="true" />Invite member</>}
@@ -236,18 +236,18 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 id="edit-member-title" className="text-lg font-bold text-gray-900">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+          <h2 id="edit-member-title" className="text-lg font-bold text-ink">
             Edit {member.firstName} {member.lastName}
           </h2>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+          <button onClick={onClose} aria-label="Close" className="p-1.5 text-ink-3 hover:text-ink-2 rounded-xl hover:bg-ground transition-colors">
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-4">
-            {error && <div role="alert" className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
+            {error && <div role="alert" className="px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">{error}</div>}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -266,21 +266,21 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
               <label className="label" htmlFor="em-email">Login email</label>
               <input id="em-email" type="email" className="input" value={form.email} required
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-              <p className="text-xs text-gray-500 mt-1">How they sign in. Their notification email may be a different address, set under Settings → Notifications.</p>
+              <p className="text-xs text-ink-3 mt-1">How they sign in. Their notification email may be a different address, set under Settings → Notifications.</p>
             </div>
 
             <div>
               <label className="label" htmlFor="em-phone">Mobile number</label>
               <input id="em-phone" type="tel" className="input font-mono" value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 or 98765 43210" />
-              <p className="text-xs text-gray-500 mt-1">Their profile mobile; leave empty to remove it. WhatsApp notifications use it unless a different receiver number is set under Settings → Notifications → Receivers.</p>
+              <p className="text-xs text-ink-3 mt-1">Their profile mobile; leave empty to remove it. WhatsApp notifications use it unless a different receiver number is set under Settings → Notifications → Receivers.</p>
             </div>
 
             {/* Role */}
             <div>
               <label className="label" htmlFor="em-role">Role</label>
               {isSelf ? (
-                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <p className="text-sm text-warn bg-warn-soft border border-warn/30 rounded-xl px-3 py-2">
                   You cannot change your own role.
                 </p>
               ) : (
@@ -289,19 +289,19 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
                     onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
                     {ROLES.map(r => <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>)}
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden="true" />
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3 pointer-events-none" aria-hidden="true" />
                 </div>
               )}
             </div>
 
             {/* Active toggle */}
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+            <div className="flex items-center justify-between p-3 bg-ground rounded-xl">
               <div>
-                <p className="text-sm font-medium text-gray-900">Account active</p>
-                <p className="text-xs text-gray-500">Inactive users cannot log in</p>
+                <p className="text-sm font-medium text-ink">Account active</p>
+                <p className="text-xs text-ink-3">Inactive users cannot log in</p>
               </div>
               {isSelf ? (
-                <span className="text-xs text-gray-400">Cannot deactivate self</span>
+                <span className="text-xs text-ink-3">Cannot deactivate self</span>
               ) : (
                 <button
                   type="button"
@@ -319,7 +319,7 @@ function EditMemberModal({ member, currentUserId, onClose, onSaved }) {
             </div>
           </div>
 
-          <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <div className="px-6 py-4 border-t border-line flex justify-end gap-3">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
             <button type="submit" disabled={saving} className="btn-primary text-sm">
               {saving ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />Saving…</> : 'Save changes'}
@@ -358,13 +358,13 @@ function ResetPasswordModal({ member, onClose, onReset }) {
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 id="reset-pw-title" className="text-lg font-bold text-gray-900">Reset password</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" /></button>
+          <h2 id="reset-pw-title" className="text-lg font-bold text-ink">Reset password</h2>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 text-ink-3 hover:text-ink-2 rounded-xl hover:bg-ground"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-3">
-            <p className="text-sm text-gray-600">Setting a new password for <strong>{member.firstName} {member.lastName}</strong>. They will be logged out of all sessions.</p>
-            {error && <div role="alert" className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
+            <p className="text-sm text-ink-2">Setting a new password for <strong>{member.firstName} {member.lastName}</strong>. They will be logged out of all sessions.</p>
+            {error && <div role="alert" className="px-3 py-2 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">{error}</div>}
             <div>
               <label className="label" htmlFor="rp-pass">New password *</label>
               <input id="rp-pass" type="password" className="input" required value={password}
@@ -405,7 +405,7 @@ function MemberRow({ member, currentUserId, isAdmin, onEdit, onResetPassword, on
   }, [menuOpen]);
 
   return (
-    <tr className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
+    <tr className="border-t border-line hover:bg-ground transition-colors">
       {/* Avatar + name */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
@@ -413,11 +413,11 @@ function MemberRow({ member, currentUserId, isAdmin, onEdit, onResetPassword, on
             {member.firstName[0]}{member.lastName[0]}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">
+            <p className="text-sm font-semibold text-ink truncate">
               {member.firstName} {member.lastName}
               {isSelf && <span className="ml-2 text-xs text-brand-600 font-medium">(you)</span>}
             </p>
-            <p className="text-xs text-gray-500 truncate">{member.email}{member.phone ? <span className="font-mono"> · {member.phone}</span> : null}</p>
+            <p className="text-xs text-ink-3 truncate">{member.email}{member.phone ? <span className="font-mono"> · {member.phone}</span> : null}</p>
           </div>
         </div>
       </td>
@@ -433,14 +433,14 @@ function MemberRow({ member, currentUserId, isAdmin, onEdit, onResetPassword, on
       </td>
 
       {/* Last login */}
-      <td className="px-4 py-3 hidden lg:table-cell text-xs text-gray-500">
+      <td className="px-4 py-3 hidden lg:table-cell text-xs text-ink-3">
         {member.lastLoginAt
           ? new Date(member.lastLoginAt).toLocaleDateString()
-          : <span className="text-gray-300">Never</span>}
+          : <span className="text-line">Never</span>}
       </td>
 
       {/* Joined */}
-      <td className="px-4 py-3 hidden lg:table-cell text-xs text-gray-500">
+      <td className="px-4 py-3 hidden lg:table-cell text-xs text-ink-3">
         {new Date(member.createdAt).toLocaleDateString()}
       </td>
 
@@ -453,7 +453,7 @@ function MemberRow({ member, currentUserId, isAdmin, onEdit, onResetPassword, on
               aria-label={`Actions for ${member.firstName} ${member.lastName}`}
               aria-expanded={menuOpen}
               aria-haspopup="menu"
-              className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-1.5 text-ink-3 hover:text-ink-2 rounded-xl hover:bg-ground transition-colors"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                 <path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z" />
@@ -463,27 +463,27 @@ function MemberRow({ member, currentUserId, isAdmin, onEdit, onResetPassword, on
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-9 z-20 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1 text-sm"
+                className="absolute right-0 top-9 z-20 w-48 bg-white border border-line rounded-xl shadow-xl py-1 text-sm"
               >
-                <button role="menuitem" className="flex items-center gap-2 w-full px-4 py-2 text-gray-700 hover:bg-gray-50"
+                <button role="menuitem" className="flex items-center gap-2 w-full px-4 py-2 text-ink-2 hover:bg-ground"
                   onClick={() => { onEdit(); setMenuOpen(false); }}>
                   <Pencil className="w-4 h-4" aria-hidden="true" /> Edit member
                 </button>
-                <button role="menuitem" className="flex items-center gap-2 w-full px-4 py-2 text-gray-700 hover:bg-gray-50"
+                <button role="menuitem" className="flex items-center gap-2 w-full px-4 py-2 text-ink-2 hover:bg-ground"
                   onClick={() => { onResetPassword(); setMenuOpen(false); }}>
                   <KeyRound className="w-4 h-4" aria-hidden="true" /> Reset password
                 </button>
                 {!isSelf && (
                   <>
-                    <button role="menuitem" className="flex items-center gap-2 w-full px-4 py-2 text-gray-700 hover:bg-gray-50"
+                    <button role="menuitem" className="flex items-center gap-2 w-full px-4 py-2 text-ink-2 hover:bg-ground"
                       onClick={() => { onToggleActive(); setMenuOpen(false); }}>
                       {member.isActive
                         ? <><ToggleLeft  className="w-4 h-4" aria-hidden="true" /> Deactivate</>
                         : <><ToggleRight className="w-4 h-4" aria-hidden="true" /> Reactivate</>
                       }
                     </button>
-                    <div className="border-t border-gray-100 my-1" role="separator" />
-                    <button role="menuitem" className="flex items-center gap-2 w-full px-4 py-2 text-red-600 hover:bg-red-50"
+                    <div className="border-t border-line my-1" role="separator" />
+                    <button role="menuitem" className="flex items-center gap-2 w-full px-4 py-2 text-red-600 hover:bg-danger-soft"
                       onClick={() => { onDelete(); setMenuOpen(false); }}>
                       <Trash2 className="w-4 h-4" aria-hidden="true" /> Delete member
                     </button>
@@ -561,12 +561,12 @@ function MembersTab({ members, loading, currentUserId, isAdmin, onRefresh, showT
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-base font-bold text-gray-900">Team Members</h2>
-          <p className="text-sm text-gray-500">{members.length} member{members.length !== 1 ? 's' : ''} in your organisation</p>
+          <h2 className="text-base font-bold text-ink">Team Members</h2>
+          <p className="text-sm text-ink-3">{members.length} member{members.length !== 1 ? 's' : ''} in your organisation</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onRefresh} aria-label="Refresh members list"
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+            className="p-2 text-ink-3 hover:text-ink-2 rounded-xl hover:bg-ground transition-colors">
             <RefreshCw className="w-4 h-4" aria-hidden="true" />
           </button>
           {isAdmin && (
@@ -603,14 +603,14 @@ function MembersTab({ members, loading, currentUserId, isAdmin, onRefresh, showT
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full" aria-label="Members table">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-ground border-b border-line">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Member</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:table-cell">Role</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Last login</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Joined</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-ink-3 uppercase tracking-wider">Member</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-ink-3 uppercase tracking-wider hidden sm:table-cell">Role</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-ink-3 uppercase tracking-wider hidden md:table-cell">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-ink-3 uppercase tracking-wider hidden lg:table-cell">Last login</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-ink-3 uppercase tracking-wider hidden lg:table-cell">Joined</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-ink-3 uppercase tracking-wider">
                     {isAdmin ? 'Actions' : 'Role'}
                   </th>
                 </tr>
@@ -635,8 +635,8 @@ function MembersTab({ members, loading, currentUserId, isAdmin, onRefresh, showT
       </div>
 
       {/* Role legend */}
-      <div className="mt-4 p-4 bg-gray-50 rounded-xl">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Role permissions</p>
+      <div className="mt-4 p-4 bg-ground rounded-xl">
+        <p className="text-xs font-semibold text-ink-3 uppercase tracking-wider mb-2">Role permissions</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {ROLES.map(r => {
             const Icon = r.icon;
@@ -645,7 +645,7 @@ function MembersTab({ members, loading, currentUserId, isAdmin, onRefresh, showT
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${r.color}`}>
                   <Icon className="w-3 h-3" aria-hidden="true" />{r.label}
                 </span>
-                <span className="text-xs text-gray-500">{r.desc}</span>
+                <span className="text-xs text-ink-3">{r.desc}</span>
               </div>
             );
           })}
@@ -685,10 +685,10 @@ function OrganisationTab({ org, isAdmin, showToast, onOrgUpdated }) {
 
   return (
     <section aria-label="Organisation settings">
-      <h2 className="text-base font-bold text-gray-900 mb-4">Organisation Profile</h2>
+      <h2 className="text-base font-bold text-ink mb-4">Organisation Profile</h2>
 
       <div className="card p-6 max-w-lg">
-        {error && <div role="alert" className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
+        {error && <div role="alert" className="mb-4 px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger">{error}</div>}
 
         <form onSubmit={handleSave} className="space-y-4">
           <div>
@@ -697,16 +697,16 @@ function OrganisationTab({ org, isAdmin, showToast, onOrgUpdated }) {
               onChange={e => setName(e.target.value)} placeholder="Your organisation" />
           </div>
           <div>
-            <label className="label" htmlFor="org-slug">URL slug <span className="text-gray-400 font-normal">(read-only)</span></label>
-            <input id="org-slug" className="input bg-gray-50 text-gray-500" value={org?.slug ?? ''} readOnly
+            <label className="label" htmlFor="org-slug">URL slug <span className="text-ink-3 font-normal">(read-only)</span></label>
+            <input id="org-slug" className="input bg-ground text-ink-3" value={org?.slug ?? ''} readOnly
               aria-readonly="true" />
-            <p className="mt-1 text-xs text-gray-400">The slug is set at registration and cannot be changed.</p>
+            <p className="mt-1 text-xs text-ink-3">The slug is set at registration and cannot be changed.</p>
           </div>
 
-          <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl">
+          <div className="flex items-center justify-between py-3 px-4 bg-ground rounded-xl">
             <div>
-              <p className="text-sm font-medium text-gray-900">Account status</p>
-              <p className="text-xs text-gray-500">Whether this organisation is active in the system</p>
+              <p className="text-sm font-medium text-ink">Account status</p>
+              <p className="text-xs text-ink-3">Whether this organisation is active in the system</p>
             </div>
             <StatusBadge isActive={org?.isActive ?? true} />
           </div>
@@ -722,7 +722,7 @@ function OrganisationTab({ org, isAdmin, showToast, onOrgUpdated }) {
       </div>
 
       {!isAdmin && (
-        <p className="mt-4 text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+        <p className="mt-4 text-sm text-ink-3 bg-ground border border-line rounded-xl px-4 py-3">
           🔒 Only admins can update the organisation name.
         </p>
       )}
@@ -749,13 +749,13 @@ function StatsTab({ stats, loading }) {
 
   return (
     <section aria-label="Organisation statistics">
-      <h2 className="text-base font-bold text-gray-900 mb-4">Organisation Overview</h2>
+      <h2 className="text-base font-bold text-ink mb-4">Organisation Overview</h2>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total members',    value: stats.members.total,    icon: Users,        color: 'bg-blue-50 text-blue-600' },
+          { label: 'Total members',    value: stats.members.total,    icon: Users,        color: 'bg-accent-soft text-blue-600' },
           { label: 'Active members',   value: stats.members.active,   icon: ToggleRight,  color: 'bg-green-50 text-green-600' },
-          { label: 'Inactive members', value: stats.members.inactive, icon: ToggleLeft,   color: 'bg-gray-50 text-gray-500' },
+          { label: 'Inactive members', value: stats.members.inactive, icon: ToggleLeft,   color: 'bg-ground text-ink-3' },
           { label: 'Projects',         value: stats.projects,         icon: Building2,    color: 'bg-purple-50 text-purple-600' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="card p-5 flex items-center gap-4">
@@ -763,8 +763,8 @@ function StatsTab({ stats, loading }) {
               <Icon className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{value}</p>
-              <p className="text-xs text-gray-500">{label}</p>
+              <p className="text-2xl font-bold text-ink">{value}</p>
+              <p className="text-xs text-ink-3">{label}</p>
             </div>
           </div>
         ))}
@@ -772,7 +772,7 @@ function StatsTab({ stats, loading }) {
 
       {/* Role breakdown */}
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Members by role</h3>
+        <h3 className="text-sm font-semibold text-ink mb-4">Members by role</h3>
         <div className="space-y-3">
           {roleBreakdown.map(r => {
             const Icon = r.icon;
@@ -783,9 +783,9 @@ function StatsTab({ stats, loading }) {
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${r.color}`}>
                     <Icon className="w-3.5 h-3.5" aria-hidden="true" />{r.label}
                   </span>
-                  <span className="text-sm font-semibold text-gray-700">{r.count}</span>
+                  <span className="text-sm font-semibold text-ink-2">{r.count}</span>
                 </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden" aria-hidden="true">
+                <div className="h-2 bg-ground rounded-full overflow-hidden" aria-hidden="true">
                   <div
                     className="h-full rounded-full bg-brand-500 transition-all duration-500"
                     style={{ width: `${pct}%` }}
@@ -860,8 +860,8 @@ export default function AdminPage() {
         {/* Page header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Admin</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Manage your team and organisation settings</p>
+            <h1 className="text-2xl font-bold text-ink">Admin</h1>
+            <p className="text-sm text-ink-3 mt-0.5">Manage your team and organisation settings</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 border border-brand-200 rounded-full text-xs font-semibold text-brand-700">
@@ -873,7 +873,7 @@ export default function AdminPage() {
 
         {/* Tab bar */}
         <div
-          className="flex border-b border-gray-200"
+          className="flex border-b border-line"
           role="tablist"
           aria-label="Admin sections"
           onKeyDown={e => {
@@ -896,7 +896,7 @@ export default function AdminPage() {
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors
                   ${active
                     ? 'border-brand-600 text-brand-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                    : 'border-transparent text-ink-3 hover:text-ink-2 hover:border-line'}`}
               >
                 <Icon className="w-4 h-4" aria-hidden="true" />
                 {tab.label}

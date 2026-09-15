@@ -18,8 +18,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useReducedMotion } from '../AccessibilityProvider';
 import {
   Droplets, LayoutDashboard, FolderOpen, FileText, Settings,
-  LogOut, ChevronLeft, ChevronRight, User, Menu, X, ShieldCheck, Bell,
-  Activity, Boxes, Wrench, ScrollText, Gauge, LineChart, ClipboardList, Monitor,
+  LogOut, ChevronLeft, ChevronRight, Menu, X, ShieldCheck, Bell,
+  Activity, Boxes, Wrench, ScrollText, Gauge, LineChart, ClipboardList, Monitor, Crown, Eye,
 } from 'lucide-react';
 import { OnboardingTrigger } from '../OnboardingWizard';
 
@@ -76,6 +76,15 @@ const ADMIN_ITEMS = [
 
 const SETTINGS_ITEM = { icon: Settings, label: 'Settings', path: '/settings' };
 
+/** The tier chip under the product name, one per role — the console's identity line. */
+const ROLE_CHIP = {
+  admin:    { icon: ShieldCheck, label: 'Admin console',    className: 'bg-white text-ink' },
+  manager:  { icon: Crown,       label: 'Manager console',  className: 'bg-star text-ink' },
+  engineer: { icon: Wrench,      label: 'Engineer console', className: 'bg-accent text-white' },
+  operator: { icon: Activity,    label: 'Operator console', className: 'bg-white/15 text-white' },
+  viewer:   { icon: Eye,         label: 'Viewer',           className: 'bg-white/15 text-white' },
+};
+
 const SURFACE_KEY = 'ws.surface';
 const readSurface = () => { try { return localStorage.getItem(SURFACE_KEY); } catch { return null; } };
 const writeSurface = (k) => { try { localStorage.setItem(SURFACE_KEY, k); } catch { /* private mode */ } };
@@ -129,34 +138,50 @@ function SidebarContent({
   const current = activeItem(allItems, pathname);
   const isActive = (item) => current && current.path === item.path && current.label === item.label;
 
-  const linkClass = (active, tone = 'default') => {
-    const on  = tone === 'admin' ? 'bg-amber-500/30 text-amber-100' : 'bg-white/20 text-white';
-    const off = tone === 'admin'
-      ? 'text-amber-200 hover:bg-amber-500/20 hover:text-amber-100'
-      : 'text-brand-100 hover:bg-white/10 hover:text-white';
-    return `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${active ? on : off}`;
-  };
+  // Console links: 44px tall, 14px radius, white on ink when active.
+  const linkClass = (active) =>
+    `flex items-center gap-3 min-h-[44px] rounded-xl text-sm font-medium transition-colors ${expanded ? 'px-3' : 'justify-center px-0'}
+     ${active ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'}`;
+  const groupLabel = 'px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-[0.12em]';
+  const chip = ROLE_CHIP[user?.role] || ROLE_CHIP.viewer;
+  const ChipIcon = chip.icon;
+  const initials = `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`.toUpperCase() || '?';
 
   return (
     <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className={`flex items-center h-14 md:h-16 border-b border-brand-600 flex-shrink-0 px-4 ${mobile ? 'justify-between' : 'gap-3'}`}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-            <Droplets className="w-5 h-5" />
+      {/* Identity: product, tier chip, organisation */}
+      <div className={`flex-shrink-0 ${expanded ? 'px-5 pt-5 pb-2' : 'px-2 py-4'} ${mobile ? 'flex items-start justify-between gap-2' : ''}`}>
+        {expanded ? (
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                <Droplets className="w-[18px] h-[18px]" />
+              </span>
+              <span className="font-extrabold text-lg tracking-tight truncate">SafeKrit</span>
+            </div>
+            <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${chip.className}`} data-testid="tier-chip">
+              <ChipIcon className="w-3 h-3" aria-hidden="true" />
+              {chip.label}
+            </div>
+            {user?.organisation?.name && (
+              <div className="text-white/60 text-[12px] mt-2 truncate" title={user.organisation.name}>{user.organisation.name}</div>
+            )}
           </div>
-          {expanded && <span className="font-bold text-base truncate">SafeKrit</span>}
-        </div>
+        ) : (
+          <span className="mx-auto w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center" title="SafeKrit" aria-hidden="true">
+            <Droplets className="w-5 h-5" />
+          </span>
+        )}
         {mobile && (
-          <button onClick={onCloseDrawer}
-            className="p-1.5 rounded-lg text-brand-100 hover:bg-white/10 hover:text-white transition-colors -mr-1">
+          <button onClick={onCloseDrawer} aria-label="Close navigation"
+            className="p-2 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-colors -mr-2">
             <X className="w-5 h-5" />
           </button>
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 py-3 px-2 overflow-y-auto space-y-3" aria-label="Main navigation">
+      {/* Nav: one group per surface (the open one shows its links), then administration */}
+      <nav className="flex-1 py-1 px-3 overflow-y-auto" aria-label="Main navigation">
         {surfaces.map((s) => {
           const SIcon = s.icon;
           const open = s.key === currentSurface;
@@ -168,17 +193,18 @@ function SidebarContent({
                 aria-expanded={open}
                 aria-controls={`surface-${s.key}${mobile ? '-m' : ''}`}
                 title={s.label}
-                className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wider transition-colors
-                  ${open ? 'text-white' : 'text-brand-200 hover:text-white hover:bg-white/10'}`}
+                className={`w-full flex items-center gap-2 rounded-xl transition-colors
+                  ${expanded ? groupLabel : 'justify-center py-2 mt-1'}
+                  ${open ? 'text-white/80' : 'text-white/40 hover:text-white/80'}`}
               >
-                <SIcon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                <SIcon className={expanded ? 'w-3.5 h-3.5 flex-shrink-0' : 'w-5 h-5'} aria-hidden="true" />
                 {expanded && <span className="flex-1 text-left truncate">{s.label}</span>}
                 {expanded && (
-                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
+                  <ChevronRight className={`w-3 h-3 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
                 )}
               </button>
               {(open || !expanded) && (
-                <div id={`surface-${s.key}${mobile ? '-m' : ''}`} className="mt-1 space-y-0.5">
+                <div id={`surface-${s.key}${mobile ? '-m' : ''}`} className="space-y-0.5">
                   {s.items.map(({ icon: Icon, label, path, badge }) => {
                     const active = isActive({ path, label });
                     return (
@@ -187,14 +213,12 @@ function SidebarContent({
                         to={path}
                         aria-current={active ? 'page' : undefined}
                         title={badge ? `${label} — arrives in ${badge}` : label}
-                        className={`${linkClass(active)} ${expanded ? 'pl-9' : ''}`}
+                        className={linkClass(active)}
                       >
-                        <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+                        <Icon className="w-[18px] h-[18px] flex-shrink-0" aria-hidden="true" />
                         {expanded && <span className="flex-1 truncate">{label}</span>}
                         {expanded && badge && (
-                          <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/10 text-brand-200">
-                            {badge}
-                          </span>
+                          <span className="pill bg-white/10 text-white/60 normal-case">{badge}</span>
                         )}
                       </Link>
                     );
@@ -206,13 +230,15 @@ function SidebarContent({
         })}
 
         {/* Settings, then the admin group */}
-        <div className="pt-2 border-t border-brand-600/60 space-y-0.5">
+        {expanded && <div className={`${groupLabel} text-white/40`}>Administration</div>}
+        <div className={`space-y-0.5 ${expanded ? '' : 'mt-2 pt-2 border-t border-white/10'}`}>
           <Link
             to={SETTINGS_ITEM.path}
             aria-current={isActive(SETTINGS_ITEM) ? 'page' : undefined}
+            title="Settings"
             className={linkClass(isActive(SETTINGS_ITEM))}
           >
-            <Settings className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+            <Settings className="w-[18px] h-[18px] flex-shrink-0" aria-hidden="true" />
             {expanded && <span>Settings</span>}
           </Link>
           {adminItems.map(({ icon: Icon, label, path }) => (
@@ -220,39 +246,42 @@ function SidebarContent({
               key={path}
               to={path}
               aria-current={isActive({ path, label }) ? 'page' : undefined}
-              className={linkClass(isActive({ path, label }), 'admin')}
+              title={label}
+              className={linkClass(isActive({ path, label }))}
             >
-              <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+              <Icon className="w-[18px] h-[18px] flex-shrink-0" aria-hidden="true" />
               {expanded && <span>{label}</span>}
             </Link>
           ))}
         </div>
       </nav>
 
-      {/* User + actions */}
-      <div className="border-t border-brand-600 p-2 flex-shrink-0">
+      {/* Person + actions */}
+      <div className="flex-shrink-0 border-t border-white/10 px-3 py-3">
         {expanded && user && (
-          <div className="flex items-center gap-3 px-3 py-2 mb-1">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-              <User className="w-4 h-4" />
+          <div className="flex items-center gap-3 px-2 py-1.5">
+            <span className="w-8 h-8 rounded-full bg-white text-ink text-xs font-bold flex items-center justify-center flex-shrink-0" aria-hidden="true">{initials}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium truncate text-white/90">{user.firstName} {user.lastName}</p>
+              <p className="text-[11px] text-white/40 capitalize">{user.role}</p>
             </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{user.firstName} {user.lastName}</p>
-              <p className="text-xs text-brand-200 capitalize">{user.role}</p>
-            </div>
+            <button onClick={onLogout} title="Sign out" aria-label="Sign out"
+              className="p-2 rounded-xl text-white/70 hover:bg-white/10 hover:text-white transition-colors">
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         )}
-        <button onClick={onLogout}
-          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-brand-100 hover:bg-white/10 hover:text-white transition-colors">
-          <LogOut className="w-5 h-5 flex-shrink-0" />
-          {expanded && <span>Sign out</span>}
-        </button>
+        {!expanded && (
+          <button onClick={onLogout} title="Sign out" aria-label="Sign out" className={linkClass(false)}>
+            <LogOut className="w-[18px] h-[18px]" />
+          </button>
+        )}
         {!mobile && (
-          <button onClick={onToggleCollapse}
-            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-brand-100 hover:bg-white/10 hover:text-white transition-colors mt-1">
+          <button onClick={onToggleCollapse} className={`${linkClass(false)} mt-1 text-white/50`}
+            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'} title={collapsed ? 'Expand' : 'Collapse'}>
             {collapsed
-              ? <ChevronRight className="w-5 h-5" />
-              : <><ChevronLeft className="w-5 h-5" /><span>Collapse</span></>
+              ? <ChevronRight className="w-[18px] h-[18px]" />
+              : <><ChevronLeft className="w-[18px] h-[18px]" /><span>Collapse</span></>
             }
           </button>
         )}
@@ -368,21 +397,21 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
   const bottomItems = [...(surfaceMeta?.items || []).slice(0, 4), SETTINGS_ITEM];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-ground">
 
       {/* Desktop sidebar */}
-      <aside aria-label="Sidebar navigation" className={`hidden md:flex flex-col bg-brand-700 text-white transition-all duration-200 flex-shrink-0
-        ${collapsed ? 'w-16' : 'w-60'}`}>
+      <aside aria-label="Sidebar navigation" className={`hidden md:flex flex-col bg-ink text-white transition-all duration-200 flex-shrink-0
+        ${collapsed ? 'w-16' : 'w-[248px]'}`}>
         <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* Mobile drawer backdrop */}
       {drawerOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
+        <div className="md:hidden fixed inset-0 bg-ink/50 z-40" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
       )}
 
       {/* Mobile drawer */}
-      <aside id="mobile-drawer" aria-label="Mobile navigation" aria-hidden={!drawerOpen} className={`md:hidden fixed top-0 left-0 h-full w-72 max-w-[85vw] bg-brand-700 text-white z-50
+      <aside id="mobile-drawer" aria-label="Mobile navigation" aria-hidden={!drawerOpen} className={`md:hidden fixed top-0 left-0 h-full w-72 max-w-[85vw] bg-ink text-white z-50
         flex flex-col transition-transform duration-300
         ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <SidebarContent {...sidebarProps} mobile />
@@ -390,11 +419,13 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
 
       {/* Main area */}
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-        {/* Top bar */}
-        <header className={`${immersive ? 'md:hidden ' : ''}h-14 md:h-16 bg-white border-b border-gray-200 flex items-center gap-3 px-4 md:px-6 flex-shrink-0`}>
+        {/* Top strip: the page title and the menu on phones; on desktop only
+            the tour trigger and the avatar, on the ground, because every page
+            carries its own heading the way the console does. */}
+        <header className={`${immersive ? 'md:hidden ' : ''}h-14 md:h-12 bg-white/90 md:bg-transparent backdrop-blur md:backdrop-blur-none border-b border-line md:border-0 flex items-center gap-3 px-4 md:px-8 flex-shrink-0`}>
           {/* Mobile hamburger */}
           <button
-            className="md:hidden p-2 -ml-1 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+            className="md:hidden p-2 -ml-2 text-ink-2 hover:text-ink rounded-xl hover:bg-ground transition-colors"
             onClick={() => setDrawerOpen(true)}
             aria-label="Open navigation menu"
             aria-expanded={drawerOpen}
@@ -403,19 +434,20 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
             <Menu className="w-5 h-5" aria-hidden="true" />
           </button>
 
-          <h1 className="text-base md:text-lg font-semibold text-gray-900 truncate flex-1">
+          <h1 className="md:hidden text-[15px] font-bold tracking-tight text-ink truncate flex-1">
             {surfaceMeta && active && active.label !== surfaceMeta.label && (
-              <span className="hidden sm:inline text-gray-400 font-normal">{surfaceMeta.label} / </span>
+              <span className="hidden sm:inline text-ink-3 font-normal">{surfaceMeta.label} / </span>
             )}
             {title}
           </h1>
+          <div className="hidden md:block flex-1" />
 
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Onboarding tour trigger */}
             <OnboardingTrigger userId={user?.id} userName={user?.firstName} />
 
             <div
-              className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-medium text-sm flex-shrink-0"
+              className="w-8 h-8 rounded-full bg-ink text-white flex items-center justify-center font-bold text-xs flex-shrink-0"
               aria-label={`${user?.firstName} ${user?.lastName} — ${user?.role}`}
               role="img"
             >
@@ -433,7 +465,7 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
       </div>
 
       {/* Mobile bottom navigation bar — the open surface's links (Admin via hamburger) */}
-      <nav aria-label="Bottom navigation" className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 flex">
+      <nav aria-label="Bottom navigation" className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-line flex">
         {bottomItems.map(({ icon: Icon, label, path }) => {
           const isOn = active && active.path === path && active.label === label;
           return (
@@ -441,7 +473,7 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
               aria-label={label}
               aria-current={isOn ? 'page' : undefined}
               className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors
-                ${isOn ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
+                ${isOn ? 'text-brand-600' : 'text-ink-3 hover:text-ink-2'}`}
             >
               <Icon className="w-5 h-5" aria-hidden="true" />
               <span>{label}</span>

@@ -20,7 +20,7 @@ export function Skeleton({ className = '', rounded = 'rounded-md' }) {
   return (
     <div
       aria-hidden="true"
-      className={`bg-gray-200 animate-pulse motion-reduce:animate-none ${rounded} ${className}`}
+      className={`bg-line animate-pulse motion-reduce:animate-none ${rounded} ${className}`}
     />
   );
 }
@@ -61,7 +61,7 @@ export function SkeletonProjectCard() {
   return (
     <div aria-hidden="true" aria-label="Loading…" className="card p-5">
       <div className="flex items-center gap-3 mb-3">
-        <Skeleton className="w-9 h-9 flex-shrink-0" rounded="rounded-lg" />
+        <Skeleton className="w-9 h-9 flex-shrink-0" rounded="rounded-xl" />
         <Skeleton className="h-4 w-2/3" />
       </div>
       <Skeleton className="h-3 w-full mb-2" />
@@ -121,7 +121,7 @@ export function SkeletonTable({ rows = 4, cols = 4 }) {
         </thead>
         <tbody>
           {Array.from({ length: rows }).map((_, row) => (
-            <tr key={row} className="border-t border-gray-100">
+            <tr key={row} className="border-t border-line">
               {Array.from({ length: cols }).map((_, col) => (
                 <td key={col} className="p-3">
                   <Skeleton className={`h-3 ${col === 0 ? 'w-32' : 'w-16'}`} />

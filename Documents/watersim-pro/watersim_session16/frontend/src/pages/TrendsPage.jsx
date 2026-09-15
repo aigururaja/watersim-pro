@@ -87,31 +87,31 @@ function TagPicker({ tags, selected, onToggle, loading }) {
   return (
     <aside className="w-full md:w-72 flex-shrink-0 card p-3 flex flex-col gap-2 md:h-[calc(100vh-8rem)]" aria-label="Tag picker">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" aria-hidden="true" />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3" aria-hidden="true" />
         <input type="search" className="input py-1.5 pl-8 text-sm w-full" placeholder="Find a tag…" value={q}
           onChange={(e) => setQ(e.target.value)} aria-label="Find a tag" />
       </div>
-      <label className="flex items-center gap-2 text-xs text-gray-600">
+      <label className="flex items-center gap-2 text-xs text-ink-2">
         <input type="checkbox" checked={analogOnly} onChange={(e) => setAnalogOnly(e.target.checked)} className="accent-brand-600" />
         Analogue and bound points only
       </label>
-      <div className="text-[11px] text-gray-400">{selected.size} of {MAX_SELECTED} selected · {shown.length} shown</div>
+      <div className="text-[11px] text-ink-3">{selected.size} of {MAX_SELECTED} selected · {shown.length} shown</div>
       <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-2">
-        {loading && <div className="text-xs text-gray-400 py-4 text-center">Loading the registry…</div>}
-        {!loading && !shown.length && <div className="text-xs text-gray-400 py-4 text-center">No tags match.</div>}
+        {loading && <div className="text-xs text-ink-3 py-4 text-center">Loading the registry…</div>}
+        {!loading && !shown.length && <div className="text-xs text-ink-3 py-4 text-center">No tags match.</div>}
         {groups.map(([area, items]) => (
           <div key={area}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-1 mb-0.5">{area}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-3 px-1 mb-0.5">{area}</div>
             {items.map((t) => {
               const on = selected.has(t.id);
               const full = !on && selected.size >= MAX_SELECTED;
               return (
-                <label key={t.id} className={`flex items-center gap-2 px-1.5 py-1 rounded text-xs cursor-pointer ${on ? 'bg-brand-50' : 'hover:bg-gray-50'} ${full ? 'opacity-50' : ''}`}>
+                <label key={t.id} className={`flex items-center gap-2 px-1.5 py-1 rounded text-xs cursor-pointer ${on ? 'bg-brand-50' : 'hover:bg-ground'} ${full ? 'opacity-50' : ''}`}>
                   <input type="checkbox" checked={on} disabled={full} onChange={() => onToggle(t)} className="accent-brand-600" aria-label={t.tag} />
                   <QualityDot binding={t.binding} />
-                  <span className="font-mono text-gray-800 whitespace-nowrap">{t.tag}</span>
-                  <span className="text-gray-500 truncate flex-1" title={t.name}>{t.name}</span>
-                  {t.binding?.value != null && <span className="text-gray-400 tabular-nums">{fmtNum(t.binding.value, 1)}</span>}
+                  <span className="font-mono text-ink whitespace-nowrap">{t.tag}</span>
+                  <span className="text-ink-3 truncate flex-1" title={t.name}>{t.name}</span>
+                  {t.binding?.value != null && <span className="text-ink-3 tabular-nums">{fmtNum(t.binding.value, 1)}</span>}
                 </label>
               );
             })}
@@ -138,20 +138,20 @@ function SeriesChart({ series, color, width, spanMs, raw, onRemove }) {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: color }} aria-hidden="true" />
-            <span className="font-mono text-sm font-semibold text-gray-900">{series.tag}</span>
-            <span className="text-sm text-gray-500 truncate">{series.name}</span>
+            <span className="font-mono text-sm font-semibold text-ink">{series.tag}</span>
+            <span className="text-sm text-ink-3 truncate">{series.name}</span>
           </div>
-          <div className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
+          <div className="text-[11px] text-ink-3 mt-0.5 tabular-nums">
             min <b>{fmtNum(s.min)}</b> · avg <b>{fmtNum(s.avg)}</b> · max <b>{fmtNum(s.max)}</b> · last <b>{fmtNum(s.last)}</b>
             {series.unit ? ` ${series.unit}` : ''} · {s.samples ?? 0} samples
           </div>
         </div>
-        <button onClick={onRemove} className="p-1 text-gray-400 hover:text-gray-600 rounded" aria-label={`Remove ${series.tag}`}>
+        <button onClick={onRemove} className="p-1 text-ink-3 hover:text-ink-2 rounded" aria-label={`Remove ${series.tag}`}>
           <X className="w-4 h-4" />
         </button>
       </div>
       {!data.length ? (
-        <div className="h-32 flex items-center justify-center text-xs text-gray-400">No samples in this window.</div>
+        <div className="h-32 flex items-center justify-center text-xs text-ink-3">No samples in this window.</div>
       ) : (
         <div className="overflow-x-auto">
           <ComposedChart width={w} height={180} data={chartData} syncId="trends" margin={{ top: 6, right: 12, bottom: 4, left: 0 }}>
@@ -336,11 +336,11 @@ export default function TrendsPage() {
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <h2 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2">
               <LineChartIcon className="w-5 h-5 text-brand-600" aria-hidden="true" />
               Trends
             </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-ink-3 mt-0.5">
               Every sample the PLC reported, kept. Pick points, choose a window, export the period.
             </p>
           </div>
@@ -363,22 +363,22 @@ export default function TrendsPage() {
 
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Trend window">
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden" role="group" aria-label="Range">
+          <div className="flex rounded-xl border border-line overflow-hidden" role="group" aria-label="Range">
             {RANGES.map((r) => (
               <button key={r.key} onClick={() => setRange(r.key)} aria-pressed={range === r.key}
-                className={`px-3 py-1.5 text-xs font-medium ${range === r.key ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                className={`px-3 py-1.5 text-xs font-medium ${range === r.key ? 'bg-brand-600 text-white' : 'bg-white text-ink-2 hover:bg-ground'}`}>
                 {r.label}
               </button>
             ))}
             <button onClick={() => setRange('custom')} aria-pressed={range === 'custom'}
-              className={`px-3 py-1.5 text-xs font-medium ${range === 'custom' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+              className={`px-3 py-1.5 text-xs font-medium ${range === 'custom' ? 'bg-brand-600 text-white' : 'bg-white text-ink-2 hover:bg-ground'}`}>
               Custom
             </button>
           </div>
           {range === 'custom' && (
             <>
               <input type="datetime-local" className="input py-1 text-xs" value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} aria-label="From" />
-              <span className="text-gray-400 text-xs">to</span>
+              <span className="text-ink-3 text-xs">to</span>
               <input type="datetime-local" className="input py-1 text-xs" value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} aria-label="To" />
             </>
           )}
@@ -386,23 +386,23 @@ export default function TrendsPage() {
             <select className="input py-1.5 pr-8 text-xs appearance-none" value={bucket} onChange={(e) => setBucket(e.target.value)} aria-label="Resolution">
               {BUCKETS.map((b) => <option key={b} value={b}>{b === 'auto' ? 'Auto resolution' : b === 'raw' ? 'Raw samples' : `${b} buckets`}</option>)}
             </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
           </div>
-          <label className="flex items-center gap-1.5 text-xs text-gray-600 ml-1">
+          <label className="flex items-center gap-1.5 text-xs text-ink-2 ml-1">
             <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} className="accent-brand-600" />
-            <Radio className={`w-3.5 h-3.5 ${live ? 'text-emerald-600' : 'text-gray-400'}`} aria-hidden="true" /> Live (30 s)
+            <Radio className={`w-3.5 h-3.5 ${live ? 'text-ok' : 'text-ink-3'}`} aria-hidden="true" /> Live (30 s)
           </label>
           <button onClick={() => load()} disabled={loading || !ids.length} className="btn-secondary text-xs py-1.5 disabled:opacity-50" aria-label="Refresh">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
           {result && (
-            <span className="text-[11px] text-gray-400 ml-auto tabular-nums">
+            <span className="text-[11px] text-ink-3 ml-auto tabular-nums">
               {result.raw ? 'raw samples' : `at ${result.bucket} resolution`} · {new Date(result.from).toLocaleString()} → {new Date(result.to).toLocaleString()}
             </span>
           )}
         </div>
 
-        {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</div>}
+        {error && <div role="alert" className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-xl px-4 py-2.5">{error}</div>}
 
         <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-start">
           <TagPicker tags={tags} selected={selected} onToggle={toggle} loading={tagsLoading} />
@@ -413,7 +413,7 @@ export default function TrendsPage() {
                 description="Choose up to eight points from the registry on the left. Analogue inputs that are bound to a PLC already have history; the rest fill as soon as they are bound." />
             )}
             {ids.length > 0 && loading && !hasData && (
-              <div className="card p-8 text-center text-sm text-gray-400"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />Loading history…</div>
+              <div className="card p-8 text-center text-sm text-ink-3"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />Loading history…</div>
             )}
             {hasData && result.series.map((s, i) => (
               <SeriesChart key={s.tagId} series={s} color={COLORS[i % COLORS.length]} width={chartWidth}

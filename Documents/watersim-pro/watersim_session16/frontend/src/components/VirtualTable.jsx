@@ -18,9 +18,9 @@ import { useVirtualScroll } from '../hooks/useVirtualScroll';
 // ── Tiny skeleton row ──────────────────────────────────────────────────────────
 function SkeletonRow({ cols }) {
   return (
-    <div className="flex items-center border-b border-gray-100 px-4 gap-4" style={{ height: 52 }}>
+    <div className="flex items-center border-b border-line px-4 gap-4" style={{ height: 52 }}>
       {cols.map((_, i) => (
-        <div key={i} className="h-3 bg-gray-200 rounded animate-pulse" style={{ flex: 1 }} />
+        <div key={i} className="h-3 bg-line rounded animate-pulse" style={{ flex: 1 }} />
       ))}
     </div>
   );
@@ -66,12 +66,12 @@ export default function VirtualTable({
 
   if (loading) {
     return (
-      <div className="border border-gray-200 rounded-lg overflow-x-auto">
+      <div className="border border-line rounded-xl overflow-x-auto">
         <div style={{ minWidth }}>
           {/* Header */}
-          <div className="flex items-center bg-gray-50 border-b border-gray-200 px-4 py-2 gap-4">
+          <div className="flex items-center bg-ground border-b border-line px-4 py-2 gap-4">
             {columns.map(col => (
-              <div key={col.key} className="text-xs font-semibold text-gray-500 uppercase tracking-wide" style={{ flex: col.flex ?? 1, width: col.width, minWidth: col.minWidth }}>
+              <div key={col.key} className="text-xs font-semibold text-ink-3 uppercase tracking-wide" style={{ flex: col.flex ?? 1, width: col.width, minWidth: col.minWidth }}>
                 {col.header}
               </div>
             ))}
@@ -87,14 +87,14 @@ export default function VirtualTable({
   return (
     // Sideways scroll lives here, on the whole table, so the header and the
     // rows move together and every column stays reachable on a narrow screen.
-    <div className="border border-gray-200 rounded-lg overflow-x-auto" data-testid="virtual-table">
+    <div className="border border-line rounded-xl overflow-x-auto" data-testid="virtual-table">
       <div style={{ minWidth }}>
         {/* Sticky header */}
-        <div className="flex items-center bg-gray-50 border-b border-gray-200 px-4 py-2 gap-4 sticky top-0 z-10">
+        <div className="flex items-center bg-ground border-b border-line px-4 py-2 gap-4 sticky top-0 z-10">
           {columns.map(col => (
             <div
               key={col.key}
-              className="text-xs font-semibold text-gray-500 uppercase tracking-wide"
+              className="text-xs font-semibold text-ink-3 uppercase tracking-wide"
               style={{ flex: col.flex ?? 1, width: col.width, minWidth: col.minWidth }}
             >
               {col.header}
@@ -110,15 +110,15 @@ export default function VirtualTable({
               <div
                 key={getRowKey(item, index)}
                 onClick={onRowClick ? () => onRowClick(item) : undefined}
-                className={`flex items-center border-b border-gray-100 px-4 gap-4 transition-colors
-                  ${onRowClick ? 'cursor-pointer hover:bg-blue-50' : ''}
-                  ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
+                className={`flex items-center border-b border-line px-4 gap-4 transition-colors
+                  ${onRowClick ? 'cursor-pointer hover:bg-accent-soft' : ''}
+                  ${index % 2 === 0 ? 'bg-white' : 'bg-ground/40'}`}
                 style={{ position: 'absolute', top, width: '100%', height: rowHeight }}
               >
                 {columns.map(col => (
                   <div
                     key={col.key}
-                    className="truncate text-sm text-gray-700"
+                    className="truncate text-sm text-ink-2"
                     style={{ flex: col.flex ?? 1, width: col.width, minWidth: col.minWidth }}
                   >
                     {col.render ? col.render(item, index) : item[col.key]}

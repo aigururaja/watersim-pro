@@ -40,12 +40,12 @@ function ProviderBanner({ providers }) {
   return (
     <div className="flex flex-wrap gap-2 text-xs" aria-label="Provider status">
       {providers.dryRun && (
-        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-warn-soft text-warn border border-warn/30">
           <AlertTriangle className="w-3.5 h-3.5" /> Dry run: messages are logged, not sent
         </span>
       )}
       {items.map((p) => (
-        <span key={p.key} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border ${p.s?.ok ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+        <span key={p.key} className={`inline-flex items-center gap-1 px-2 py-1 rounded-xl border ${p.s?.ok ? 'bg-ok-soft text-ok border-ok/30' : 'bg-ground text-ink-2 border-line'}`}>
           {p.s?.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
           {p.label}: {p.s?.ok ? (p.s.reason || 'configured') : (p.s?.reason || 'not configured')}
         </span>
@@ -55,28 +55,28 @@ function ProviderBanner({ providers }) {
 }
 
 function StatePill({ state }) {
-  const cls = state === 'sent' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-    : state === 'dead' ? 'text-red-700 bg-red-50 border-red-200'
-      : state === 'failed' ? 'text-amber-700 bg-amber-50 border-amber-200'
-        : 'text-gray-600 bg-gray-50 border-gray-200';
+  const cls = state === 'sent' ? 'text-ok bg-ok-soft border-ok/30'
+    : state === 'dead' ? 'text-danger bg-danger-soft border-danger/30'
+      : state === 'failed' ? 'text-warn bg-warn-soft border-warn/30'
+        : 'text-ink-2 bg-ground border-line';
   return <span data-state={state} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${cls}`}>{state}</span>;
 }
 
 function DeliveryPill({ d }) {
   if (!d?.status) return null;
-  const cls = d.status === 'read' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+  const cls = d.status === 'read' ? 'text-ok bg-ok-soft border-ok/30'
     : d.status === 'delivered' ? 'text-sky-700 bg-sky-50 border-sky-200'
-      : d.status === 'failed' ? 'text-red-700 bg-red-50 border-red-200'
-        : 'text-gray-600 bg-gray-50 border-gray-200';
+      : d.status === 'failed' ? 'text-danger bg-danger-soft border-danger/30'
+        : 'text-ink-2 bg-ground border-line';
   return <span data-delivery={d.status} title={d.at ? `Meta reported ${d.status} at ${new Date(d.at).toLocaleString()}` : ''} className={`ml-1 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${cls}`}>{d.status}</span>;
 }
 
 const TEMPLATE_STATUS = {
-  APPROVED: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-  PENDING: 'text-amber-700 bg-amber-50 border-amber-200',
-  REJECTED: 'text-red-700 bg-red-50 border-red-200',
-  PAUSED: 'text-red-700 bg-red-50 border-red-200',
-  DISABLED: 'text-red-700 bg-red-50 border-red-200',
+  APPROVED: 'text-ok bg-ok-soft border-ok/30',
+  PENDING: 'text-warn bg-warn-soft border-warn/30',
+  REJECTED: 'text-danger bg-danger-soft border-danger/30',
+  PAUSED: 'text-danger bg-danger-soft border-danger/30',
+  DISABLED: 'text-danger bg-danger-soft border-danger/30',
 };
 
 export default function NotificationsTab({ showToast }) {
@@ -250,21 +250,21 @@ export default function NotificationsTab({ showToast }) {
 
   return (
     <div className="space-y-6">
-      {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</div>}
+      {error && <div role="alert" className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-xl px-4 py-2.5">{error}</div>}
       <ProviderBanner providers={me?.providers} />
 
       {/* ── My channels ── */}
       <section aria-label="My channels" className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900">My channels</h3>
+        <h3 className="text-sm font-semibold text-ink">My channels</h3>
         <div className="grid md:grid-cols-2 gap-3">
           <div className="card p-3 space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+            <label className="flex items-center gap-2 text-sm font-medium text-ink">
               <input type="checkbox" checked={form.email.enabled} onChange={(e) => setForm((f) => ({ ...f, email: { ...f.email, enabled: e.target.checked } }))} className="accent-brand-600" />
-              <Mail className="w-4 h-4 text-gray-500" /> Email
+              <Mail className="w-4 h-4 text-ink-3" /> Email
             </label>
             <input className="input py-1.5 text-sm w-full font-mono" type="email" placeholder={me?.login?.email || 'you@example.com'} value={form.email.address}
               onChange={(e) => setForm((f) => ({ ...f, email: { ...f.email, address: e.target.value } }))} aria-label="Notification email address" />
-            <div className="text-xs text-gray-500" data-testid="login-email">
+            <div className="text-xs text-ink-3" data-testid="login-email">
               {me?.login?.email && form.email.address.trim() && form.email.address.trim().toLowerCase() !== me.login.email
                 ? <>Notifications go to the address above; you still sign in as <span className="font-mono">{me.login.email}</span>.</>
                 : <>Same as your login email — enter another address to receive notifications elsewhere.</>}
@@ -274,19 +274,19 @@ export default function NotificationsTab({ showToast }) {
             </button>
           </div>
           <div className="card p-3 space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+            <label className="flex items-center gap-2 text-sm font-medium text-ink">
               <input type="checkbox" checked={form.whatsapp.enabled} onChange={(e) => setForm((f) => ({ ...f, whatsapp: { ...f.whatsapp, enabled: e.target.checked } }))} className="accent-brand-600" />
-              <MessageCircle className="w-4 h-4 text-gray-500" /> WhatsApp
+              <MessageCircle className="w-4 h-4 text-ink-3" /> WhatsApp
             </label>
             <input className="input py-1.5 text-sm w-full font-mono" placeholder="+91 98765 43210 or 98765 43210" value={form.whatsapp.address}
               onChange={(e) => setForm((f) => ({ ...f, whatsapp: { ...f.whatsapp, address: e.target.value.replace(/\s+/g, '') } }))} aria-label="WhatsApp number" />
-            <div className="text-xs text-gray-500" data-testid="whatsapp-verified">
+            <div className="text-xs text-ink-3" data-testid="whatsapp-verified">
               {me?.whatsapp?.verified
                 ? 'Verified — this number has replied to the plant’s WhatsApp number.'
                 : 'Send “hi” to the plant’s WhatsApp number once from this phone: that verifies the number and opens a 24-hour window for plain-text messages.'}
             </div>
             {me?.login?.phone && (
-              <div className="text-xs text-gray-500" data-testid="profile-mobile">
+              <div className="text-xs text-ink-3" data-testid="profile-mobile">
                 Mobile on your profile: <span className="font-mono">{me.login.phone}</span>
                 {form.whatsapp.address && form.whatsapp.address !== me.login.phone
                   ? ' — WhatsApp messages go to the number above instead.'
@@ -303,13 +303,13 @@ export default function NotificationsTab({ showToast }) {
             {busy === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Save channels
           </button>
           {testResult && (
-            <span className="text-xs text-gray-600 inline-flex items-center gap-2" data-testid="test-result">
+            <span className="text-xs text-ink-2 inline-flex items-center gap-2" data-testid="test-result">
               <StatePill state={testResult.state} /> {testResult.channel} → {testResult.address}{testResult.last_error ? ` · ${testResult.last_error}` : ''}
             </span>
           )}
         </div>
         {me?.subscriptions?.length > 0 && (
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-ink-3">
             You currently hear about: {me.subscriptions.map((s) => `${s.eventType} (${s.minSeverity}+)`).join(', ')}.
           </div>
         )}
@@ -318,7 +318,7 @@ export default function NotificationsTab({ showToast }) {
       {/* ── Policy ── */}
       <section aria-label="Notification policy" className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-gray-900">Who hears what</h3>
+          <h3 className="text-sm font-semibold text-ink">Who hears what</h3>
           <div className="flex items-center gap-2">
             {canPolicy && (
               <button onClick={installDefaults} disabled={busy === 'defaults' || !missingDefaults.length} className="btn-secondary text-xs disabled:opacity-50" aria-label="Install the default policy for every role"
@@ -332,12 +332,12 @@ export default function NotificationsTab({ showToast }) {
         </div>
         <div className="overflow-x-auto card">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+            <thead className="bg-ground text-ink-3 uppercase tracking-wide text-[10px]">
               <tr><th className="text-left px-3 py-2">Who</th><th className="text-left px-3 py-2">Event</th><th className="text-left px-3 py-2">From severity</th><th className="text-left px-3 py-2">Channels</th><th className="px-3 py-2">On</th>{canPolicy && <th className="px-3 py-2" />}</tr>
             </thead>
             <tbody>
               {subs.map((s) => (
-                <tr key={s.id} className="border-t border-gray-100" data-sub={s.id}>
+                <tr key={s.id} className="border-t border-line" data-sub={s.id}>
                   <td className="px-3 py-2 capitalize">{s.role ? `every ${s.role}` : s.userName || 'a user'}</td>
                   <td className="px-3 py-2 font-mono">{s.eventType}</td>
                   <td className="px-3 py-2">
@@ -359,10 +359,10 @@ export default function NotificationsTab({ showToast }) {
                   <td className="px-3 py-2 text-center">
                     <input type="checkbox" checked={s.enabled} disabled={!canPolicy} onChange={(e) => toggleSub(s, { enabled: e.target.checked })} aria-label={`Enable ${s.eventType}`} className="accent-brand-600" />
                   </td>
-                  {canPolicy && <td className="px-3 py-2 text-right"><button onClick={() => removeSub(s)} className="p-1 text-gray-400 hover:text-red-600" aria-label={`Remove ${s.eventType}`}><Trash2 className="w-3.5 h-3.5" /></button></td>}
+                  {canPolicy && <td className="px-3 py-2 text-right"><button onClick={() => removeSub(s)} className="p-1 text-ink-3 hover:text-red-600" aria-label={`Remove ${s.eventType}`}><Trash2 className="w-3.5 h-3.5" /></button></td>}
                 </tr>
               ))}
-              {!subs.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">No policy rows — nobody is notified beyond their own task assignments.</td></tr>}
+              {!subs.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-ink-3">No policy rows — nobody is notified beyond their own task assignments.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -399,22 +399,22 @@ export default function NotificationsTab({ showToast }) {
       {/* ── Receivers ── */}
       {canPolicy && (
         <section aria-label="Receivers" className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-900">
+          <h3 className="text-sm font-semibold text-ink">
             Receivers
-            <span className="ml-2 text-xs font-normal text-gray-500">every active member by role — the receiver addresses may differ from the login email and mobile shown under each name; an admin changes those under Users</span>
+            <span className="ml-2 text-xs font-normal text-ink-3">every active member by role — the receiver addresses may differ from the login email and mobile shown under each name; an admin changes those under Users</span>
           </h3>
           <div className="overflow-x-auto card">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+              <thead className="bg-ground text-ink-3 uppercase tracking-wide text-[10px]">
                 <tr><th className="text-left px-3 py-2">Who</th><th className="text-left px-3 py-2">Email</th><th className="text-left px-3 py-2">WhatsApp</th><th className="text-left px-3 py-2">Hears</th><th className="px-3 py-2" /></tr>
               </thead>
               <tbody>
                 {receivers.map((r) => (
-                  <tr key={r.id} className="border-t border-gray-100 align-top" data-receiver={r.id}>
+                  <tr key={r.id} className="border-t border-line align-top" data-receiver={r.id}>
                     <td className="px-3 py-2">
-                      <div className="font-medium text-gray-900">{r.name}</div>
-                      <div className="text-gray-500 capitalize">{r.role}</div>
-                      <div className="text-[10px] text-gray-400 font-mono" data-testid={`profile-${r.id}`}>login {r.login}{r.mobile ? ` · mobile ${r.mobile}` : ''}</div>
+                      <div className="font-medium text-ink">{r.name}</div>
+                      <div className="text-ink-3 capitalize">{r.role}</div>
+                      <div className="text-[10px] text-ink-3 font-mono" data-testid={`profile-${r.id}`}>login {r.login}{r.mobile ? ` · mobile ${r.mobile}` : ''}</div>
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
@@ -427,16 +427,16 @@ export default function NotificationsTab({ showToast }) {
                         <input type="checkbox" checked={!!r.whatsapp.enabled} onChange={(e) => editReceiver(r.id, 'whatsapp', { enabled: e.target.checked })} aria-label={`WhatsApp for ${r.name}`} className="accent-brand-600" />
                         <input className="input py-1 text-xs w-40 font-mono" placeholder="+91… or 10 digits" value={r.whatsapp.address || ''} onChange={(e) => editReceiver(r.id, 'whatsapp', { address: e.target.value })} aria-label={`WhatsApp number for ${r.name}`} />
                         {r.whatsapp.address && (
-                          <span data-verified={r.whatsapp.verified ? 'yes' : 'no'} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${r.whatsapp.verified ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-gray-500 bg-gray-50 border-gray-200'}`} title={r.whatsapp.verified ? 'This number has replied to the plant’s WhatsApp number' : 'Not yet verified — a reply from the phone verifies it'}>
+                          <span data-verified={r.whatsapp.verified ? 'yes' : 'no'} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${r.whatsapp.verified ? 'text-ok bg-ok-soft border-ok/30' : 'text-ink-3 bg-ground border-line'}`} title={r.whatsapp.verified ? 'This number has replied to the plant’s WhatsApp number' : 'Not yet verified — a reply from the phone verifies it'}>
                             {r.whatsapp.verified ? 'verified' : 'unverified'}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-gray-500 max-w-[16rem]">
+                    <td className="px-3 py-2 text-ink-3 max-w-[16rem]">
                       {r.hears?.length
                         ? r.hears.map((h) => `${h.eventType} (${h.minSeverity}+)`).join(', ')
-                        : <span className="text-amber-700">nothing yet — add a policy row for every {r.role}</span>}
+                        : <span className="text-warn">nothing yet — add a policy row for every {r.role}</span>}
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       <button onClick={() => saveReceiver(r)} disabled={!!busy || !r.dirty} className="btn-primary text-[11px] py-0.5 px-2 disabled:opacity-50" aria-label={`Save receiver ${r.name}`}>
@@ -451,7 +451,7 @@ export default function NotificationsTab({ showToast }) {
                     </td>
                   </tr>
                 ))}
-                {!receivers.length && <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400">No active members.</td></tr>}
+                {!receivers.length && <tr><td colSpan={5} className="px-3 py-4 text-center text-ink-3">No active members.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -461,22 +461,22 @@ export default function NotificationsTab({ showToast }) {
       {/* ── Outbox ── */}
       {canPolicy && outbox && (
         <section aria-label="Outbox" className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-900">
+          <h3 className="text-sm font-semibold text-ink">
             Recent deliveries
-            <span className="ml-2 text-xs font-normal text-gray-500">
+            <span className="ml-2 text-xs font-normal text-ink-3">
               {outbox.counts.sent} sent · {outbox.counts.pending + outbox.counts.failed} waiting · {outbox.counts.dead} dead
             </span>
           </h3>
           <div className="overflow-x-auto card">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+              <thead className="bg-ground text-ink-3 uppercase tracking-wide text-[10px]">
                 <tr><th className="text-left px-3 py-2">When</th><th className="text-left px-3 py-2">To</th><th className="text-left px-3 py-2">Event</th><th className="text-left px-3 py-2">Subject</th><th className="text-left px-3 py-2">State</th><th className="px-3 py-2" /></tr>
               </thead>
               <tbody>
                 {outbox.outbox.map((o) => (
-                  <tr key={o.id} className="border-t border-gray-100">
-                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{new Date(o.createdAt).toLocaleString()}</td>
-                    <td className="px-3 py-2"><span className="font-mono">{o.address}</span>{o.userName ? <span className="text-gray-400"> · {o.userName}</span> : null}<span className="text-gray-400"> · {o.channel}</span></td>
+                  <tr key={o.id} className="border-t border-line">
+                    <td className="px-3 py-2 text-ink-3 whitespace-nowrap">{new Date(o.createdAt).toLocaleString()}</td>
+                    <td className="px-3 py-2"><span className="font-mono">{o.address}</span>{o.userName ? <span className="text-ink-3"> · {o.userName}</span> : null}<span className="text-ink-3"> · {o.channel}</span></td>
                     <td className="px-3 py-2 font-mono">{o.eventType}</td>
                     <td className="px-3 py-2 truncate max-w-[18rem]" title={o.subject}>{o.subject}</td>
                     <td className="px-3 py-2"><StatePill state={o.state} /><DeliveryPill d={o.delivery} />{o.lastError && <div className="text-[10px] text-red-600 mt-0.5 max-w-[16rem] truncate" title={o.lastError}>{o.lastError}</div>}</td>
@@ -489,7 +489,7 @@ export default function NotificationsTab({ showToast }) {
                     </td>
                   </tr>
                 ))}
-                {!outbox.outbox.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">Nothing sent yet.</td></tr>}
+                {!outbox.outbox.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-ink-3">Nothing sent yet.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -500,35 +500,35 @@ export default function NotificationsTab({ showToast }) {
       {canPolicy && me?.providers?.whatsapp?.provider !== 'twilio' && (
         <section aria-label="WhatsApp templates" className="space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">WhatsApp templates</h3>
+            <h3 className="text-sm font-semibold text-ink">WhatsApp templates</h3>
             <button onClick={checkTemplates} disabled={busy === 'templates'} className="btn-secondary text-xs disabled:opacity-50" aria-label="Check Meta templates">
               {busy === 'templates' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Check Meta templates
             </button>
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-ink-3">
             Outside a 24-hour reply window Meta delivers only approved templates. SafeKrit fills two parameters — the subject and the details —
             so a template mapped in <span className="font-mono">WHATSAPP_TEMPLATES</span> must take exactly two.
           </p>
-          {templates?.error && <div role="alert" className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{templates.error}</div>}
-          {templates && !templates.error && !templates.ok && <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{templates.reason}</div>}
+          {templates?.error && <div role="alert" className="text-xs text-danger bg-danger-soft border border-danger/30 rounded-xl px-3 py-2">{templates.error}</div>}
+          {templates && !templates.error && !templates.ok && <div className="text-xs text-warn bg-warn-soft border border-warn/30 rounded-xl px-3 py-2">{templates.reason}</div>}
           {templates?.ok && (
             <div className="overflow-x-auto card">
               <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+                <thead className="bg-ground text-ink-3 uppercase tracking-wide text-[10px]">
                   <tr><th className="text-left px-3 py-2">Template</th><th className="text-left px-3 py-2">Meta status</th><th className="text-left px-3 py-2">Language</th><th className="text-left px-3 py-2">Category</th><th className="text-left px-3 py-2">Params</th><th className="text-left px-3 py-2">Used for</th></tr>
                 </thead>
                 <tbody>
                   {templates.templates.map((t) => (
-                    <tr key={t.id || t.name} className="border-t border-gray-100" data-template={t.name}>
+                    <tr key={t.id || t.name} className="border-t border-line" data-template={t.name}>
                       <td className="px-3 py-2 font-mono">{t.name}</td>
-                      <td className="px-3 py-2"><span data-status={t.status} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${TEMPLATE_STATUS[t.status] || 'text-gray-600 bg-gray-50 border-gray-200'}`}>{t.status}</span></td>
+                      <td className="px-3 py-2"><span data-status={t.status} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${TEMPLATE_STATUS[t.status] || 'text-ink-2 bg-ground border-line'}`}>{t.status}</span></td>
                       <td className="px-3 py-2">{t.language}</td>
                       <td className="px-3 py-2">{t.category}</td>
                       <td className={`px-3 py-2 ${t.mappedTo?.length && t.params !== 2 ? 'text-red-600 font-semibold' : ''}`} title={t.mappedTo?.length && t.params !== 2 ? 'SafeKrit sends two parameters; Meta will refuse this template' : ''}>{t.params}</td>
-                      <td className="px-3 py-2 font-mono">{t.mappedTo?.length ? t.mappedTo.join(', ') : <span className="text-gray-400">—</span>}</td>
+                      <td className="px-3 py-2 font-mono">{t.mappedTo?.length ? t.mappedTo.join(', ') : <span className="text-ink-3">—</span>}</td>
                     </tr>
                   ))}
-                  {!templates.templates.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">No templates on this WhatsApp Business Account yet.</td></tr>}
+                  {!templates.templates.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-ink-3">No templates on this WhatsApp Business Account yet.</td></tr>}
                 </tbody>
               </table>
             </div>

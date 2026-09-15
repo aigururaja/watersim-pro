@@ -9,6 +9,7 @@ import { PAGE_LOADERS, prefetchPages } from './pagePrefetch';
 // Code-split every page — each route loads its own chunk on demand, and
 // pagePrefetch.js warms them all once the browser is idle so the first click
 // on a page does not wait behind a loader.
+const LandingPage    = lazy(PAGE_LOADERS.LandingPage);
 const LoginPage      = lazy(PAGE_LOADERS.LoginPage);
 const RegisterPage   = lazy(PAGE_LOADERS.RegisterPage);
 const DashboardPage  = lazy(PAGE_LOADERS.DashboardPage);
@@ -57,8 +58,8 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        {/* Redirect root */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* The public front door; a signed-in person sees "Open dashboard" on it */}
+        <Route path="/" element={<LandingPage />} />
 
         {/* Public */}
         <Route path="/login"    element={<PublicRoute><LoginPage /></PublicRoute>} />

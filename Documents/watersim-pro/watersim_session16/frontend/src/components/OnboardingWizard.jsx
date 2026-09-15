@@ -281,7 +281,7 @@ export default function OnboardingWizard({
                 aria-selected={i === step}
                 aria-label={`Step ${i + 1}: ${s.title}`}
                 className={`h-1.5 rounded-full transition-all duration-300
-                  ${i === step ? 'bg-brand-600 w-6' : i < step ? 'bg-brand-300 w-3' : 'bg-gray-200 w-3'}`}
+                  ${i === step ? 'bg-brand-600 w-6' : i < step ? 'bg-brand-300 w-3' : 'bg-line w-3'}`}
               />
             ))}
           </div>
@@ -289,7 +289,7 @@ export default function OnboardingWizard({
             ref={closeBtnRef}
             onClick={() => closeWizard()}
             aria-label="Close onboarding"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded-xl text-ink-3 hover:text-ink-2 hover:bg-ground transition-colors"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -306,12 +306,12 @@ export default function OnboardingWizard({
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${current.iconBg}`}>
               <Icon className={`w-5 h-5 ${current.iconColor}`} aria-hidden="true" />
             </div>
-            <h2 id="onboarding-title" className="text-lg font-bold text-gray-900">
+            <h2 id="onboarding-title" className="text-lg font-bold text-ink">
               {current.id === 'welcome' ? `Hi ${userName}! ${current.title}` : current.title}
             </h2>
           </div>
 
-          <p id="onboarding-body" className="text-sm text-gray-600 leading-relaxed mb-6">
+          <p id="onboarding-body" className="text-sm text-ink-2 leading-relaxed mb-6">
             {current.body}
           </p>
 
@@ -367,7 +367,7 @@ export function OnboardingTrigger({ userId, userName }) {
         onClick={() => setShow(true)}
         aria-label="Launch onboarding tour"
         title="Onboarding tour"
-        className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+        className="p-1.5 rounded-xl text-ink-3 hover:text-brand-600 hover:bg-brand-50 transition-colors"
       >
         <Sparkles className="w-4 h-4" aria-hidden="true" />
       </button>

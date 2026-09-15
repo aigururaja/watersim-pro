@@ -32,12 +32,12 @@ const PAGE_SIZE = 50;
 function ActionPill({ action }) {
   const verb = String(action || '').split('.').pop();
   const tone = /^(create|register|seed|instantiate|login)$/.test(verb)
-    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+    ? 'text-ok bg-ok-soft border-ok/30'
     : /^(delete|revoke|deactivate|logout)$/.test(verb)
-      ? 'text-red-700 bg-red-50 border-red-200'
+      ? 'text-danger bg-danger-soft border-danger/30'
       : /^(ack|acknowledge|approve)$/.test(verb)
         ? 'text-purple-700 bg-purple-50 border-purple-200'
-        : 'text-gray-700 bg-gray-50 border-gray-200';
+        : 'text-ink-2 bg-ground border-line';
   return (
     <span data-action={action} className={`inline-flex px-2 py-0.5 rounded-full text-xs font-mono font-medium border ${tone}`}>
       {action}
@@ -56,19 +56,19 @@ function Actor({ actor }) {
         {system ? <Bot className="w-3.5 h-3.5" aria-hidden="true" /> : <User className="w-3.5 h-3.5" aria-hidden="true" />}
       </span>
       <div className="min-w-0">
-        <div className="text-sm text-gray-800 truncate" title={actor?.email || actor?.name}>{actor?.name || '—'}</div>
-        <div className="text-[11px] text-gray-400 capitalize">{actor?.role || ''}</div>
+        <div className="text-sm text-ink truncate" title={actor?.email || actor?.name}>{actor?.name || '—'}</div>
+        <div className="text-[11px] text-ink-3 capitalize">{actor?.role || ''}</div>
       </div>
     </div>
   );
 }
 
 function When({ ts }) {
-  if (!ts) return <span className="text-gray-400">—</span>;
+  if (!ts) return <span className="text-ink-3">—</span>;
   return (
-    <span className="text-xs text-gray-500" title={absTime(ts)}>
+    <span className="text-xs text-ink-3" title={absTime(ts)}>
       <span className="block">{relTime(ts)}</span>
-      <span className="block text-[10px] text-gray-400">{absTime(ts)}</span>
+      <span className="block text-[10px] text-ink-3">{absTime(ts)}</span>
     </span>
   );
 }
@@ -76,10 +76,10 @@ function When({ ts }) {
 /** The details JSON, one line, truncated; the full text sits in the title. */
 function Details({ details }) {
   const entries = Object.entries(details || {}).filter(([k]) => k !== 'source' && k !== 'requestId');
-  if (!entries.length) return <span className="text-gray-300">—</span>;
+  if (!entries.length) return <span className="text-line">—</span>;
   const text = entries.map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join('  ');
   return (
-    <span className="block text-xs font-mono text-gray-600 truncate" title={JSON.stringify(details, null, 2)}>
+    <span className="block text-xs font-mono text-ink-2 truncate" title={JSON.stringify(details, null, 2)}>
       {text}
     </span>
   );
@@ -94,7 +94,7 @@ function FilterBar({ filters, setFilters, actions }) {
   return (
     <div className="flex flex-wrap gap-2 items-center">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" aria-hidden="true" />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" aria-hidden="true" />
         <input
           type="search"
           className="input py-1.5 pl-8 text-sm min-w-52"
@@ -117,7 +117,7 @@ function FilterBar({ filters, setFilters, actions }) {
             <option key={a.action} value={a.action}>{a.action} ({a.count})</option>
           ))}
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
       <div className="relative">
@@ -132,7 +132,7 @@ function FilterBar({ filters, setFilters, actions }) {
           <option value="evaluator">System · alarm evaluator</option>
           <option value="scheduler">System · scheduler</option>
         </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-3 pointer-events-none" />
       </div>
 
       <input
@@ -142,7 +142,7 @@ function FilterBar({ filters, setFilters, actions }) {
         onChange={e => set({ from: e.target.value || undefined })}
         aria-label="From date"
       />
-      <span className="text-gray-400 text-sm">to</span>
+      <span className="text-ink-3 text-sm">to</span>
       <input
         type="date"
         className="input py-1.5 text-sm w-auto"
@@ -154,7 +154,7 @@ function FilterBar({ filters, setFilters, actions }) {
       {dirty && (
         <button
           onClick={() => setFilters({})}
-          className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+          className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2 px-2 py-1"
         >
           <X className="w-3.5 h-3.5" /> Clear
         </button>
@@ -281,15 +281,15 @@ export default function AuditPage() {
       key: 'resource', header: 'Record', flex: 1.2, minWidth: 140,
       render: (e) => (
         <div className="min-w-0">
-          <div className="text-sm text-gray-800 truncate">{e.resourceType || '—'}</div>
+          <div className="text-sm text-ink truncate">{e.resourceType || '—'}</div>
           {e.resourceId && (
-            <div className="text-[10px] font-mono text-gray-400 truncate" title={e.resourceId}>{e.resourceId}</div>
+            <div className="text-[10px] font-mono text-ink-3 truncate" title={e.resourceId}>{e.resourceId}</div>
           )}
         </div>
       ),
     },
     { key: 'details', header: 'Details', flex: 2, minWidth: 200, render: (e) => <Details details={e.details} /> },
-    { key: 'ip', header: 'IP', flex: '0 0 110px', width: 110, render: (e) => <span className="text-xs font-mono text-gray-500">{e.ip || '—'}</span> },
+    { key: 'ip', header: 'IP', flex: '0 0 110px', width: 110, render: (e) => <span className="text-xs font-mono text-ink-3">{e.ip || '—'}</span> },
   ], []);
 
   const hasFilters = Object.keys(filters).some(k => filters[k]);
@@ -315,11 +315,11 @@ export default function AuditPage() {
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <h2 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2">
               <ScrollText className="w-5 h-5 text-brand-600" aria-hidden="true" />
               Audit trail
             </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-ink-3 mt-0.5">
               Every user action and automated event in your organisation, newest first.
               {total > 0 && <> {total.toLocaleString()} entr{total === 1 ? 'y' : 'ies'} match.</>}
             </p>
@@ -346,7 +346,7 @@ export default function AuditPage() {
         </div>
 
         {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+          <div role="alert" className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-xl px-4 py-2.5">
             {error}
           </div>
         )}
@@ -382,7 +382,7 @@ export default function AuditPage() {
                 : <><ArrowRight className="w-3.5 h-3.5" />Load more ({entries.length} of {total})</>}
             </button>
           ) : entries.length > 0 && (
-            <p className="text-xs text-gray-400 py-2">
+            <p className="text-xs text-ink-3 py-2">
               All {total.toLocaleString()} entr{total === 1 ? 'y' : 'ies'} loaded
             </p>
           )}

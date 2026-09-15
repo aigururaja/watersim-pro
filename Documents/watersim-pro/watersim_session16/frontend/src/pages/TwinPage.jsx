@@ -29,27 +29,27 @@ import { useOrgLive } from '../hooks/useOrgLive';
 import { relTime } from '../components/alarms/alarmState';
 
 const fmt = (v, dp = 2) => (v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('en-IN', { maximumFractionDigits: dp }));
-const zTone = (z, limit) => (z == null ? 'text-gray-400' : Math.abs(z) > limit ? 'text-red-700 font-semibold' : Math.abs(z) > limit * 0.66 ? 'text-amber-700' : 'text-emerald-700');
+const zTone = (z, limit) => (z == null ? 'text-ink-3' : Math.abs(z) > limit ? 'text-danger font-semibold' : Math.abs(z) > limit * 0.66 ? 'text-warn' : 'text-ok');
 
 function TwinList({ twins, selected, onSelect }) {
   return (
     <aside className="card p-2 w-full lg:w-72 flex-shrink-0 space-y-1" aria-label="Twins">
       {twins.map((t) => (
         <button key={t.flowsheetId} onClick={() => onSelect(t.flowsheetId)}
-          className={`w-full text-left px-3 py-2 rounded-lg text-sm ${selected === t.flowsheetId ? 'bg-brand-50 border border-brand-200' : 'hover:bg-gray-50 border border-transparent'}`}
+          className={`w-full text-left px-3 py-2 rounded-xl text-sm ${selected === t.flowsheetId ? 'bg-brand-50 border border-brand-200' : 'hover:bg-ground border border-transparent'}`}
           aria-label={t.flowsheetName} data-twin={t.flowsheetId}>
           <div className="flex items-center justify-between gap-2">
-            <span className="font-medium text-gray-900 truncate">{t.flowsheetName}</span>
+            <span className="font-medium text-ink truncate">{t.flowsheetName}</span>
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${t.config.enabled ? (t.state?.error ? 'bg-red-500' : 'bg-emerald-500') : 'bg-gray-300'}`} title={t.config.enabled ? 'running' : 'off'} />
           </div>
-          <div className="text-[11px] text-gray-500 truncate">{t.projectName}</div>
-          <div className="text-[10px] text-gray-400 mt-0.5">
+          <div className="text-[11px] text-ink-3 truncate">{t.projectName}</div>
+          <div className="text-[10px] text-ink-3 mt-0.5">
             {t.boundPoints} bound · {t.state?.solvedAt ? `solved ${relTime(t.state.solvedAt)}` : 'never solved'}{t.driftAlarms ? ` · ${t.driftAlarms} drift` : ''}
           </div>
         </button>
       ))}
       {!twins.length && (
-        <div className="text-xs text-gray-400 p-3">
+        <div className="text-xs text-ink-3 p-3">
           No twins yet. <Link to="/projects" className="text-brand-700 hover:underline">Import the plant you monitor</Link> or create a model under Projects.
         </div>
       )}
@@ -202,12 +202,12 @@ export default function TwinPage() {
       <div className="p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-brand-600" aria-hidden="true" /> Digital twin</h2>
-            <p className="text-sm text-gray-500 mt-0.5">The model runs beside the plant on the server and says where they disagree.</p>
+            <h2 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2"><Boxes className="w-5 h-5 text-brand-600" aria-hidden="true" /> Digital twin</h2>
+            <p className="text-sm text-ink-3 mt-0.5">The model runs beside the plant on the server and says where they disagree.</p>
           </div>
           <div className="flex items-center gap-2">
             {anyShadow && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-300" role="status">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold text-warn bg-warn-soft border border-amber-300" role="status">
                 <ShieldAlert className="w-3.5 h-3.5" /> Shadow mode on — writes go to the simulator, not the plant
               </span>
             )}
@@ -215,7 +215,7 @@ export default function TwinPage() {
           </div>
         </div>
 
-        {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</div>}
+        {error && <div role="alert" className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-xl px-4 py-2.5">{error}</div>}
 
         {/* Side by side from lg only: at tablet width the fixed list left the
             detail column too narrow for its controls (what-if select). */}
@@ -223,7 +223,7 @@ export default function TwinPage() {
           <TwinList twins={twins} selected={flowsheetId} onSelect={(id) => navigate(`/twin/${id}`)} />
 
           <div className="flex-1 min-w-0 space-y-4">
-            {loading && !detail && <div className="card p-8 text-center text-sm text-gray-400"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />Loading…</div>}
+            {loading && !detail && <div className="card p-8 text-center text-sm text-ink-3"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />Loading…</div>}
             {!loading && !flowsheetId && <EmptyState icon={Boxes} title="No twin selected" description="Pick a flowsheet on the left." />}
             {detail && (
               <>
@@ -231,43 +231,43 @@ export default function TwinPage() {
                 <section className="card p-4" aria-label="Twin configuration">
                   <div className="flex flex-wrap items-end gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="text-base font-semibold text-gray-900">{detail.flowsheetName}</div>
-                      <div className="text-xs text-gray-500">{detail.projectName} · <Link className="text-brand-700 hover:underline" to={`/projects/${detail.projectId}/flowsheets/${detail.flowsheetId}`}>open canvas</Link></div>
+                      <div className="text-base font-semibold text-ink">{detail.flowsheetName}</div>
+                      <div className="text-xs text-ink-3">{detail.projectName} · <Link className="text-brand-700 hover:underline" to={`/projects/${detail.projectId}/flowsheets/${detail.flowsheetId}`}>open canvas</Link></div>
                     </div>
                     <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={cfg.enabled} disabled={!canConfigure} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} className="accent-brand-600" /> Enabled</label>
-                    <label className="text-xs text-gray-600">Every
+                    <label className="text-xs text-ink-2">Every
                       <input type="number" min="5" max="3600" className="input py-1 text-sm w-20 ml-1" value={cfg.cadenceS} disabled={!canConfigure} onChange={(e) => setCfg((c) => ({ ...c, cadenceS: Number(e.target.value) }))} aria-label="Cadence seconds" /> s
                     </label>
-                    <label className="text-xs text-gray-600">Drift at |z| &gt;
+                    <label className="text-xs text-ink-2">Drift at |z| &gt;
                       <input type="number" min="0.5" max="20" step="0.5" className="input py-1 text-sm w-20 ml-1" value={cfg.driftZ} disabled={!canConfigure} onChange={(e) => setCfg((c) => ({ ...c, driftZ: Number(e.target.value) }))} aria-label="Drift z" />
                     </label>
                     {canConfigure && <button onClick={saveConfig} disabled={busy === 'config'} className="btn-secondary text-sm disabled:opacity-50">{busy === 'config' ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Save</button>}
                     {canConfigure && <button onClick={solveNow} disabled={busy === 'solve'} className="btn-primary text-sm disabled:opacity-50" aria-label="Solve now">{busy === 'solve' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />} Solve now</button>}
                   </div>
-                  <div className="mt-3 text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-1">
+                  <div className="mt-3 text-xs text-ink-3 flex flex-wrap gap-x-4 gap-y-1">
                     <span>{state?.solvedAt ? <>Last solve <b>{relTime(state.solvedAt)}</b> in {state.durationMs} ms (#{state.seq})</> : 'Never solved'}</span>
-                    {state?.error && <span className="text-red-700 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {state.error}</span>}
+                    {state?.error && <span className="text-danger inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {state.error}</span>}
                     {state?.summary?.effluent && <span>Effluent: {effluentKeys.map((k) => `${k} ${fmt(state.summary.effluent[k])}`).join(' · ')}</span>}
                   </div>
                 </section>
 
                 {/* Residuals */}
                 <section className="card p-4" aria-label="Residuals">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2">Model vs measured</h3>
+                  <h3 className="text-sm font-semibold text-ink mb-2">Model vs measured</h3>
                   {!residuals.length ? (
-                    <p className="text-xs text-gray-500">No instrument on this flowsheet has a live measurement bound to its <span className="font-mono">measured</span> parameter yet. Bind a flow meter, level or pH transmitter and the twin compares every solve.</p>
+                    <p className="text-xs text-ink-3">No instrument on this flowsheet has a live measurement bound to its <span className="font-mono">measured</span> parameter yet. Bind a flow meter, level or pH transmitter and the twin compares every solve.</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
-                        <thead className="text-gray-500 uppercase tracking-wide text-[10px]">
+                        <thead className="text-ink-3 uppercase tracking-wide text-[10px]">
                           <tr><th className="text-left px-2 py-1">Instrument</th><th className="text-right px-2 py-1">Measured</th><th className="text-right px-2 py-1">Modelled</th><th className="text-right px-2 py-1">Residual</th><th className="text-right px-2 py-1">z</th><th className="text-left px-2 py-1">Last 6 h (residual)</th></tr>
                         </thead>
                         <tbody>
                           {residuals.map((r) => {
                             const s = residualSeries.find((x) => x.tagId === r.tagId);
                             return (
-                              <tr key={r.tagId} className="border-t border-gray-100" data-residual={r.tag}>
-                                <td className="px-2 py-1.5 font-mono text-gray-900">{r.tag}</td>
+                              <tr key={r.tagId} className="border-t border-line" data-residual={r.tag}>
+                                <td className="px-2 py-1.5 font-mono text-ink">{r.tag}</td>
                                 <td className="px-2 py-1.5 text-right tabular-nums">{fmt(r.measured)} {r.unit || ''}</td>
                                 <td className="px-2 py-1.5 text-right tabular-nums">{fmt(r.modelled)}</td>
                                 <td className="px-2 py-1.5 text-right tabular-nums">{r.residual > 0 ? '+' : ''}{fmt(r.residual)}</td>
@@ -284,9 +284,9 @@ export default function TwinPage() {
 
                 {/* What-if */}
                 <section className="card p-4" aria-label="What-if">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><FlaskConical className="w-4 h-4 text-gray-400" /> What if — from the live state</h3>
+                  <h3 className="text-sm font-semibold text-ink mb-2 flex items-center gap-1"><FlaskConical className="w-4 h-4 text-ink-3" /> What if — from the live state</h3>
                   {!paramOptions.length ? (
-                    <p className="text-xs text-gray-500">Solve the twin once with live measurements and its parameters become the baseline here.</p>
+                    <p className="text-xs text-ink-3">Solve the twin once with live measurements and its parameters become the baseline here.</p>
                   ) : (
                     <div className="flex flex-wrap items-end gap-2 text-xs">
                       <label>Parameter
@@ -297,34 +297,34 @@ export default function TwinPage() {
                       </label>
                       <label>New value <input type="number" step="any" className="input py-1 text-xs block w-28" value={whatIf.value} onChange={(e) => setWhatIf((w) => ({ ...w, value: e.target.value }))} aria-label="New value" /></label>
                       <button onClick={runWhatIf} disabled={busy === 'whatif' || !canScenario} className="btn-primary text-xs disabled:opacity-50" aria-label="Run scenario">{busy === 'whatif' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />} Run</button>
-                      {!canScenario && <span className="text-gray-400">Operators and above can run scenarios.</span>}
+                      {!canScenario && <span className="text-ink-3">Operators and above can run scenarios.</span>}
                     </div>
                   )}
                   {whatIfResult && (
                     <div className="mt-3 overflow-x-auto" data-testid="whatif-result">
                       <table className="text-xs w-full">
-                        <thead className="text-gray-500 uppercase text-[10px]"><tr><th className="text-left px-2 py-1">Scenario</th>{effluentKeys.map((k) => <th key={k} className="text-right px-2 py-1">{k}</th>)}</tr></thead>
+                        <thead className="text-ink-3 uppercase text-[10px]"><tr><th className="text-left px-2 py-1">Scenario</th>{effluentKeys.map((k) => <th key={k} className="text-right px-2 py-1">{k}</th>)}</tr></thead>
                         <tbody>
-                          <tr className="border-t border-gray-100"><td className="px-2 py-1 font-medium">{whatIfResult.baseline.name}</td>{effluentKeys.map((k) => <td key={k} className="text-right px-2 py-1 tabular-nums">{fmt(whatIfResult.baseline.effluent?.[k])}</td>)}</tr>
+                          <tr className="border-t border-line"><td className="px-2 py-1 font-medium">{whatIfResult.baseline.name}</td>{effluentKeys.map((k) => <td key={k} className="text-right px-2 py-1 tabular-nums">{fmt(whatIfResult.baseline.effluent?.[k])}</td>)}</tr>
                           {whatIfResult.scenarios.map((s) => (
-                            <tr key={s.name} className="border-t border-gray-100">
+                            <tr key={s.name} className="border-t border-line">
                               <td className="px-2 py-1 font-medium">{s.name}{!s.ok && <span className="text-red-600"> · {s.error}</span>}</td>
-                              {effluentKeys.map((k) => <td key={k} className="text-right px-2 py-1 tabular-nums">{fmt(s.effluent?.[k])}{s.delta?.[k] != null && s.delta[k] !== 0 && <span className={`ml-1 ${s.delta[k] > 0 ? 'text-red-600' : 'text-emerald-600'}`}>({s.delta[k] > 0 ? '+' : ''}{fmt(s.delta[k])})</span>}</td>)}
+                              {effluentKeys.map((k) => <td key={k} className="text-right px-2 py-1 tabular-nums">{fmt(s.effluent?.[k])}{s.delta?.[k] != null && s.delta[k] !== 0 && <span className={`ml-1 ${s.delta[k] > 0 ? 'text-red-600' : 'text-ok'}`}>({s.delta[k] > 0 ? '+' : ''}{fmt(s.delta[k])})</span>}</td>)}
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                      <div className="text-[10px] text-gray-400 mt-1">Not persisted as a run.</div>
+                      <div className="text-[10px] text-ink-3 mt-1">Not persisted as a run.</div>
                     </div>
                   )}
                 </section>
 
                 {/* Commissioning */}
                 <section className="card p-4 space-y-3" aria-label="Virtual commissioning">
-                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1"><ListChecks className="w-4 h-4 text-gray-400" /> Virtual commissioning</h3>
+                  <h3 className="text-sm font-semibold text-ink flex items-center gap-1"><ListChecks className="w-4 h-4 text-ink-3" /> Virtual commissioning</h3>
                   <div className="flex flex-wrap gap-2">
                     {connections.map((c) => (
-                      <div key={c.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs ${c.mode === 'shadow' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-gray-50 border-gray-200 text-gray-700'}`} data-connection={c.id}>
+                      <div key={c.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs ${c.mode === 'shadow' ? 'bg-warn-soft border-amber-300 text-amber-900' : 'bg-ground border-line text-ink-2'}`} data-connection={c.id}>
                         {c.mode === 'shadow' ? <ShieldAlert className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                         <span className="font-medium">{c.name}</span><span className="opacity-70">{c.protocol}</span>
                         <span className="font-mono uppercase">{c.mode}</span>
@@ -333,16 +333,16 @@ export default function TwinPage() {
                         {c.mode === 'shadow' && !canLeaveShadow && <span className="text-[10px]">a manager leaves shadow</span>}
                       </div>
                     ))}
-                    {!connections.length && <span className="text-xs text-gray-400">No PLC connections.</span>}
+                    {!connections.length && <span className="text-xs text-ink-3">No PLC connections.</span>}
                   </div>
                   <div className="grid md:grid-cols-2 gap-2">
                     {scripts.map((s) => (
-                      <div key={s.id} className="border border-gray-200 rounded-lg p-2 text-xs" data-script={s.id}>
+                      <div key={s.id} className="border border-line rounded-xl p-2 text-xs" data-script={s.id}>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium text-gray-900">{s.numeral}. {s.title}</span>
-                          <span className="text-gray-400">{s.actionableSteps} steps · {fmt(s.totalHours, 2)} h</span>
+                          <span className="font-medium text-ink">{s.numeral}. {s.title}</span>
+                          <span className="text-ink-3">{s.actionableSteps} steps · {fmt(s.totalHours, 2)} h</span>
                         </div>
-                        <ol className="text-[11px] text-gray-500 mt-1 space-y-0.5 max-h-24 overflow-y-auto">
+                        <ol className="text-[11px] text-ink-3 mt-1 space-y-0.5 max-h-24 overflow-y-auto">
                           {s.steps.filter((st) => st.acts).map((st) => <li key={st.no}>{st.no}. <b className="uppercase">{st.action}</b> {st.devices.join(', ')}{st.durationH ? ` · ${fmt(st.durationH * 60, 1)} min` : ''}</li>)}
                         </ol>
                         <div className="mt-1.5">
@@ -359,11 +359,11 @@ export default function TwinPage() {
                     <div className="text-xs space-y-1" aria-label="Script runs">
                       {runs.slice(0, 5).map((r) => (
                         <div key={r.runId} className="flex items-center gap-2" data-run={r.runId}>
-                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${r.status === 'running' ? 'text-brand-700 bg-brand-50 border-brand-200' : r.status === 'completed' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-gray-600 bg-gray-50 border-gray-200'}`}>{r.status}</span>
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${r.status === 'running' ? 'text-brand-700 bg-brand-50 border-brand-200' : r.status === 'completed' ? 'text-ok bg-ok-soft border-ok/30' : 'text-ink-2 bg-ground border-line'}`}>{r.status}</span>
                           <span className="font-medium">{r.sectionId}</span>
-                          <span className="text-gray-500">step {r.stepNo}/{r.totalSteps}</span>
-                          {r.log?.length > 0 && <span className="text-gray-400 truncate">last: {r.log[r.log.length - 1].action} {r.log[r.log.length - 1].devices.join(', ')}</span>}
-                          {r.status === 'completed' && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                          <span className="text-ink-3">step {r.stepNo}/{r.totalSteps}</span>
+                          {r.log?.length > 0 && <span className="text-ink-3 truncate">last: {r.log[r.log.length - 1].action} {r.log[r.log.length - 1].devices.join(', ')}</span>}
+                          {r.status === 'completed' && <Check className="w-3.5 h-3.5 text-ok" />}
                           {r.status === 'running' && canCommission && <button onClick={() => cancelRun(r)} className="btn-secondary text-[10px] py-0.5 px-1.5" aria-label="Cancel script"><Square className="w-3 h-3" /> Cancel</button>}
                         </div>
                       ))}

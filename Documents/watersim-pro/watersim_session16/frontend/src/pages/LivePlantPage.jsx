@@ -46,12 +46,12 @@ function SeverityPill({ severity }) {
 }
 
 function ConnChip({ c }) {
-  const tone = !c.enabled ? 'text-gray-500 bg-gray-50 border-gray-200'
-    : c.status === 'online' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-      : c.status === 'error' ? 'text-red-700 bg-red-50 border-red-200'
-        : 'text-gray-600 bg-gray-50 border-gray-200';
+  const tone = !c.enabled ? 'text-ink-3 bg-ground border-line'
+    : c.status === 'online' ? 'text-ok bg-ok-soft border-ok/30'
+      : c.status === 'error' ? 'text-danger bg-danger-soft border-danger/30'
+        : 'text-ink-2 bg-ground border-line';
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] ${tone}`} title={c.lastError || (c.lastSeen ? `Last seen ${absTime(c.lastSeen)}` : 'Never seen')} data-connection={c.id}>
+    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-xl border text-[11px] ${tone}`} title={c.lastError || (c.lastSeen ? `Last seen ${absTime(c.lastSeen)}` : 'Never seen')} data-connection={c.id}>
       {c.status === 'online' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
       <span className="font-medium">{c.name}</span>
       <span className="text-[10px] opacity-80">{c.protocol}</span>
@@ -304,34 +304,34 @@ export default function LivePlantPage() {
   <aside className="card p-3 w-full lg:w-72 flex-shrink-0 space-y-2" aria-label="Selected equipment">
     <div className="flex items-start justify-between gap-2">
       <div className="min-w-0">
-        <div className="text-sm font-semibold text-gray-900 leading-snug">{selected.data?.label || selected.id}</div>
-        <div className="text-[11px] text-gray-500">{familyOf(selected.data?.opType)} · {selected.data?.area || ''}</div>
+        <div className="text-sm font-semibold text-ink leading-snug">{selected.data?.label || selected.id}</div>
+        <div className="text-[11px] text-ink-3">{familyOf(selected.data?.opType)} · {selected.data?.area || ''}</div>
       </div>
-      <button onClick={() => setSelectedNode(null)} className="p-1 text-gray-400 hover:text-gray-600" aria-label="Close equipment"><X className="w-4 h-4" /></button>
+      <button onClick={() => setSelectedNode(null)} className="p-1 text-ink-3 hover:text-ink-2" aria-label="Close equipment"><X className="w-4 h-4" /></button>
     </div>
-    {selected.data?.source && <div className="text-[11px] text-gray-500">{selected.data.source}</div>}
-    <ul className="text-xs divide-y divide-gray-100" aria-label="Points">
+    {selected.data?.source && <div className="text-[11px] text-ink-3">{selected.data.source}</div>}
+    <ul className="text-xs divide-y divide-line" aria-label="Points">
       {selectedTags.map((t) => (
         <li key={t.id} className="py-1 flex items-center justify-between gap-2">
-          <span className="font-mono text-gray-800 truncate">{t.tag}</span>
-          <span className={`tabular-nums ${t.quality === 'good' ? 'text-gray-900' : 'text-amber-700'}`}>
+          <span className="font-mono text-ink truncate">{t.tag}</span>
+          <span className={`tabular-nums ${t.quality === 'good' ? 'text-ink' : 'text-warn'}`}>
             {t.value == null ? '—' : t.signalType === 'DI' || t.signalType === 'DO' ? (t.value >= 0.5 ? 'ON' : 'OFF') : Number(t.value).toLocaleString('en-IN', { maximumFractionDigits: 1 })}
             {t.signalType === 'AI' && t.engUnit ? ` ${t.engUnit}` : ''}
           </span>
         </li>
       ))}
-      {!selectedTags.length && <li className="py-1 text-gray-400">No PLC points bound on this equipment.</li>}
+      {!selectedTags.length && <li className="py-1 text-ink-3">No PLC points bound on this equipment.</li>}
     </ul>
     {selectedEquipment.filter((e) => e.command).map((e) => (
       <div key={e.key} className="flex items-center justify-between gap-2 pt-1">
-        <span className="font-mono text-xs text-gray-700">{e.key}</span>
+        <span className="font-mono text-xs text-ink-2">{e.key}</span>
         {canControl ? (
           <button onClick={() => { setWriteError(null); setControl({ equipment: e, action: e.opType === 'valve' ? (e.opened === true ? 'close' : 'open') : (e.running === true ? 'stop' : 'start') }); }}
-            className={`text-xs px-2 py-1 rounded border font-semibold ${e.running === true || e.opened === true ? 'text-red-700 border-red-300 hover:bg-red-50' : 'text-emerald-700 border-emerald-300 hover:bg-emerald-50'}`}
+            className={`text-xs px-2 py-1 rounded border font-semibold ${e.running === true || e.opened === true ? 'text-danger border-red-300 hover:bg-danger-soft' : 'text-ok border-emerald-300 hover:bg-ok-soft'}`}
             aria-label={`${e.opType === 'valve' ? (e.opened === true ? 'close' : 'open') : (e.running === true ? 'stop' : 'start')} ${e.key}`}>
             {e.opType === 'valve' ? (e.opened === true ? 'Close' : 'Open') : (e.running === true ? 'Stop' : 'Start')}
           </button>
-        ) : <span className="text-[10px] text-gray-400">operators control</span>}
+        ) : <span className="text-[10px] text-ink-3">operators control</span>}
       </div>
     ))}
   </aside>
@@ -345,20 +345,20 @@ export default function LivePlantPage() {
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <h2 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2">
               <Monitor className="w-5 h-5 text-brand-600" aria-hidden="true" /> Live plant
             </h2>
-            <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${connected ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-gray-500 bg-gray-50 border-gray-200'}`} data-testid="ws-status">
+            <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${connected ? 'text-ok bg-ok-soft border-ok/30' : 'text-ink-3 bg-ground border-line'}`} data-testid="ws-status">
               <Radio className="w-3 h-3" /> {connected ? 'live' : 'polling'}
             </span>
-            {lastUpdate && <span className="text-[11px] text-gray-400">updated {relTime(lastUpdate)}</span>}
+            {lastUpdate && <span className="text-[11px] text-ink-3">updated {relTime(lastUpdate)}</span>}
           </div>
           <div className="flex items-center gap-2 flex-wrap text-[11px]">
-            <Link to="/alarms" className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border ${counts.critical ? 'text-red-700 bg-red-50 border-red-200' : 'text-gray-600 bg-gray-50 border-gray-200'}`}>
+            <Link to="/alarms" className={`inline-flex items-center gap-1 px-2 py-1 rounded-xl border ${counts.critical ? 'text-danger bg-danger-soft border-danger/30' : 'text-ink-2 bg-ground border-line'}`}>
               <BellRing className="w-3 h-3" /> {counts.critical} critical · {counts.warning} warning · {counts.unack} unacknowledged
             </Link>
             {tasks && (
-              <Link to="/tasks" className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border ${tasks.overdue ? 'text-red-700 bg-red-50 border-red-200' : 'text-gray-600 bg-gray-50 border-gray-200'}`}>
+              <Link to="/tasks" className={`inline-flex items-center gap-1 px-2 py-1 rounded-xl border ${tasks.overdue ? 'text-danger bg-danger-soft border-danger/30' : 'text-ink-2 bg-ground border-line'}`}>
                 <ClipboardList className="w-3 h-3" /> {tasks.open} open tasks · {tasks.awaitingApproval} awaiting approval{tasks.overdue ? ` · ${tasks.overdue} overdue` : ''}
               </Link>
             )}
@@ -368,27 +368,27 @@ export default function LivePlantPage() {
           </div>
         </div>
 
-        {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</div>}
+        {error && <div role="alert" className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-xl px-4 py-2.5">{error}</div>}
 
         {/* Comms bar */}
         {comms && (
           <div className="flex flex-wrap items-center gap-2" aria-label="PLC connections">
             {comms.connections.map((c) => <ConnChip key={c.id} c={c} />)}
-            {!comms.connections.length && <span className="text-xs text-gray-400">No PLC connections — add one under Settings → PLC.</span>}
-            <span className="text-[11px] text-gray-400 ml-auto">{comms.bindings.good}/{comms.bindings.total} points good</span>
+            {!comms.connections.length && <span className="text-xs text-ink-3">No PLC connections — add one under Settings → PLC.</span>}
+            <span className="text-[11px] text-ink-3 ml-auto">{comms.bindings.good}/{comms.bindings.total} points good</span>
           </div>
         )}
 
         {/* Alarm strip */}
         {alarms.length > 0 && (
-          <section className="card p-2 divide-y divide-gray-100" aria-label="Active alarms">
+          <section className="card p-2 divide-y divide-line" aria-label="Active alarms">
             {alarms.slice(0, 8).map((a) => (
               <div key={a.id} className="flex items-center gap-3 px-2 py-1.5 text-sm" data-alarm={a.id}>
                 <SeverityPill severity={a.severity} />
-                <span className="flex-1 min-w-0 truncate text-gray-800" title={a.message}>{a.message}</span>
-                <span className="text-[11px] text-gray-400 whitespace-nowrap" title={absTime(a.triggeredAt)}>{relTime(a.triggeredAt)}</span>
+                <span className="flex-1 min-w-0 truncate text-ink" title={a.message}>{a.message}</span>
+                <span className="text-[11px] text-ink-3 whitespace-nowrap" title={absTime(a.triggeredAt)}>{relTime(a.triggeredAt)}</span>
                 {a.acknowledged
-                  ? <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700"><Check className="w-3 h-3" /> ack</span>
+                  ? <span className="inline-flex items-center gap-1 text-[11px] text-ok"><Check className="w-3 h-3" /> ack</span>
                   : canAck && (
                     <button onClick={() => ack(a)} disabled={acking.has(a.id)} className="btn-secondary text-[11px] py-0.5 px-2 disabled:opacity-50" aria-label={`Acknowledge ${a.ruleName || a.message}`}>
                       {acking.has(a.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Ack
@@ -396,16 +396,16 @@ export default function LivePlantPage() {
                   )}
               </div>
             ))}
-            {alarms.length > 8 && <div className="px-2 py-1 text-[11px] text-gray-400"><Link to="/alarms" className="text-brand-700 hover:underline">{alarms.length - 8} more…</Link></div>}
+            {alarms.length > 8 && <div className="px-2 py-1 text-[11px] text-ink-3"><Link to="/alarms" className="text-brand-700 hover:underline">{alarms.length - 8} more…</Link></div>}
           </section>
         )}
 
         {/* View switch */}
         {snap && plant && (
           <div className="flex items-center gap-2" role="tablist" aria-label="Plant view">
-            <button role="tab" aria-selected={effectiveView === 'schematic'} onClick={() => chooseView('schematic')} className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${effectiveView === 'schematic' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>Schematic</button>
-            <button role="tab" aria-selected={effectiveView === 'areas'} onClick={() => chooseView('areas')} className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${effectiveView === 'areas' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>Areas</button>
-            <span className="text-[11px] text-gray-400 ml-1">{plant.name} · {plant.bound} bound points</span>
+            <button role="tab" aria-selected={effectiveView === 'schematic'} onClick={() => chooseView('schematic')} className={`px-3 py-1.5 text-xs font-medium rounded-xl border ${effectiveView === 'schematic' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-ink-2 border-line hover:bg-ground'}`}>Schematic</button>
+            <button role="tab" aria-selected={effectiveView === 'areas'} onClick={() => chooseView('areas')} className={`px-3 py-1.5 text-xs font-medium rounded-xl border ${effectiveView === 'areas' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-ink-2 border-line hover:bg-ground'}`}>Areas</button>
+            <span className="text-[11px] text-ink-3 ml-1">{plant.name} · {plant.bound} bound points</span>
           </div>
         )}
 
@@ -416,7 +416,7 @@ export default function LivePlantPage() {
               {canvas ? (
                 <MimicView nodes={canvas.nodes} edges={canvas.edges} states={nodeStates} selected={selectedNode} onSelect={setSelectedNode} height={640} />
               ) : (
-                <div className="card p-8 text-center text-sm text-gray-400"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />Drawing the plant…</div>
+                <div className="card p-8 text-center text-sm text-ink-3"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />Drawing the plant…</div>
               )}
             </div>
             {selectedPanel}
@@ -425,7 +425,7 @@ export default function LivePlantPage() {
 
         {/* Areas */}
         {loading && !snap ? (
-          <div className="card p-8 text-center text-sm text-gray-400"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />Loading the plant…</div>
+          <div className="card p-8 text-center text-sm text-ink-3"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />Loading the plant…</div>
         ) : effectiveView === 'schematic' && plant ? null : !areas.length ? (
           <EmptyState icon={Monitor} title="Nothing is bound to a PLC yet"
             description="Bind registry tags to a PLC connection on a flowsheet and this screen fills itself: gauges for analogue points, cards for drives and valves, alarms as they happen." />
@@ -438,18 +438,18 @@ export default function LivePlantPage() {
                 const drives = a.equipment.filter((e) => e.opType !== 'valve');
                 const valves = a.equipment.filter((e) => e.opType === 'valve');
                 return (
-                  <section key={a.code} className={`card p-3 ${a.alarms ? 'border-red-200' : ''}`} aria-label={a.name} data-area={a.code} data-view={asFlow ? 'flow' : 'cards'}>
+                  <section key={a.code} className={`card p-3 ${a.alarms ? 'border-danger/30' : ''}`} aria-label={a.name} data-area={a.code} data-view={asFlow ? 'flow' : 'cards'}>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-gray-900 truncate">{a.name}</div>
-                        <div className="text-[10px] text-gray-400 font-mono">
+                        <div className="text-sm font-semibold text-ink truncate">{a.name}</div>
+                        <div className="text-[10px] text-ink-3 font-mono">
                           {a.code} · {a.good}/{a.points} points good
                           {drives.length > 0 && ` · ${drives.filter((e) => e.running === true).length}/${drives.length} running`}
                           {valves.length > 0 && ` · ${valves.filter((e) => e.opened === true).length}/${valves.length} open`}
                         </div>
                       </div>
                       {a.alarms > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-danger bg-danger-soft border border-danger/30 rounded-full px-2 py-0.5">
                           <AlertTriangle className="w-3 h-3" /> {a.alarms} alarm{a.alarms === 1 ? '' : 's'}
                         </span>
                       )}
@@ -468,7 +468,7 @@ export default function LivePlantPage() {
                             {a.equipment.map((e) => <EquipmentCard key={e.key} equipment={e} canControl={canControl} onControl={(eq, action) => { setWriteError(null); setControl({ equipment: eq, action }); }} />)}
                           </div>
                         )}
-                        {!a.analog.length && !a.equipment.length && <div className="text-[11px] text-gray-400">Only digital points here.</div>}
+                        {!a.analog.length && !a.equipment.length && <div className="text-[11px] text-ink-3">Only digital points here.</div>}
                       </>
                     )}
                   </section>
@@ -483,7 +483,7 @@ export default function LivePlantPage() {
         {pins.length > 0 && (
           <section className="card p-3 space-y-2" aria-label="Pinned trends">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1"><Pin className="w-3.5 h-3.5 text-gray-400" /> Pinned trends · last 6 h</h3>
+              <h3 className="text-sm font-semibold text-ink flex items-center gap-1"><Pin className="w-3.5 h-3.5 text-ink-3" /> Pinned trends · last 6 h</h3>
               <Link to={`/trends?ids=${pins.map((p) => p.tagId).join(',')}`} className="text-xs text-brand-700 hover:underline">Open in Trends</Link>
             </div>
             <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">

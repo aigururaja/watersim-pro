@@ -90,13 +90,13 @@ export default function DashboardPage() {
       <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-[1600px] mx-auto">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">{meta.title}</h2>
-            <p className="text-gray-500 mt-1 text-sm">
+            <h2 className="text-2xl font-extrabold tracking-tight text-ink">{meta.title}</h2>
+            <p className="text-ink-3 mt-1 text-sm">
               Welcome back, {user?.firstName} 👋 · {user?.organisation?.name} · <span className="capitalize">{role}</span>
             </p>
-            <p className="text-gray-400 text-xs mt-0.5">{meta.blurb}</p>
+            <p className="text-ink-3 text-xs mt-0.5">{meta.blurb}</p>
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-gray-400">
+          <div className="flex items-center gap-2 text-[11px] text-ink-3">
             {data?.at && <span>updated {relTime(data.at)}</span>}
             <button onClick={() => load(true)} disabled={loading} className="btn-secondary text-xs py-1 disabled:opacity-50" aria-label="Refresh">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -109,8 +109,8 @@ export default function DashboardPage() {
             <div className="flex items-center gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" aria-hidden="true" />
               <div>
-                <p className="font-semibold text-gray-900 text-sm">Could not load dashboard</p>
-                <p className="text-sm text-gray-500">{error}</p>
+                <p className="font-semibold text-ink text-sm">Could not load dashboard</p>
+                <p className="text-sm text-ink-3">{error}</p>
               </div>
             </div>
             <button onClick={() => load()} className="btn-secondary text-sm">

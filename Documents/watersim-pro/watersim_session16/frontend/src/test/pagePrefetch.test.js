@@ -14,7 +14,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 describe('PAGE_LOADERS', () => {
   it('names every page the router mounts', () => {
     expect(Object.keys(PAGE_LOADERS).sort()).toEqual([
-      'AdminPage', 'AlarmsPage', 'AuditPage', 'CanvasPage', 'ComparisonPage', 'DashboardPage', 'LivePlantPage',
+      'AdminPage', 'AlarmsPage', 'AuditPage', 'CanvasPage', 'ComparisonPage', 'DashboardPage', 'LandingPage', 'LivePlantPage',
       'LoginPage', 'ProjectPage', 'ProjectsPage', 'RegisterPage', 'ReportPage', 'ReportsPage', 'SettingsPage',
       'TasksPage', 'TrendsPage', 'TwinPage',
     ]);

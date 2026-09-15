@@ -10,6 +10,7 @@
  * mode (main.jsx), the current page stays put until the next one is ready.
  */
 export const PAGE_LOADERS = {
+  LandingPage:    () => import('./pages/LandingPage'),
   LoginPage:      () => import('./pages/LoginPage'),
   RegisterPage:   () => import('./pages/RegisterPage'),
   DashboardPage:  () => import('./pages/DashboardPage'),

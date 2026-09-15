@@ -34,7 +34,7 @@ function wrapHtml(title, lines, footer) {
   return `<!doctype html><html><body style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#111827;margin:0;padding:16px;background:#f9fafb">
 <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px">
 <div style="font-size:12px;color:#6b7280;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">SafeKrit</div>
-<h2 style="margin:0 0 12px;font-size:17px;color:#1e40af">${esc(title)}</h2>
+<h2 style="margin:0 0 12px;font-size:17px;color:#16181d">${esc(title)}</h2>
 ${lines.map((l) => `<p style="margin:0 0 8px;line-height:1.45">${l}</p>`).join('\n')}
 <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">
 <div style="font-size:12px;color:#6b7280">${esc(footer)}</div>

@@ -80,9 +80,9 @@ function bestIndices(values, lowerBetter) {
 
 function ComplianceIcon({ summary }) {
   const c = summary?.compliant;
-  if (c === true)  return <CheckCircle2 className="w-5 h-5 text-emerald-600" />;
+  if (c === true)  return <CheckCircle2 className="w-5 h-5 text-ok" />;
   if (c === false) return <XCircle className="w-5 h-5 text-red-600" />;
-  return <AlertTriangle className="w-5 h-5 text-gray-400" />;
+  return <AlertTriangle className="w-5 h-5 text-ink-3" />;
 }
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
@@ -116,17 +116,17 @@ function ComparisonTable({ runs, rows, title, color, getCellValue, lowerBetterFn
   return (
     <Section title={title} color={color}>
       <table className="w-full text-sm min-w-max" aria-label={title}>
-        <thead className="bg-gray-50 border-b border-gray-200">
+        <thead className="bg-ground border-b border-line">
           <tr>
-            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50 min-w-48">
+            <th className="px-4 py-2.5 text-left text-xs font-semibold text-ink-2 uppercase tracking-wider sticky left-0 bg-ground min-w-48">
               Parameter
             </th>
             {runs.map((run, i) => (
-              <th key={run.id} className="px-4 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-36">
-                <div className="font-bold text-gray-900 normal-case text-sm truncate max-w-36" title={run.label || run.flowsheet_name}>
+              <th key={run.id} className="px-4 py-2.5 text-center text-xs font-semibold text-ink-2 uppercase tracking-wider min-w-36">
+                <div className="font-bold text-ink normal-case text-sm truncate max-w-36" title={run.label || run.flowsheet_name}>
                   {run.label || run.flowsheet_name}
                 </div>
-                <div className="font-normal text-gray-400 text-[11px] truncate">{run.project_name}</div>
+                <div className="font-normal text-ink-3 text-[11px] truncate">{run.project_name}</div>
               </th>
             ))}
           </tr>
@@ -154,11 +154,11 @@ function ComparisonTable({ runs, rows, title, color, getCellValue, lowerBetterFn
             }
 
             return (
-              <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
-                <td className="px-4 py-2.5 text-sm font-medium text-gray-700 sticky left-0 bg-inherit border-r border-gray-100">
+              <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-ground/60'}>
+                <td className="px-4 py-2.5 text-sm font-medium text-ink-2 sticky left-0 bg-inherit border-r border-line">
                   <div>{row.label || row.key}</div>
                   {(row.unit || unitFn(row)) && (
-                    <div className="text-xs text-gray-400">{row.unit || unitFn(row)}</div>
+                    <div className="text-xs text-ink-3">{row.unit || unitFn(row)}</div>
                   )}
                 </td>
                 {values.map((val, ci) => {
@@ -167,9 +167,9 @@ function ComparisonTable({ runs, rows, title, color, getCellValue, lowerBetterFn
                   return (
                     <td key={ci}
                       className={`px-4 py-2.5 text-sm text-center font-mono transition-colors
-                        ${isBest ? 'bg-emerald-50 text-emerald-800 font-bold' : 'text-gray-700'}`}
+                        ${isBest ? 'bg-ok-soft text-emerald-800 font-bold' : 'text-ink-2'}`}
                     >
-                      {isBest && <Crown className="w-3 h-3 inline mr-1 text-emerald-600 -mt-0.5" aria-hidden="true" />}
+                      {isBest && <Crown className="w-3 h-3 inline mr-1 text-ok -mt-0.5" aria-hidden="true" />}
                       {cellVal}
                     </td>
                   );
@@ -256,20 +256,20 @@ export default function ComparisonPage() {
   // ── Loading / error ────────────────────────────────────────────────────────
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-ground flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
-        <p className="text-sm text-gray-500">Loading scenarios for comparison…</p>
+        <p className="text-sm text-ink-3">Loading scenarios for comparison…</p>
       </div>
     </div>
   );
 
   if (error) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-ground flex items-center justify-center">
       <div className="text-center max-w-sm">
         <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-3" />
-        <p className="font-semibold text-gray-800 mb-1">Could not load comparison</p>
-        <p className="text-sm text-gray-500 mb-4">{error}</p>
+        <p className="font-semibold text-ink mb-1">Could not load comparison</p>
+        <p className="text-sm text-ink-3 mb-4">{error}</p>
         <button onClick={() => navigate('/reports')} className="text-sm text-brand-600 hover:underline flex items-center gap-1 mx-auto">
           <ArrowLeft className="w-4 h-4" />Back to reports
         </button>
@@ -281,12 +281,12 @@ export default function ComparisonPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-ground">
       {/* Header bar */}
       <header className="bg-blue-900 text-white px-4 md:px-6 py-3 flex items-center justify-between sticky top-0 z-10 shadow-lg">
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => navigate('/reports')}
-            className="p-1.5 hover:bg-blue-800 rounded-lg transition-colors flex-shrink-0"
+            className="p-1.5 hover:bg-blue-800 rounded-xl transition-colors flex-shrink-0"
             aria-label="Back to reports">
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -298,7 +298,7 @@ export default function ComparisonPage() {
         <button
           onClick={handleExcel}
           disabled={exporting}
-          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 px-3 py-2 rounded-xl text-sm font-semibold transition-colors"
         >
           {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <TableIcon className="w-4 h-4" />}
           <span className="hidden sm:inline">{exporting ? 'Exporting…' : 'Export Excel'}</span>
@@ -316,26 +316,26 @@ export default function ComparisonPage() {
               <div key={run.run_id}
                 className={`card p-4 border-t-4 ${
                   compliant === true  ? 'border-emerald-500' :
-                  compliant === false ? 'border-red-500'     : 'border-gray-300'}`}>
+                  compliant === false ? 'border-red-500'     : 'border-line'}`}>
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
-                    <p className="font-bold text-sm text-gray-900 truncate">{labels[i] || run.flowsheet_name}</p>
-                    <p className="text-xs text-gray-500 truncate">{run.project_name}</p>
+                    <p className="font-bold text-sm text-ink truncate">{labels[i] || run.flowsheet_name}</p>
+                    <p className="text-xs text-ink-3 truncate">{run.project_name}</p>
                   </div>
                   <ComplianceIcon summary={summary} />
                 </div>
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border
-                    ${run.mode === 'dynamic' ? 'text-purple-700 bg-purple-50 border-purple-200' : 'text-blue-700 bg-blue-50 border-blue-200'}`}>
+                    ${run.mode === 'dynamic' ? 'text-purple-700 bg-purple-50 border-purple-200' : 'text-accent-ink bg-accent-soft border-accent/30'}`}>
                     {run.mode === 'dynamic' ? 'Dynamic' : 'Steady'}
                   </span>
-                  {compliant === true  && <span className="text-xs text-emerald-700 font-medium">✓ All permits</span>}
-                  {compliant === false && <span className="text-xs text-red-700 font-medium">✗ {summary.permit_violations?.length} violation{summary.permit_violations?.length !== 1 ? 's' : ''}</span>}
+                  {compliant === true  && <span className="text-xs text-ok font-medium">✓ All permits</span>}
+                  {compliant === false && <span className="text-xs text-danger font-medium">✗ {summary.permit_violations?.length} violation{summary.permit_violations?.length !== 1 ? 's' : ''}</span>}
                 </div>
 
                 {/* Editable label */}
                 <div className="mb-2">
-                  <label className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block mb-1">Scenario label</label>
+                  <label className="text-[10px] text-ink-3 uppercase tracking-wider font-semibold block mb-1">Scenario label</label>
                   <input
                     className="input text-xs py-1"
                     value={labels[i]}
@@ -360,12 +360,12 @@ export default function ComparisonPage() {
         {/* Effluent quality */}
         <Section title="Effluent Quality" color="blue">
           <table className="w-full text-sm min-w-max">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-ground border-b border-line">
               <tr>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-44">Parameter</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-ink-2 uppercase tracking-wider min-w-44">Parameter</th>
                 {runs.map((run, i) => (
                   <th key={run.run_id} className="px-4 py-2.5 text-center min-w-36">
-                    <div className="text-sm font-bold text-gray-900 truncate">{labels[i]}</div>
+                    <div className="text-sm font-bold text-ink truncate">{labels[i]}</div>
                   </th>
                 ))}
               </tr>
@@ -381,10 +381,10 @@ export default function ComparisonPage() {
                 const limits = runs.map(run => run.results?.permitLimitsUsed?.[p.key]);
 
                 return (
-                  <tr key={p.key} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
-                    <td className="px-4 py-2.5 font-medium text-gray-700 border-r border-gray-100">
+                  <tr key={p.key} className={ri % 2 === 0 ? 'bg-white' : 'bg-ground/60'}>
+                    <td className="px-4 py-2.5 font-medium text-ink-2 border-r border-line">
                       <div className="text-sm">{p.label}</div>
-                      <div className="text-xs text-gray-400">{p.unit}</div>
+                      <div className="text-xs text-ink-3">{p.unit}</div>
                     </td>
                     {values.map((val, ci) => {
                       const num = parseFloat(val);
@@ -397,10 +397,10 @@ export default function ComparisonPage() {
                       return (
                         <td key={ci}
                           className={`px-4 py-2.5 text-center font-mono text-sm
-                            ${isBest ? 'bg-emerald-50 text-emerald-800 font-bold' :
-                              overLimit ? 'bg-red-50 text-red-700' : 'text-gray-700'}`}
+                            ${isBest ? 'bg-ok-soft text-emerald-800 font-bold' :
+                              overLimit ? 'bg-danger-soft text-danger' : 'text-ink-2'}`}
                         >
-                          {isBest && <Crown className="w-3 h-3 inline mr-0.5 text-emerald-600 -mt-0.5" />}
+                          {isBest && <Crown className="w-3 h-3 inline mr-0.5 text-ok -mt-0.5" />}
                           {val != null ? fmtNum(val, p.dec) : '—'}
                           {overLimit && <span className="ml-1 text-[10px] text-red-500 font-semibold">↑</span>}
                         </td>
@@ -411,20 +411,20 @@ export default function ComparisonPage() {
               })}
             </tbody>
           </table>
-          <p className="px-4 py-2 text-xs text-gray-400 bg-gray-50 border-t border-gray-100">
-            <Crown className="w-3 h-3 inline text-emerald-600 mr-1" />best value  ·  ↑ exceeds permit limit
+          <p className="px-4 py-2 text-xs text-ink-3 bg-ground border-t border-line">
+            <Crown className="w-3 h-3 inline text-ok mr-1" />best value  ·  ↑ exceeds permit limit
           </p>
         </Section>
 
         {/* Removal efficiencies */}
         <Section title="Removal Efficiencies" color="green">
           <table className="w-full text-sm min-w-max">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-ground border-b border-line">
               <tr>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-44">Parameter</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-ink-2 uppercase tracking-wider min-w-44">Parameter</th>
                 {runs.map((run, i) => (
                   <th key={run.run_id} className="px-4 py-2.5 text-center min-w-36">
-                    <div className="text-sm font-bold text-gray-900 truncate">{labels[i]}</div>
+                    <div className="text-sm font-bold text-ink truncate">{labels[i]}</div>
                   </th>
                 ))}
               </tr>
@@ -439,19 +439,19 @@ export default function ComparisonPage() {
                 const bestVal   = validVals.length > 1 ? Math.max(...validVals) : null;
 
                 return (
-                  <tr key={p.key} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
-                    <td className="px-4 py-2.5 font-medium text-gray-700 border-r border-gray-100">
+                  <tr key={p.key} className={ri % 2 === 0 ? 'bg-white' : 'bg-ground/60'}>
+                    <td className="px-4 py-2.5 font-medium text-ink-2 border-r border-line">
                       <div className="text-sm">{p.label}</div>
-                      <div className="text-xs text-gray-400">%</div>
+                      <div className="text-xs text-ink-3">%</div>
                     </td>
                     {values.map((val, ci) => {
                       const isBest = bestVal !== null && val !== null && val === bestVal;
                       return (
                         <td key={ci}
                           className={`px-4 py-2.5 text-center font-mono text-sm
-                            ${isBest ? 'bg-emerald-50 text-emerald-800 font-bold' : 'text-gray-700'}`}
+                            ${isBest ? 'bg-ok-soft text-emerald-800 font-bold' : 'text-ink-2'}`}
                         >
-                          {isBest && <TrendingUp className="w-3 h-3 inline mr-0.5 text-emerald-600 -mt-0.5" />}
+                          {isBest && <TrendingUp className="w-3 h-3 inline mr-0.5 text-ok -mt-0.5" />}
                           {val != null ? `${fmtNum(val, 1)}%` : '—'}
                         </td>
                       );
@@ -467,12 +467,12 @@ export default function ComparisonPage() {
         {runs.some(r => r.results?.costBreakdown) && (
           <Section title="Operating Cost Comparison" color="violet">
             <table className="w-full text-sm min-w-max">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-ground border-b border-line">
                 <tr>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-48">Cost item</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-ink-2 uppercase tracking-wider min-w-48">Cost item</th>
                   {runs.map((run, i) => (
                     <th key={run.run_id} className="px-4 py-2.5 text-center min-w-36">
-                      <div className="text-sm font-bold text-gray-900 truncate">{labels[i]}</div>
+                      <div className="text-sm font-bold text-ink truncate">{labels[i]}</div>
                     </th>
                   ))}
                 </tr>
@@ -487,8 +487,8 @@ export default function ComparisonPage() {
                   if (row.lowerBetter === false && validVals.length > 1) bestVal = Math.max(...validVals);
 
                   return (
-                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}>
-                      <td className="px-4 py-2.5 font-medium text-gray-700 border-r border-gray-100 text-sm">
+                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-ground/60'}>
+                      <td className="px-4 py-2.5 font-medium text-ink-2 border-r border-line text-sm">
                         {row.label}
                       </td>
                       {values.map((val, ci) => {
@@ -497,9 +497,9 @@ export default function ComparisonPage() {
                         return (
                           <td key={ci}
                             className={`px-4 py-2.5 text-center font-mono text-sm
-                              ${isBest ? 'bg-emerald-50 text-emerald-800 font-bold' : 'text-gray-700'}`}
+                              ${isBest ? 'bg-ok-soft text-emerald-800 font-bold' : 'text-ink-2'}`}
                           >
-                            {isBest && <TrendingDown className="w-3 h-3 inline mr-0.5 text-emerald-600 -mt-0.5" />}
+                            {isBest && <TrendingDown className="w-3 h-3 inline mr-0.5 text-ok -mt-0.5" />}
                             {val != null ? fmtNum(val, row.dec) : '—'}
                           </td>
                         );
@@ -509,8 +509,8 @@ export default function ComparisonPage() {
                 })}
               </tbody>
             </table>
-            <p className="px-4 py-2 text-xs text-gray-400 bg-gray-50 border-t border-gray-100">
-              <TrendingDown className="w-3 h-3 inline text-emerald-600 mr-1" />lowest cost scenario highlighted in green
+            <p className="px-4 py-2 text-xs text-ink-3 bg-ground border-t border-line">
+              <TrendingDown className="w-3 h-3 inline text-ok mr-1" />lowest cost scenario highlighted in green
             </p>
           </Section>
         )}
@@ -523,19 +523,19 @@ export default function ComparisonPage() {
               const violations  = summary.permit_violations || [];
               const limits      = run.results?.permitLimitsUsed || {};
               return (
-                <div key={run.run_id} className={`rounded-xl border p-4 ${summary.compliant === true ? 'border-emerald-200 bg-emerald-50' : summary.compliant === false ? 'border-red-200 bg-red-50' : 'border-gray-200'}`}>
+                <div key={run.run_id} className={`rounded-xl border p-4 ${summary.compliant === true ? 'border-ok/30 bg-ok-soft' : summary.compliant === false ? 'border-danger/30 bg-danger-soft' : 'border-line'}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <ComplianceIcon summary={summary} />
-                    <p className="font-semibold text-sm text-gray-900">{labels[i]}</p>
+                    <p className="font-semibold text-sm text-ink">{labels[i]}</p>
                   </div>
                   {violations.length === 0
-                    ? <p className="text-xs text-emerald-700">All permit limits met</p>
+                    ? <p className="text-xs text-ok">All permit limits met</p>
                     : violations.map((v, j) => (
-                        <p key={j} className="text-xs text-red-700 mb-0.5">• {v}</p>
+                        <p key={j} className="text-xs text-danger mb-0.5">• {v}</p>
                       ))
                   }
                   {Object.keys(limits).length > 0 && (
-                    <p className="text-xs text-gray-400 mt-2">
+                    <p className="text-xs text-ink-3 mt-2">
                       Template: {Object.keys(limits).filter(k => limits[k] != null).length} parameters regulated
                     </p>
                   )}

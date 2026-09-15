@@ -13,9 +13,9 @@ import { KeyRound, Webhook, Plus, Trash2, Send, RotateCcw, Loader2, Copy, Check,
 import api from '../../services/api';
 
 function StatePill({ state }) {
-  const cls = state === 'sent' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-    : state === 'dead' ? 'text-red-700 bg-red-50 border-red-200'
-      : state === 'failed' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-gray-600 bg-gray-50 border-gray-200';
+  const cls = state === 'sent' ? 'text-ok bg-ok-soft border-ok/30'
+    : state === 'dead' ? 'text-danger bg-danger-soft border-danger/30'
+      : state === 'failed' ? 'text-warn bg-warn-soft border-warn/30' : 'text-ink-2 bg-ground border-line';
   return <span data-state={state} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${cls}`}>{state}</span>;
 }
 
@@ -23,10 +23,10 @@ function ShownOnce({ label, value, onDone }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => { try { await navigator.clipboard.writeText(value); setCopied(true); } catch { /* clipboard blocked */ } };
   return (
-    <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs space-y-2" role="status" data-testid="shown-once">
-      <div className="flex items-center gap-1 text-amber-800 font-medium"><AlertTriangle className="w-3.5 h-3.5" /> {label} — shown once. Copy it now.</div>
+    <div className="bg-warn-soft border border-amber-300 rounded-xl p-3 text-xs space-y-2" role="status" data-testid="shown-once">
+      <div className="flex items-center gap-1 text-warn font-medium"><AlertTriangle className="w-3.5 h-3.5" /> {label} — shown once. Copy it now.</div>
       <div className="flex items-center gap-2">
-        <code className="font-mono bg-white border border-amber-200 rounded px-2 py-1 break-all flex-1">{value}</code>
+        <code className="font-mono bg-white border border-warn/30 rounded px-2 py-1 break-all flex-1">{value}</code>
         <button onClick={copy} className="btn-secondary text-xs" aria-label="Copy">{copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}</button>
         <button onClick={onDone} className="btn-secondary text-xs">Done</button>
       </div>
@@ -105,28 +105,28 @@ export default function IntegrationsTab({ showToast }) {
 
   return (
     <div className="space-y-6">
-      {error && <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</div>}
+      {error && <div role="alert" className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-xl px-4 py-2.5">{error}</div>}
       {reveal && <ShownOnce label={reveal.label} value={reveal.value} onDone={() => setReveal(null)} />}
 
       {/* ── API keys ── */}
       <section aria-label="API keys" className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1"><KeyRound className="w-4 h-4 text-gray-400" /> API keys</h3>
-        <p className="text-xs text-gray-500">Another system (the CMMS) presents a key as <code>Authorization: Bearer wsk_…</code> or <code>X-API-Key</code>. A key does only what its scopes say.</p>
+        <h3 className="text-sm font-semibold text-ink flex items-center gap-1"><KeyRound className="w-4 h-4 text-ink-3" /> API keys</h3>
+        <p className="text-xs text-ink-3">Another system (the CMMS) presents a key as <code>Authorization: Bearer wsk_…</code> or <code>X-API-Key</code>. A key does only what its scopes say.</p>
         <div className="card overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]"><tr><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Prefix</th><th className="text-left px-3 py-2">Scopes</th><th className="text-left px-3 py-2">Last used</th><th className="text-left px-3 py-2">Expires</th><th /></tr></thead>
+            <thead className="bg-ground text-ink-3 uppercase tracking-wide text-[10px]"><tr><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Prefix</th><th className="text-left px-3 py-2">Scopes</th><th className="text-left px-3 py-2">Last used</th><th className="text-left px-3 py-2">Expires</th><th /></tr></thead>
             <tbody>
               {keys.map((k) => (
-                <tr key={k.id} className={`border-t border-gray-100 ${k.revokedAt ? 'opacity-50' : ''}`} data-key={k.id}>
+                <tr key={k.id} className={`border-t border-line ${k.revokedAt ? 'opacity-50' : ''}`} data-key={k.id}>
                   <td className="px-3 py-2 font-medium">{k.name}{k.revokedAt && <span className="ml-2 text-red-600">revoked</span>}</td>
                   <td className="px-3 py-2 font-mono">wsk_{k.prefix}_…</td>
                   <td className="px-3 py-2 font-mono">{k.scopes.join(' ')}</td>
-                  <td className="px-3 py-2 text-gray-500">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'never'}</td>
-                  <td className="px-3 py-2 text-gray-500">{k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : '—'}</td>
-                  <td className="px-3 py-2 text-right">{!k.revokedAt && <button onClick={() => revoke(k)} className="p-1 text-gray-400 hover:text-red-600" aria-label={`Revoke ${k.name}`}><Trash2 className="w-3.5 h-3.5" /></button>}</td>
+                  <td className="px-3 py-2 text-ink-3">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'never'}</td>
+                  <td className="px-3 py-2 text-ink-3">{k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : '—'}</td>
+                  <td className="px-3 py-2 text-right">{!k.revokedAt && <button onClick={() => revoke(k)} className="p-1 text-ink-3 hover:text-red-600" aria-label={`Revoke ${k.name}`}><Trash2 className="w-3.5 h-3.5" /></button>}</td>
                 </tr>
               ))}
-              {!keys.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">No keys yet.</td></tr>}
+              {!keys.length && <tr><td colSpan={6} className="px-3 py-4 text-center text-ink-3">No keys yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -140,26 +140,26 @@ export default function IntegrationsTab({ showToast }) {
 
       {/* ── Webhooks ── */}
       <section aria-label="Webhooks" className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1"><Webhook className="w-4 h-4 text-gray-400" /> Webhooks</h3>
-        <p className="text-xs text-gray-500">Events are POSTed as JSON with an <code>X-WaterSim-Signature</code> (HMAC-SHA256 of <code>timestamp.body</code>), retried with backoff, dead-lettered after repeated refusals.</p>
+        <h3 className="text-sm font-semibold text-ink flex items-center gap-1"><Webhook className="w-4 h-4 text-ink-3" /> Webhooks</h3>
+        <p className="text-xs text-ink-3">Events are POSTed as JSON with an <code>X-WaterSim-Signature</code> (HMAC-SHA256 of <code>timestamp.body</code>), retried with backoff, dead-lettered after repeated refusals.</p>
         <div className="card overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]"><tr><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">URL</th><th className="text-left px-3 py-2">Events</th><th className="text-left px-3 py-2">Last delivery</th><th /></tr></thead>
+            <thead className="bg-ground text-ink-3 uppercase tracking-wide text-[10px]"><tr><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">URL</th><th className="text-left px-3 py-2">Events</th><th className="text-left px-3 py-2">Last delivery</th><th /></tr></thead>
             <tbody>
               {hooks.map((h) => (
-                <tr key={h.id} className="border-t border-gray-100" data-hook={h.id}>
-                  <td className="px-3 py-2 font-medium">{h.name}{!h.enabled && <span className="ml-2 text-gray-400">disabled</span>}</td>
+                <tr key={h.id} className="border-t border-line" data-hook={h.id}>
+                  <td className="px-3 py-2 font-medium">{h.name}{!h.enabled && <span className="ml-2 text-ink-3">disabled</span>}</td>
                   <td className="px-3 py-2 font-mono truncate max-w-[18rem]" title={h.url}>{h.url}</td>
                   <td className="px-3 py-2 font-mono">{h.eventTypes.join(' ')}</td>
-                  <td className="px-3 py-2">{h.lastDeliveryAt ? <>{h.lastStatus ? <span className={h.lastStatus < 300 ? 'text-emerald-700' : 'text-red-700'}>HTTP {h.lastStatus}</span> : <span className="text-red-700">{h.lastError}</span>} · {new Date(h.lastDeliveryAt).toLocaleString()}{h.failures ? ` · ${h.failures} failures` : ''}</> : <span className="text-gray-400">never</span>}</td>
+                  <td className="px-3 py-2">{h.lastDeliveryAt ? <>{h.lastStatus ? <span className={h.lastStatus < 300 ? 'text-ok' : 'text-danger'}>HTTP {h.lastStatus}</span> : <span className="text-danger">{h.lastError}</span>} · {new Date(h.lastDeliveryAt).toLocaleString()}{h.failures ? ` · ${h.failures} failures` : ''}</> : <span className="text-ink-3">never</span>}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button onClick={() => testHook(h)} disabled={!!busy} className="btn-secondary text-[11px] py-0.5 px-2 mr-1" aria-label={`Test ${h.name}`}>{busy === `test:${h.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />} Test</button>
                     <button onClick={() => rotate(h)} className="btn-secondary text-[11px] py-0.5 px-2 mr-1" aria-label={`Rotate secret of ${h.name}`}><RotateCcw className="w-3 h-3" /></button>
-                    <button onClick={() => removeHook(h)} className="p-1 text-gray-400 hover:text-red-600" aria-label={`Delete ${h.name}`}><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => removeHook(h)} className="p-1 text-ink-3 hover:text-red-600" aria-label={`Delete ${h.name}`}><Trash2 className="w-3.5 h-3.5" /></button>
                   </td>
                 </tr>
               ))}
-              {!hooks.length && <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400">No webhooks yet.</td></tr>}
+              {!hooks.length && <tr><td colSpan={5} className="px-3 py-4 text-center text-ink-3">No webhooks yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -176,17 +176,17 @@ export default function IntegrationsTab({ showToast }) {
       {/* ── Deliveries ── */}
       {deliveries.length > 0 && (
         <section aria-label="Webhook deliveries" className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-900">Recent deliveries</h3>
+          <h3 className="text-sm font-semibold text-ink">Recent deliveries</h3>
           <div className="card overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]"><tr><th className="text-left px-3 py-2">When</th><th className="text-left px-3 py-2">Endpoint</th><th className="text-left px-3 py-2">Event</th><th className="text-left px-3 py-2">State</th></tr></thead>
+              <thead className="bg-ground text-ink-3 uppercase tracking-wide text-[10px]"><tr><th className="text-left px-3 py-2">When</th><th className="text-left px-3 py-2">Endpoint</th><th className="text-left px-3 py-2">Event</th><th className="text-left px-3 py-2">State</th></tr></thead>
               <tbody>
                 {deliveries.map((d) => (
-                  <tr key={d.id} className="border-t border-gray-100">
-                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{new Date(d.createdAt).toLocaleString()}</td>
+                  <tr key={d.id} className="border-t border-line">
+                    <td className="px-3 py-2 text-ink-3 whitespace-nowrap">{new Date(d.createdAt).toLocaleString()}</td>
                     <td className="px-3 py-2">{d.endpointName || d.url}</td>
                     <td className="px-3 py-2 font-mono">{d.eventType}</td>
-                    <td className="px-3 py-2"><StatePill state={d.state} />{d.lastError && <span className="ml-2 text-red-600">{d.lastError}</span>}{d.attempts > 1 ? <span className="ml-2 text-gray-400">{d.attempts} attempts</span> : null}</td>
+                    <td className="px-3 py-2"><StatePill state={d.state} />{d.lastError && <span className="ml-2 text-red-600">{d.lastError}</span>}{d.attempts > 1 ? <span className="ml-2 text-ink-3">{d.attempts} attempts</span> : null}</td>
                   </tr>
                 ))}
               </tbody>

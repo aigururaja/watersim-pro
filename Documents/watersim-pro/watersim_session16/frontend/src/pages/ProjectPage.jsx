@@ -420,15 +420,15 @@ function SnapshotCard({ snap, onRestore, onDelete, restoring, deleting }) {
 const S = {
   page:       { padding: 'clamp(16px, 4vw, 40px)', maxWidth: 1100, margin: '0 auto' },
   breadcrumb: { fontSize: 14, color: '#6B7280', marginBottom: 20 },
-  bc:         { cursor: 'pointer', color: '#2E75B6', fontWeight: 500 },
+  bc:         { cursor: 'pointer', color: '#0f9d8f', fontWeight: 500 },
   headerRow:  { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, gap: 12, flexWrap: 'wrap' },
   title:      { fontSize: 'clamp(18px, 4vw, 26px)', fontWeight: 700, color: '#111', margin: 0 },
   desc:       { color: '#6B7280', marginTop: 4, fontSize: 14 },
-  newBtn:     { background: '#1F4E79', color: '#fff', border: 'none', borderRadius: 7, padding: '10px 16px', fontWeight: 600, cursor: 'pointer', fontSize: 14, flexShrink: 0, minHeight: 40 },
+  newBtn:     { background: '#16181d', color: '#fff', border: 'none', borderRadius: 7, padding: '10px 16px', fontWeight: 600, cursor: 'pointer', fontSize: 14, flexShrink: 0, minHeight: 40 },
 
   tabs:      { display: 'flex', gap: 0, marginBottom: 24, borderBottom: '2px solid #E5E7EB', overflowX: 'auto' },
   tab:       { background: 'none', border: 'none', padding: '10px 16px', fontSize: 14, fontWeight: 500, color: '#6B7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '2px solid transparent', marginBottom: -2, whiteSpace: 'nowrap' },
-  tabActive: { color: '#1D4ED8', borderBottomColor: '#1D4ED8', fontWeight: 700 },
+  tabActive: { color: '#16181d', borderBottomColor: '#16181d', fontWeight: 700 },
   tabBadge:  { background: '#E5E7EB', color: '#374151', fontSize: 11, fontWeight: 700, borderRadius: 10, padding: '1px 7px' },
 
   grid:       { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: 16 },
@@ -453,7 +453,7 @@ const S = {
   input:      { width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 16 /* prevents iOS zoom */, marginBottom: 14, boxSizing: 'border-box' },
   modalBtns:  { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 },
   cancelBtn:  { padding: '10px 18px', background: '#F3F4F6', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, minHeight: 40 },
-  submitBtn:  { padding: '10px 18px', background: '#1F4E79', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, minHeight: 40 },
+  submitBtn:  { padding: '10px 18px', background: '#16181d', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, minHeight: 40 },
 
   toast: { position: 'fixed', bottom: 80, right: 16, left: 'auto', color: '#fff', borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 600, zIndex: 2000, boxShadow: '0 4px 12px rgba(0,0,0,.25)', maxWidth: 'calc(100vw - 32px)' },
 };
