@@ -7,9 +7,10 @@
  * leaving the page; /login and /register render this page with the popup
  * already open, so every old link and redirect still lands on the form.
  *
- * Images are screenshots of this very application (frontend/public/landing,
- * captured from the seeded ITC plant) and the generated process-flow diagram
- * of that plant; nothing is stock or invented.
+ * Images are screenshots of this very application (frontend/public/landing),
+ * captured with every API response rewritten to a fictional organisation,
+ * people and numbers, and without the plant's process layout: the page shows
+ * the functionality, never a customer's plant or data.
  */
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -33,16 +34,16 @@ function Shot({ src, alt, eager = false, className = '' }) {
 }
 
 const PROOF = [
-  { value: '675 KLD', label: 'reference plant' },
-  { value: '11', label: 'process areas' },
-  { value: '339', label: 'wired signals' },
+  { value: '3', label: 'surfaces' },
+  { value: '4', label: 'PLC protocols' },
+  { value: '5', label: 'roles' },
   { value: '21', label: 'unit models' },
 ];
 
 const SURFACES = [
   {
     icon: Monitor, key: 'ops', eyebrow: 'Surface A', title: 'Operations monitor & control',
-    img: '/landing/live.jpg', alt: 'The Live plant screen: a schematic of the whole plant with every drive, valve and instrument drawn from live PLC data',
+    img: '/landing/trends.jpg', alt: 'The Trends page: historian series for selected instruments over the last hours, updating live, with export to CSV and Excel',
     blurb: 'The plant as it is wired. A photoreal SCADA mimic of every process area, alarms with acknowledgement, trends from the historian, control write-back for the roles allowed to act, and period reports.',
     points: [
       'A schematic of the whole plant and a mimic window per area, with levels, drives and valves moving on live data',
@@ -140,7 +141,6 @@ export default function LandingPage({ dialog: initialDialog = null }) {
           </Link>
           <nav className="hidden md:flex items-center gap-6 ml-8 text-sm font-medium text-ink-2" aria-label="Sections">
             <a href="#surfaces" className="hover:text-ink">Product</a>
-            <a href="#plant" className="hover:text-ink">The plant</a>
             <a href="#flow" className="hover:text-ink">Alarm to action</a>
             <a href="#connect" className="hover:text-ink">Integrations</a>
           </nav>
@@ -166,7 +166,7 @@ export default function LandingPage({ dialog: initialDialog = null }) {
                 boundary that hands work orders to your CMMS.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">{doors(true)}</div>
-              <dl className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4" aria-label="Reference plant">
+              <dl className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4" aria-label="At a glance">
                 {PROOF.map((p) => (
                   <div key={p.label} className="rounded-2xl bg-white border border-line p-3">
                     <dt className="stat-label">{p.label}</dt>
@@ -214,32 +214,6 @@ export default function LandingPage({ dialog: initialDialog = null }) {
                 <Shot src={s.img} alt={s.alt} />
               </article>
             ))}
-          </div>
-        </section>
-
-        {/* The plant */}
-        <section id="plant" className="mx-auto max-w-[1200px] px-5 md:px-8 py-10 md:py-14" aria-label="The reference plant">
-          <div className="card overflow-hidden">
-            <div className="p-5 md:p-7 flex flex-wrap items-end justify-between gap-4">
-              <div className="max-w-[680px]">
-                <div className="stat-label">The plant</div>
-                <h2 className="text-[24px] md:text-[30px] font-extrabold tracking-tight leading-tight mt-1">A real sewage treatment plant, end to end</h2>
-                <p className="text-ink-3 mt-3">
-                  SafeKrit was built around a 675 KLD sequencing-batch plant: screening and equalisation, the SBR basins,
-                  filtration, disinfection, sludge handling and the treated-water side, across 11 process areas and 339
-                  wired signals. Its process flow, drawn from the same definition the software runs, is below.
-                </p>
-              </div>
-              <ul className="flex flex-wrap gap-1.5" aria-label="Plant facts">
-                {['39 unit operations', '11 areas', '339 signals', 'ISA-5.1 tags'].map((f) => <li key={f} className="pill bg-ground text-ink-2 border border-line">{f}</li>)}
-              </ul>
-            </div>
-            {/* The diagram carries a title block at the top; the crop shows the flow itself. */}
-            <div className="border-t border-line bg-white overflow-x-auto">
-              <div className="min-w-[1100px] aspect-[3944/690] overflow-hidden">
-                <img src="/landing/plant-pfd.svg" alt="Process flow diagram of the reference plant: raw sewage through screening, equalisation, SBR basins, filtration and disinfection to treated water, with sludge handling and return lines" loading="lazy" decoding="async" className="w-full h-full object-cover object-bottom" />
-              </div>
-            </div>
           </div>
         </section>
 
