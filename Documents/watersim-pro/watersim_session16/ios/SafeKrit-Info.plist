@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string></string>
+	</dict>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.inferconautomation.safekrit.live</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Live plant</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>waveform.path.ecg</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.inferconautomation.safekrit.alarms</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Alarms</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>bell</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.inferconautomation.safekrit.tasks</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Maintenance tasks</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>wrench.and.screwdriver</string>
+		</dict>
+	</array>
+</dict>
+</plist>

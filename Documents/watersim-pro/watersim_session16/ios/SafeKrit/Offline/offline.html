@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>SafeKrit — offline</title>
+  <!-- The iOS app's copy of frontend/public/offline.html. "Try again" asks the app to reload the page that failed. -->
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; align-items: center; justify-content: center; background: #f4f5f7; color: #16181d;
+      font-family: "Plus Jakarta Sans", -apple-system, system-ui, sans-serif; -webkit-user-select: none; }
+    main { max-width: 420px; padding: 32px 24px; text-align: center; }
+    img { width: 64px; height: 64px; border-radius: 16px; }
+    h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 20px 0 8px; }
+    p { color: #6b7280; font-size: 15px; line-height: 1.5; margin: 0 0 24px; }
+    button { font: inherit; font-weight: 600; font-size: 15px; color: #fff; background: #16181d; border: 0; border-radius: 20px;
+      min-height: 48px; padding: 0 22px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="offline-icon.png" alt="" />
+    <h1>You are offline</h1>
+    <p>SafeKrit shows live plant data, so it needs a connection. Nothing is shown from memory: check the network and try again.</p>
+    <button type="button" onclick="window.webkit.messageHandlers.safekrit.postMessage('retry')">Try again</button>
+  </main>
+</body>
+</html>

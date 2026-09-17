@@ -1,0 +1,7 @@
+# Xcode per-user state and build output. The project, sources and assets are tracked.
+xcuserdata/
+*.xcuserstate
+build/
+DerivedData/
+*.ipa
+*.xcarchive

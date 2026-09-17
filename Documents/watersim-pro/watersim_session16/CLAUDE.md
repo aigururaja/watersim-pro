@@ -462,3 +462,26 @@ tokens and classes live in `frontend/tailwind.config.js` and
   `frontend/public/downloads/safekrit.apk`; the landing page links to it.
   Raise `appVersionCode` for every release. Runbook section 17 has the
   procedure for people.
+
+## 16. iOS app (17 Sep 2026, branch `ios-app`)
+
+- `ios/SafeKrit.xcodeproj` (Xcode 26, synchronized `SafeKrit/` folder, so new
+  files there join the target without editing the project). A SwiftUI shell
+  around one WKWebView, the counterpart of the Android TWA: bundle id
+  `com.inferconautomation.safekrit`, start URL `/dashboard`, iOS 16+,
+  iPhone and iPad. Keep `ios/SafeKrit/AppConfig.swift` in step with
+  `android/twa-manifest.json`.
+- `Browser.swift` holds the policy: pages on dt.inferconautomation.com stay
+  in the app, other links open in Safari, tel:/mailto: go to the system,
+  JS alert/confirm/prompt are native dialogs, pull to refresh reloads. On a
+  network error it shows the bundled `Offline/offline.html` (a copy of
+  `frontend/public/offline.html` whose button posts `retry` to the app);
+  nothing is cached, so plant data is never shown from memory.
+- Quick actions (Live plant, Alarms, Maintenance tasks) are declared in
+  `ios/SafeKrit-Info.plist` and routed in `SafeKritApp.swift`.
+- The app icon is `icon.svg` rendered square, 1024px and without alpha
+  (`sips` renders SVG on macOS); iOS rounds the corners itself.
+- Simulator build: `xcodebuild -project ios/SafeKrit.xcodeproj -scheme
+  SafeKrit -destination 'generic/platform=iOS Simulator' build`. A device or
+  App Store build needs `DEVELOPMENT_TEAM` set in Signing & Capabilities and
+  an Apple Developer account; raise `CURRENT_PROJECT_VERSION` per upload.
