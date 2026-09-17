@@ -1,0 +1,60 @@
+{
+  "packageId": "com.inferconautomation.safekrit",
+  "host": "dt.inferconautomation.com",
+  "name": "SafeKrit",
+  "launcherName": "SafeKrit",
+  "display": "standalone",
+  "themeColor": "#16181D",
+  "navigationColor": "#16181D",
+  "navigationColorDark": "#16181D",
+  "navigationDividerColor": "#16181D",
+  "navigationDividerColorDark": "#16181D",
+  "backgroundColor": "#F4F5F7",
+  "enableNotifications": false,
+  "startUrl": "/dashboard",
+  "iconUrl": "https://dt.inferconautomation.com/icons/icon-512.png",
+  "maskableIconUrl": "https://dt.inferconautomation.com/icons/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "C:\\Users\\prade\\.safekrit-android\\safekrit-upload.jks",
+    "alias": "safekrit"
+  },
+  "appVersionCode": 1,
+  "appVersion": "1.0.0",
+  "shortcuts": [
+    {
+      "name": "Live plant",
+      "shortName": "Live",
+      "url": "/live",
+      "chosenIconUrl": "https://dt.inferconautomation.com/icons/icon-192.png"
+    },
+    {
+      "name": "Alarms",
+      "shortName": "Alarms",
+      "url": "/alarms",
+      "chosenIconUrl": "https://dt.inferconautomation.com/icons/icon-192.png"
+    },
+    {
+      "name": "Maintenance tasks",
+      "shortName": "Tasks",
+      "url": "/tasks",
+      "chosenIconUrl": "https://dt.inferconautomation.com/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://dt.inferconautomation.com/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://dt.inferconautomation.com/",
+  "minSdkVersion": 21,
+  "orientation": "default",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": []
+}

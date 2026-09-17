@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.inferconautomation.safekrit",
+      "sha256_cert_fingerprints": [
+        "4D:B3:78:C9:EE:1C:64:BD:8C:89:AF:B7:24:E2:77:DF:A6:C4:F0:04:EE:D1:7B:2D:43:D1:85:43:DD:B1:39:E0"
+      ]
+    }
+  }
+]

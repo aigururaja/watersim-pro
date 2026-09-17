@@ -67,6 +67,15 @@ describe('LandingPage', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'SafeKrit' })).toBeInTheDocument();
   });
 
+  it('offers the Android app as a download from the site itself', () => {
+    mount();
+    const link = screen.getByTestId('apk-download');
+    expect(link).toHaveAttribute('href', '/downloads/safekrit.apk');
+    expect(link).toHaveAttribute('download');
+    expect(link).toHaveTextContent('Download for Android');
+    expect(screen.getByRole('link', { name: /Get the Android app/ })).toHaveAttribute('href', '/downloads/safekrit.apk');
+  });
+
   it('offers a signed-in person the dashboard instead of the buttons', () => {
     AUTHED = true;
     mount();

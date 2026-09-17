@@ -11,6 +11,13 @@ import '@fontsource/plus-jakarta-sans/700.css';
 import '@fontsource/plus-jakarta-sans/800.css';
 import './index.css';
 
+// Installable app and offline page (public/sw.js), production builds only:
+// the dev server has nothing to cache and a stale worker there only confuses.
+// The worker handles navigations alone, so it never serves stale data.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

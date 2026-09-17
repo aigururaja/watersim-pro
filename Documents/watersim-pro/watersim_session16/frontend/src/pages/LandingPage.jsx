@@ -16,8 +16,11 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Droplets, Monitor, Boxes, Wrench, Bell, LineChart, ClipboardList, Plug, MessageCircle, ShieldCheck, ArrowRight, Activity,
-  Check, Gauge, ScrollText, Users, FileText, Cpu, Radio, Smartphone, Database,
+  Check, Gauge, ScrollText, Users, FileText, Cpu, Radio, Smartphone, Database, Download,
 } from 'lucide-react';
+
+/** The Android app: a Trusted Web Activity built from android/twa-manifest.json and published with the site. */
+const APK = { href: '/downloads/safekrit.apk', version: '1.0.0', size: '1.2 MB' };
 import { useAuth } from '../context/AuthContext';
 import AuthDialog from '../components/auth/AuthDialog';
 
@@ -166,6 +169,9 @@ export default function LandingPage({ dialog: initialDialog = null }) {
                 boundary that hands work orders to your CMMS.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">{doors(true)}</div>
+              <a href={APK.href} download className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-2 hover:text-ink">
+                <Smartphone className="w-4 h-4" aria-hidden="true" /> Get the Android app
+              </a>
               <dl className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4" aria-label="At a glance">
                 {PROOF.map((p) => (
                   <div key={p.label} className="rounded-2xl bg-white border border-line p-3">
@@ -270,6 +276,12 @@ export default function LandingPage({ dialog: initialDialog = null }) {
               <p className="mt-4 text-[13px] text-ink-3 text-center max-w-[300px] inline-flex items-start gap-2">
                 <Smartphone className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
                 The same product on the plant floor: a bottom bar for the surface you are on, drawers for the rest.
+              </p>
+              <a href={APK.href} download className="btn-primary btn-lg mt-5" data-testid="apk-download">
+                <Download className="w-4 h-4" aria-hidden="true" /> Download for Android
+              </a>
+              <p className="mt-2 text-[12px] text-ink-3 text-center max-w-[300px]">
+                Version {APK.version} · {APK.size} · Android 5 or newer. Open the file to install; Android asks once to allow installs from your browser.
               </p>
             </div>
           </div>
