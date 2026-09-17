@@ -28,6 +28,8 @@ const mount = (props, entries = ['/']) => render(<MemoryRouter initialEntries={e
 beforeEach(() => {
   AUTHED = false;
   vi.clearAllMocks();
+  localStorage.clear();
+  sessionStorage.clear();
   authService.organisations.mockResolvedValue([{ slug: 'itc-stp', name: 'ITC — Sewage Treatment Plant' }]);
 });
 
@@ -67,13 +69,40 @@ describe('LandingPage', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'SafeKrit' })).toBeInTheDocument();
   });
 
-  it('offers the Android app as a download from the site itself', () => {
+  it('asks to install the app shortly after the page appears, and "Not now" is remembered', async () => {
+    mount({ installPromptDelayMs: 10 });
+    const dialog = await screen.findByRole('dialog', { name: 'Install the SafeKrit app' });
+    expect(within(dialog).getByText(/opens straight to sign-in/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(Number(localStorage.getItem('ws.installPrompt.dismissedAt'))).toBeGreaterThan(0);
+  });
+
+  it('does not ask again within a week of "Not now"', async () => {
+    localStorage.setItem('ws.installPrompt.dismissedAt', String(Date.now() - 60_000));
+    mount({ installPromptDelayMs: 5 });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('does not interrupt someone who came to sign in', async () => {
+    mount({ dialog: 'login', installPromptDelayMs: 5 }, ['/login']);
+    await screen.findByRole('dialog', { name: 'Sign in' });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(screen.queryByRole('dialog', { name: 'Install the SafeKrit app' })).toBeNull();
+  });
+
+  it('the header and the phone section open the install popup, which offers the Android app file', async () => {
     mount();
-    const link = screen.getByTestId('apk-download');
-    expect(link).toHaveAttribute('href', '/downloads/safekrit.apk');
-    expect(link).toHaveAttribute('download');
-    expect(link).toHaveTextContent('Download for Android');
-    expect(screen.getByRole('link', { name: /Get the Android app/ })).toHaveAttribute('href', '/downloads/safekrit.apk');
+    await userEvent.click(screen.getByTestId('header-install'));
+    let dialog = await screen.findByRole('dialog', { name: 'Install the SafeKrit app' });
+    // jsdom is a desktop browser that cannot install apps: it is told to use Chrome or Edge, and gets the phone file.
+    expect(within(dialog).getByText(/does not install apps/)).toBeInTheDocument();
+    expect(within(dialog).getByTestId('apk-download')).toHaveAttribute('href', '/downloads/safekrit.apk');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await userEvent.click(screen.getByTestId('section-install'));
+    dialog = await screen.findByRole('dialog', { name: 'Install the SafeKrit app' });
+    expect(dialog).toBeInTheDocument();
   });
 
   it('offers a signed-in person the dashboard instead of the buttons', () => {

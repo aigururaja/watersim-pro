@@ -12,17 +12,16 @@
  * people and numbers, and without the plant's process layout: the page shows
  * the functionality, never a customer's plant or data.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Droplets, Monitor, Boxes, Wrench, Bell, LineChart, ClipboardList, Plug, MessageCircle, ShieldCheck, ArrowRight, Activity,
   Check, Gauge, ScrollText, Users, FileText, Cpu, Radio, Smartphone, Database, Download,
 } from 'lucide-react';
-
-/** The Android app: a Trusted Web Activity built from android/twa-manifest.json and published with the site. */
-const APK = { href: '/downloads/safekrit.apk', version: '1.0.0', size: '1.2 MB' };
 import { useAuth } from '../context/AuthContext';
 import AuthDialog from '../components/auth/AuthDialog';
+import InstallAppDialog from '../components/install/InstallAppDialog';
+import { rememberInstallDismissal, shouldAskToInstall } from '../utils/appMode';
 
 /** A product screenshot in a browser-like frame. */
 function Shot({ src, alt, eager = false, className = '' }) {
@@ -106,16 +105,31 @@ const CONNECT = [
   { icon: Database, title: 'One process, one file', text: 'The API, the WebSocket feed, the poller, the historian, the alarm sweep, the notification worker and the twin loop run in one service on a single database file.' },
 ];
 
-export default function LandingPage({ dialog: initialDialog = null }) {
+export default function LandingPage({ dialog: initialDialog = null, installPromptDelayMs = 1200 }) {
   const auth = useAuth();
   const isAuthenticated = !!auth?.isAuthenticated;
   const navigate = useNavigate();
   const location = useLocation();
   const [dialog, setDialog] = useState(initialDialog);
+  const [installOpen, setInstallOpen] = useState(false);
+  // Someone who came to sign in or register is not interrupted with the install question.
+  const cameForAuth = useRef(Boolean(initialDialog));
 
   useEffect(() => { setDialog(initialDialog); }, [initialDialog]);
+  useEffect(() => { if (dialog) cameForAuth.current = true; }, [dialog]);
 
-  const open = (mode) => setDialog(mode);
+  // Ask once, shortly after the page appears: install the app. "Not now" is
+  // remembered for a week; an installed app never sees this page at all.
+  useEffect(() => {
+    if (!shouldAskToInstall()) return undefined;
+    const t = setTimeout(() => { if (!cameForAuth.current) setInstallOpen(true); }, installPromptDelayMs);
+    return () => clearTimeout(t);
+  }, [installPromptDelayMs]);
+
+  const openInstall = () => { setDialog(null); setInstallOpen(true); };
+  const notNow = () => { rememberInstallDismissal(); setInstallOpen(false); };
+
+  const open = (mode) => { setInstallOpen(false); setDialog(mode); };
   const close = () => {
     setDialog(null);
     // /login and /register open the popup on load; closing it must not reopen it on refresh.
@@ -147,7 +161,12 @@ export default function LandingPage({ dialog: initialDialog = null }) {
             <a href="#flow" className="hover:text-ink">Alarm to action</a>
             <a href="#connect" className="hover:text-ink">Integrations</a>
           </nav>
-          <nav className="ml-auto flex items-center gap-2" aria-label="Account">{doors()}</nav>
+          <nav className="ml-auto flex items-center gap-2" aria-label="Account">
+            <button type="button" onClick={openInstall} className="btn-ghost px-3" aria-label="Install app" data-testid="header-install">
+              <Download className="w-4 h-4" aria-hidden="true" /><span className="hidden sm:inline">Install app</span>
+            </button>
+            {doors()}
+          </nav>
         </div>
       </header>
 
@@ -169,9 +188,9 @@ export default function LandingPage({ dialog: initialDialog = null }) {
                 boundary that hands work orders to your CMMS.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">{doors(true)}</div>
-              <a href={APK.href} download className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-2 hover:text-ink">
-                <Smartphone className="w-4 h-4" aria-hidden="true" /> Get the Android app
-              </a>
+              <button type="button" onClick={openInstall} className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-2 hover:text-ink">
+                <Smartphone className="w-4 h-4" aria-hidden="true" /> Install the SafeKrit app
+              </button>
               <dl className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4" aria-label="At a glance">
                 {PROOF.map((p) => (
                   <div key={p.label} className="rounded-2xl bg-white border border-line p-3">
@@ -277,11 +296,11 @@ export default function LandingPage({ dialog: initialDialog = null }) {
                 <Smartphone className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
                 The same product on the plant floor: a bottom bar for the surface you are on, drawers for the rest.
               </p>
-              <a href={APK.href} download className="btn-primary btn-lg mt-5" data-testid="apk-download">
-                <Download className="w-4 h-4" aria-hidden="true" /> Download for Android
-              </a>
+              <button type="button" onClick={openInstall} className="btn-primary btn-lg mt-5" data-testid="section-install">
+                <Download className="w-4 h-4" aria-hidden="true" /> Install the app
+              </button>
               <p className="mt-2 text-[12px] text-ink-3 text-center max-w-[300px]">
-                Version {APK.version} · {APK.size} · Android 5 or newer. Open the file to install; Android asks once to allow installs from your browser.
+                Android, iPhone, Windows and Mac. The app opens straight to sign-in.
               </p>
             </div>
           </div>
@@ -362,6 +381,7 @@ export default function LandingPage({ dialog: initialDialog = null }) {
       </footer>
 
       {dialog && <AuthDialog mode={dialog} onClose={close} onModeChange={setDialog} />}
+      {installOpen && !dialog && <InstallAppDialog onClose={() => setInstallOpen(false)} onNotNow={notNow} />}
     </div>
   );
 }

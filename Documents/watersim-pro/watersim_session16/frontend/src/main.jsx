@@ -10,6 +10,13 @@ import '@fontsource/plus-jakarta-sans/600.css';
 import '@fontsource/plus-jakarta-sans/700.css';
 import '@fontsource/plus-jakarta-sans/800.css';
 import './index.css';
+import { captureInstallPrompt, isInstalledApp } from './utils/appMode';
+
+// The browser's install offer fires before any page mounts: keep it for the
+// landing page's own Install button. Detect app mode now, while the Android
+// app's referrer is still on the first page.
+captureInstallPrompt();
+isInstalledApp();
 
 // Installable app and offline page (public/sw.js), production builds only:
 // the dev server has nothing to cache and a stale worker there only confuses.

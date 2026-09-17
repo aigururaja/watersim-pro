@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import AccessibilityProvider from './components/AccessibilityProvider';
 import { PAGE_LOADERS, prefetchPages } from './pagePrefetch';
+import { isInstalledApp } from './utils/appMode';
 
 // Code-split every page — each route loads its own chunk on demand, and
 // pagePrefetch.js warms them all once the browser is idle so the first click
@@ -59,7 +60,8 @@ function AppRoutes() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* The public front door; a signed-in person sees "Open dashboard" on it */}
-        <Route path="/" element={<LandingPage />} />
+        {/* ...except inside the installed app, which opens on the dashboard (or its sign-in screen) */}
+        <Route path="/" element={isInstalledApp() ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
 
         {/* Public */}
         <Route path="/login"    element={<PublicRoute><LoginPage /></PublicRoute>} />

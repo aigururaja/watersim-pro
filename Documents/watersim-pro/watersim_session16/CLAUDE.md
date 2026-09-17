@@ -462,3 +462,20 @@ tokens and classes live in `frontend/tailwind.config.js` and
   `frontend/public/downloads/safekrit.apk`; the landing page links to it.
   Raise `appVersionCode` for every release. Runbook section 17 has the
   procedure for people.
+- **App mode vs browser (17 Sep 2026).** `frontend/src/utils/appMode.js`
+  decides whether the page runs as an installed app: a standalone display,
+  the Android app's `android-app://` referrer on the first page, or a
+  `SafeKrit-Android` / `SafeKrit-iOS` token in a native wrapper's user agent
+  (the iOS wrapper being built on the Mac should add it). In app mode `/`
+  goes to the dashboard and `/login` / `/register` render
+  `components/auth/AuthScreen.jsx`; the landing page never appears. In a
+  browser the landing page asks to install the app a moment after it loads
+  (`components/install/InstallAppDialog.jsx`): one-tap Install where the
+  browser supports it (the `beforeinstallprompt` event is captured in
+  `main.jsx`), the APK and steps on Android, Share then Add to Home Screen on
+  iPhone. "Not now" is remembered for 7 days; nobody who came to sign in is
+  interrupted.
+- **Icon imports.** `lucide-react` is 0.294: newer icon names such as
+  `SquarePlus` do not exist in the browser build even though vitest passes.
+  A missing icon breaks the whole lazily loaded page; the production build
+  (`vite build`) rejects it, so run it before deploying UI changes.
