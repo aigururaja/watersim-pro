@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ReactFlow, {
   addEdge, Background, Controls, MiniMap,
   useNodesState, useEdgesState, useStore,
@@ -10,7 +10,7 @@ import 'reactflow/dist/style.css';
 // and @keyframes live, and until now they were in no bundle at all.
 import '../styles/canvas-tokens.css';
 import '../styles/canvas-motion.css';
-import { ArrowLeft, Undo2, Redo2, Zap, Play, MoreHorizontal, Camera, Settings2, Trash2, PanelRight, Link2, Boxes } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, Zap, Play, MoreHorizontal, Camera, Settings2, Trash2, PanelRight, Link2, Boxes, ImagePlus } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar,
@@ -20,6 +20,7 @@ import { downloadFile } from '../utils/download';
 import AppLayout from '../components/layout/AppLayout';
 import CanvasNode from '../components/canvas/CanvasNode';
 import UnitOpPalette from '../components/canvas/UnitOpPalette';
+import PidImport from '../components/canvas/PidImport';
 import { SERVICES } from '../components/canvas/StreamEdge';
 import CanvasEdge from '../components/canvas/CanvasEdge';
 import { CanvasStyleContext, readCanvasStyle, writeCanvasStyle } from '../components/canvas/canvasStyle';
@@ -432,6 +433,7 @@ function EncodingLegend({ qref }) {
 export default function CanvasPage() {
   const { projectId, flowsheetId } = useParams();
   const navigate   = useNavigate();
+  const location   = useLocation();
   // `/projects/…` (Digital Twin) or `/monitoring/projects/…` (Operations):
   // every link out of the sheet stays on the surface the person came from.
   const base       = useProjectBase();
@@ -599,6 +601,9 @@ export default function CanvasPage() {
   // Toolbar overflow menu (⋯)
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const pidRef = useRef(null);   // P&ID picture import: opens its file picker
+  // Arrived from the project page's "Import from P&ID": read the picture now.
+  const readPidOnOpen = !!location.state?.readPid;
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
@@ -1296,6 +1301,61 @@ export default function CanvasPage() {
     addNode(type, label, position);
   }, [addNode]);
 
+  // ── P&ID reading: turn the reviewed AI proposal into blocks and lines ──────
+  //
+  // Each unit is laid out where it sits on the drawing (its position is a
+  // fraction of the image, mapped onto the sheet through the picture's stored
+  // placement). Only parameter keys this block actually has are
+  // kept. With "Create & simulate", the effect below saves and then runs once
+  // the new nodes are in state — the server simulates the SAVED flowsheet.
+  const pendingSimulateRef = useRef(false);
+  const buildFromPid = useCallback((proposal, pid, { simulate: andSimulate } = {}) => {
+    const pl = pid?.placement;
+    const w = pid ? pid.width * pl.scale : 1200;
+    const h = pid ? pid.height * pl.scale : 800;
+    const ox = pl?.x ?? 0;
+    const oy = pl?.y ?? 0;
+    const idMap = {};
+    const newNodes = proposal.units.map((u) => {
+      const id = getId();
+      idMap[u.id] = id;
+      const known = new Set((PARAM_DEFS[u.type] || []).map((d) => d.key));
+      const params = Object.fromEntries(Object.entries(u.params || {}).filter(([k]) => known.has(k)));
+      return {
+        id,
+        type: 'unitOp',
+        // Card centre on the item: cards are 168 x 116.
+        position: { x: Math.round(ox + u.x * w - 84), y: Math.round(oy + u.y * h - 58) },
+        data: { label: u.label, opType: u.type, params },
+      };
+    });
+    const stamp = Date.now();
+    const newEdges = proposal.connections.map((c, i) => ({
+      id: `edge_${stamp}_${i}`,
+      source: idMap[c.from],
+      target: idMap[c.to],
+      type: 'stream',
+      animated: false,
+      data: { streamType: 'stream' },
+    }));
+    setNodes(ns => [...ns, ...newNodes]);
+    setEdges(es => [...es, ...newEdges]);
+    setSaved(false);
+    newNodes.forEach(n => sendEvent('node:add', n));
+    newEdges.forEach(e => sendEvent('edge:add', e));
+    recordAfterChange();
+    pendingSimulateRef.current = !!andSimulate;
+  }, [sendEvent, recordAfterChange]);
+
+  useEffect(() => {
+    if (!pendingSimulateRef.current) return;
+    pendingSimulateRef.current = false;
+    (async () => {
+      await save();
+      simulate();
+    })();
+  }, [nodes, edges]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const onDragOver = (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; };
 
   const onNodesChangeWrapped = useCallback((changes) => {
@@ -1631,6 +1691,14 @@ export default function CanvasPage() {
                   >
                     <Settings2 size={14} />Cost settings…
                   </button>
+                  <button
+                    role="menuitem"
+                    style={S.menuItem}
+                    title="Upload a picture of your P&ID, then let AI build the diagram from it"
+                    onClick={() => { pidRef.current?.openPicker(); setMenuOpen(false); }}
+                  >
+                    <ImagePlus size={14} />Upload P&amp;ID picture…
+                  </button>
                   {hasAnyResults && (
                     <button role="menuitem" style={{ ...S.menuItem, color: '#DC2626' }} onClick={() => { clearResults(); setMenuOpen(false); }}>
                       <Trash2 size={14} />Clear results
@@ -1727,6 +1795,13 @@ export default function CanvasPage() {
                   dot grid. Two <Background/>s need distinct ids. */}
               <Background id="major" variant="lines" gap={80} lineWidth={1} color="var(--ws-grid-major, #EDF0F4)" />
               <Background id="minor" variant="dots" gap={8} size={0.6} color="var(--ws-grid-minor, #E6E9EF)" />
+              {/* P&ID picture import: upload, then AI builds the diagram from it. */}
+              <PidImport
+                ref={pidRef} projectId={projectId} flowsheetId={flowsheetId} onBuild={buildFromPid}
+                autoRead={readPidOnOpen}
+                // Clear the flag so a page refresh does not read (and bill) again.
+                onAutoRead={() => navigate(location.pathname, { replace: true, state: null })}
+              />
               <CanvasLod paneRef={canvasWrapRef} />
               <PerfOverlay />
               <Controls />
@@ -1739,7 +1814,8 @@ export default function CanvasPage() {
               {nodes.length === 0 && (
                 <Panel position="top-right">
                   <div style={S.hint}>
-                    Drag unit ops · Connect nodes · Click to configure · ▶ Simulate
+                    Drag unit ops · Connect nodes · Click to configure · ▶ Simulate<br />
+                    Have a P&amp;ID? ⋯ → Upload P&amp;ID picture and AI builds the diagram
                   </div>
                 </Panel>
               )}

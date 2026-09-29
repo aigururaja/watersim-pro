@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useProjectBase } from '../utils/projectBase';
 import AppLayout from '../components/layout/AppLayout';
 import { SkeletonFlowsheetCard } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
-import { Cpu, Camera } from 'lucide-react';
+import { Cpu, Camera, Wand2, Loader2 } from 'lucide-react';
+import { PID_ACCEPT, uploadPidPicture, pidErrorText } from '../utils/pidImage';
 
 // ── ProjectPage ────────────────────────────────────────────────────────────────
 
@@ -112,6 +113,38 @@ export default function ProjectPage() {
     }
   };
 
+  // ── Import from P&ID: new flowsheet + picture, then open it to be read ─────
+  //
+  // Creates a flowsheet named after the file, stores the picture on it and
+  // opens the canvas with `readPid`, where the AI reading starts by itself and
+  // the review window follows. The flowsheet is kept if the upload fails, so
+  // the user can retry from the canvas (⋯ → Upload P&ID picture).
+  const pidFileRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+
+  const importFromPid = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    let flowsheetId = null;
+    try {
+      const name = file.name.replace(/\.[^.]+$/, '').slice(0, 200) || 'Imported P&ID';
+      const { data } = await api.post(`/projects/${projectId}/flowsheets`, {
+        name, description: `Built from the P&ID picture ${file.name}`,
+      });
+      flowsheetId = data.id;
+      await uploadPidPicture(projectId, flowsheetId, file);
+      navigate(`${base}/${projectId}/flowsheets/${flowsheetId}`, { state: { readPid: true } });
+    } catch (err) {
+      showToast(flowsheetId
+        ? `Flowsheet created, but the picture could not be uploaded: ${pidErrorText(err)}`
+        : pidErrorText(err), false);
+      if (flowsheetId) fetchAll();
+      setImporting(false);
+    }
+  };
+
   const deleteFlowsheet = async (fs) => {
     if (!window.confirm(`Delete "${fs.name}"? This cannot be undone.`)) return;
     setDeletingFs(fs.id);
@@ -168,7 +201,20 @@ export default function ProjectPage() {
               onClick={() => navigate(`${base}/${projectId}/settings`)}
             >⚙ Cost Settings</button>
             {tab === 'flowsheets' && (
-              <button style={S.newBtn} onClick={() => setShowNew(true)}>+ New Flowsheet</button>
+              <>
+                <input ref={pidFileRef} type="file" accept={PID_ACCEPT} style={{ display: 'none' }} onChange={importFromPid} />
+                <button
+                  style={{ ...S.newBtn, background: '#1F4E79', display: 'inline-flex', alignItems: 'center', gap: 6, opacity: importing ? 0.7 : 1 }}
+                  onClick={() => pidFileRef.current?.click()}
+                  disabled={importing}
+                  aria-busy={importing}
+                  title="Upload a picture of a P&ID: AI builds the flowsheet from it, then you review and simulate"
+                >
+                  {importing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                  {importing ? 'Uploading…' : 'Import from P&ID'}
+                </button>
+                <button style={S.newBtn} onClick={() => setShowNew(true)}>+ New Flowsheet</button>
+              </>
             )}
           </div>
         </div>
@@ -215,7 +261,7 @@ export default function ProjectPage() {
                 <EmptyState
                   icon={Cpu}
                   title="No flowsheets yet"
-                  description='Click "New Flowsheet" to start designing your treatment process.'
+                  description='Click "New Flowsheet" to start designing your treatment process, or "Import from P&ID" to build one from a picture of your P&ID.'
                   action={{ label: '+ New Flowsheet', onClick: () => setShowNew(true) }}
                 />
               </div>

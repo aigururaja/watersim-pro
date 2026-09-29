@@ -11,10 +11,10 @@
  *                         linked to their live source, so the twin reads the
  *                         plant's measurements). Opened under /projects.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, FolderOpen, Clock, Layers, Archive, Trash2, MoreVertical, Search, X, ChevronDown, Download, Radio, Boxes, Monitor, Loader2,
+  Plus, FolderOpen, Clock, Layers, Archive, Trash2, MoreVertical, Search, X, ChevronDown, Download, Radio, Boxes, Monitor, Loader2, Wand2,
 } from 'lucide-react';
 import AppLayout from '../components/layout/AppLayout';
 import { SkeletonProjectCard } from '../components/Skeleton';
@@ -22,6 +22,7 @@ import EmptyState from '../components/EmptyState';
 import { useAnnounce } from '../components/AccessibilityProvider';
 import api from '../services/api';
 import { baseForKind, TWIN_BASE } from '../utils/projectBase';
+import { PID_ACCEPT, uploadPidPicture, pidErrorText } from '../utils/pidImage';
 
 const PROJECT_TYPES = [
   { value: 'wastewater',        label: 'Wastewater Treatment' },
@@ -377,6 +378,40 @@ export default function ProjectsPage({ kind = 'twin', autoOpen = false }) {
     navigate(`${TWIN_BASE}/${project.id}`);
   };
 
+  // ── Import from P&ID: a new model built from a picture ─────────────────────
+  //
+  // Creates a twin project and a flowsheet, both named after the file, stores
+  // the picture and opens the canvas with `readPid`: the AI reading starts
+  // there and the review window follows. Whatever was created before a failure
+  // is kept and listed, so the user can retry from inside it.
+  const pidFileRef = useRef(null);
+  const [pidImporting, setPidImporting] = useState(false);
+  const [pidError, setPidError] = useState('');
+
+  const importFromPid = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setPidImporting(true);
+    setPidError('');
+    let project = null;
+    try {
+      const name = file.name.replace(/\.[^.]+$/, '').slice(0, 200) || 'Imported P&ID';
+      const description = `Built from the P&ID picture ${file.name}`;
+      ({ data: project } = await api.post('/projects', { name, description, projectType: 'wastewater', tags: [], kind }));
+      const { data: flowsheet } = await api.post(`/projects/${project.id}/flowsheets`, { name, description });
+      await uploadPidPicture(project.id, flowsheet.id, file);
+      announce(`"${name}" created from the P&ID picture`);
+      navigate(`${base}/${project.id}/flowsheets/${flowsheet.id}`, { state: { readPid: true } });
+    } catch (err) {
+      setPidError(project
+        ? `"${project.name}" was created, but the import did not finish: ${pidErrorText(err)} Open it and use ⋯ → Upload P&ID picture to try again.`
+        : pidErrorText(err));
+      if (project) load();
+      setPidImporting(false);
+    }
+  };
+
   const handleArchive = async (project) => {
     const newStatus = project.status === 'archived' ? 'active' : 'archived';
     try {
@@ -421,6 +456,21 @@ export default function ProjectsPage({ kind = 'twin', autoOpen = false }) {
           </div>
           <div className="flex items-center gap-2">
             {isTwin && (
+              <>
+                <input ref={pidFileRef} type="file" accept={PID_ACCEPT} className="hidden" onChange={importFromPid} />
+                <button
+                  className="btn-secondary text-sm"
+                  onClick={() => pidFileRef.current?.click()}
+                  disabled={pidImporting}
+                  aria-busy={pidImporting}
+                  title="Upload a picture of a P&ID: AI builds the model from it, then you review and simulate"
+                >
+                  {pidImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  {pidImporting ? 'Uploading…' : 'Import from P&ID'}
+                </button>
+              </>
+            )}
+            {isTwin && (
               <button className="btn-secondary text-sm" onClick={() => setShowImport(true)}>
                 <Download className="w-4 h-4" /> Import from live
               </button>
@@ -430,6 +480,13 @@ export default function ProjectsPage({ kind = 'twin', autoOpen = false }) {
             </button>
           </div>
         </div>
+
+        {pidError && (
+          <div role="alert" className="px-4 py-3 bg-danger-soft border border-danger/30 rounded-xl text-sm text-danger flex items-start justify-between gap-3">
+            <span>{pidError}</span>
+            <button className="shrink-0" onClick={() => setPidError('')} aria-label="Dismiss"><X className="w-4 h-4" /></button>
+          </div>
+        )}
 
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row gap-3">
