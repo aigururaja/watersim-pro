@@ -260,7 +260,10 @@ describe('shadow mode', () => {
 
 describe('equipment counters', () => {
   test('run hours, starts and trips from XS / XA transitions', async () => {
-    const t0 = Date.parse('2026-09-06T10:00:00Z');
+    // Two days ago, not a fixed date: the counters API asks for the last 30
+    // days, so a hard-coded date silently ages out of the window and the test
+    // starts failing on a calendar boundary rather than on a real defect.
+    const t0 = Date.now() - 2 * 24 * 60 * 60 * 1000;
     const at = (min) => new Date(t0 + min * 60_000);
     // A pump polled every five minutes: off at 10:00, running 10:01–10:31,
     // off at 10:32, running again from 10:40 to 10:50. A gap wider than the

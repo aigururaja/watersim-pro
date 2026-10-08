@@ -113,11 +113,19 @@ describe('AlarmsPage — rows', () => {
   });
 
   it('prints both a relative and an absolute timestamp', async () => {
-    renderPage();
-    await screen.findByText('Effluent nitrogen over permit');
-    // Relative for scanning, absolute underneath for the record.
-    expect(screen.getAllByText(/ago|just now/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Sep\s+4,\s+2026/).length).toBeGreaterThan(0);
+    // The clock is pinned next to the fixtures: relTime prints a plain date
+    // once an event is more than 30 days old, so against the real clock this
+    // test would pass today and fail next month for no reason.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-04T06:00:00.000Z'));
+    try {
+      renderPage();
+      await screen.findByText('Effluent nitrogen over permit');
+      // Relative for scanning, absolute underneath for the record.
+      expect(screen.getAllByText(/ago|just now/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Sep\s+4,\s+2026/).length).toBeGreaterThan(0);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('shows the value against its limit', async () => {
