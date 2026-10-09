@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Inbound WhatsApp events (Meta webhook)
+ * SafeCrit — Inbound WhatsApp events (Meta webhook)
  *
  * Meta accepts a message with HTTP 200 and reports what became of it later,
  * on the webhook: sent → delivered → read, or failed with a reason. Those

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Maintenance tasks: the state machine
+ * SafeCrit — Maintenance tasks: the state machine
  *
  *   open ─assign→ assigned ─start→ in_progress ─complete→ completed ─approve→ approved
  *                                       ▲                       │

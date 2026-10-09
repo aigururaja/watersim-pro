@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Historian read path
+ * SafeCrit — Historian read path
  *
  * readHistory() answers "these tags over this window at this resolution" with
  * a compact series per tag. The resolution is chosen so a browser never gets

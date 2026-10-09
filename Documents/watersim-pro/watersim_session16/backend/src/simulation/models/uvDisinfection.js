@@ -1,5 +1,5 @@
 /**
- * SafeKrit — UV Disinfection Model  (Session 8 — Step 38)
+ * SafeCrit — UV Disinfection Model  (Session 8 — Step 38)
  *
  * Ultraviolet disinfection applies a computed UV fluence (CT) to achieve
  * a target log-reduction of indicator organisms (E. coli / total coliforms).

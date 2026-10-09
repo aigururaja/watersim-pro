@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Inbound webhooks (no session; mounted before the API limiter)
+ * SafeCrit — Inbound webhooks (no session; mounted before the API limiter)
  *
  * Mounted at: /api/v1/webhooks
  *

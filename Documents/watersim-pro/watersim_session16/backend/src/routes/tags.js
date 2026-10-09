@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Tag registry API
+ * SafeCrit — Tag registry API
  *
  * Mounted at: /api/v1/tags
  *

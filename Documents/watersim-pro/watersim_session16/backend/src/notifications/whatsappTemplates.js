@@ -1,7 +1,7 @@
 /**
- * SafeKrit — WhatsApp template catalogue (Meta Cloud API)
+ * SafeCrit — WhatsApp template catalogue (Meta Cloud API)
  *
- * The templates SafeKrit submits to Meta for review, in the exact shape the
+ * The templates SafeCrit submits to Meta for review, in the exact shape the
  * Business Management API takes (POST /{WABA_ID}/message_templates). Every
  * one is UTILITY, positional, and takes the two body parameters the adapter
  * fills (adapters/whatsapp.js): {{1}} the subject line, {{2}} the details on
@@ -29,24 +29,24 @@
 
 const CATEGORY = 'UTILITY';
 const DEFAULT_LANGUAGE = 'en_US';
-const FOOTER = 'SafeKrit · automated plant notification';
+const FOOTER = 'SafeCrit · automated plant notification';
 const language = () => process.env.WHATSAPP_TEMPLATE_LANG || DEFAULT_LANGUAGE;
 
 /** key = the WHATSAPP_TEMPLATES entry the template serves ("*" default, "task." prefix, or an event type). */
 const TEMPLATES = Object.freeze([
   {
-    name: 'safekrit_alarm_raised',
+    name: 'safecrit_alarm_raised',
     key: 'alarm.raised',
     purpose: 'A limit was breached or a PLC point went quiet — the message that wakes an engineer',
     header: 'Plant alarm',
-    body: 'An alarm has been raised at your plant and needs attention.\n\n*{{1}}*\n\nDetails: {{2}}\n\nPlease check the equipment and acknowledge the alarm in SafeKrit.',
+    body: 'An alarm has been raised at your plant and needs attention.\n\n*{{1}}*\n\nDetails: {{2}}\n\nPlease check the equipment and acknowledge the alarm in SafeCrit.',
     samples: [
       '[CRITICAL] Alarm: Outlet TSS high',
       'Outlet TSS 48 mg/L is above the 30 mg/L limit · Flowsheet: ITC STP · Value: 48 · Raised: 07/09/2026, 22:14:05 · Source: live PLC data',
     ],
   },
   {
-    name: 'safekrit_alarm_cleared',
+    name: 'safecrit_alarm_cleared',
     key: 'alarm.cleared',
     purpose: 'The breach ended',
     header: 'Plant alarm cleared',
@@ -57,22 +57,22 @@ const TEMPLATES = Object.freeze([
     ],
   },
   {
-    name: 'safekrit_task_update',
+    name: 'safecrit_task_update',
     key: 'task.',
     purpose: 'Every maintenance task event: created, assigned, completed, approved, rejected, acknowledged, cancelled',
     header: 'Maintenance task update',
-    body: 'There is an update on a maintenance task you are involved in.\n\n*{{1}}*\n\nDetails: {{2}}\n\nOpen the task in SafeKrit to review it or record your work.',
+    body: 'There is an update on a maintenance task you are involved in.\n\n*{{1}}*\n\nDetails: {{2}}\n\nOpen the task in SafeCrit to review it or record your work.',
     samples: [
       'Task WO-0042 assigned to you: Clean the MBR membrane rack',
       'WO-0042 · Clean the MBR membrane rack · Priority: high · due 08/09/2026, 10:00:00 · Assigned to: Ravi Kumar',
     ],
   },
   {
-    name: 'safekrit_alert',
+    name: 'safecrit_alert',
     key: '*',
     purpose: 'Everything else: twin drift, daily equipment counters, the test message, any event added later',
-    header: 'SafeKrit notification',
-    body: 'A notification from your plant monitoring system.\n\n*{{1}}*\n\nDetails: {{2}}\n\nOpen SafeKrit for the full record.',
+    header: 'SafeCrit notification',
+    body: 'A notification from your plant monitoring system.\n\n*{{1}}*\n\nDetails: {{2}}\n\nOpen SafeCrit for the full record.',
     samples: [
       '[Warning] Twin drift on FIT-201',
       'Inlet flow: model 118 m3/h, plant 96 m3/h · Residual -22 (z 3.4)',
@@ -113,7 +113,7 @@ function check(t) {
   const vars = [...body.matchAll(VAR)].map((m) => Number(m[1]));
   const expected = Array.from({ length: LIMITS.params }, (_, i) => i + 1);
   if (vars.length !== LIMITS.params || vars.some((v, i) => v !== expected[i])) {
-    out.push(`body must use exactly {{1}} and {{2}} once each, in order (SafeKrit sends two parameters) — found ${vars.map((v) => `{{${v}}}`).join(' ') || 'none'}`);
+    out.push(`body must use exactly {{1}} and {{2}} once each, in order (SafeCrit sends two parameters) — found ${vars.map((v) => `{{${v}}}`).join(' ') || 'none'}`);
   }
   if (/^\s*[*_~]*\{\{\d+\}\}/.test(body)) out.push('body must not begin with a variable');
   if (/\{\{\d+\}\}[*_~]*\s*$/.test(body)) out.push('body must not end with a variable');
@@ -154,7 +154,7 @@ function fill(t, params) {
 /** The body's fixed text without its variables — what the parameter values must fit beside. */
 function fixedLength(t) { return String(t.body).replace(VAR, '').length; }
 
-/** The catalogue entry behind an approved template name, or null for a template SafeKrit did not write. */
+/** The catalogue entry behind an approved template name, or null for a template SafeCrit did not write. */
 function byName(name) { return TEMPLATES.find((t) => t.name === name) || null; }
 
 module.exports = {

@@ -1,5 +1,5 @@
 /**
- * InstallAppDialog — the landing page's "Install the SafeKrit app" popup.
+ * InstallAppDialog — the landing page's "Install the SafeCrit app" popup.
  *
  * What it offers depends on where it is opened:
  *   - a browser that installs apps in one tap (Chrome, Edge; computers and
@@ -61,7 +61,7 @@ export default function InstallAppDialog({ onClose, onNotNow, platform: forcedPl
       <div className="rounded-2xl bg-ok-soft text-ok px-4 py-4 flex items-start gap-3" role="status">
         <Check className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div className="text-[14px]">
-          <div className="font-semibold">SafeKrit is installed</div>
+          <div className="font-semibold">SafeCrit is installed</div>
           <div className="mt-0.5">{where === 'android' ? 'Open it from your home screen.' : 'Open it from your Start menu, Dock or desktop.'} It opens straight to sign-in.</div>
         </div>
       </div>
@@ -97,7 +97,7 @@ export default function InstallAppDialog({ onClose, onNotNow, platform: forcedPl
         <Steps items={[
           { text: 'In Safari, tap Share', icon: Share },
           { text: 'Choose Add to Home Screen', icon: PlusSquare },
-          { text: 'Tap Add. SafeKrit appears on your home screen.' },
+          { text: 'Tap Add. SafeCrit appears on your home screen.' },
         ]} />
         <button type="button" onClick={onClose} className="btn-primary btn-lg w-full mt-6">Got it</button>
       </>
@@ -106,7 +106,7 @@ export default function InstallAppDialog({ onClose, onNotNow, platform: forcedPl
     body = (
       <>
         <p className="text-[14px] text-ink-2">
-          This browser does not install apps. Open this page in <b>Chrome</b> or <b>Edge</b> to install SafeKrit on this computer.
+          This browser does not install apps. Open this page in <b>Chrome</b> or <b>Edge</b> to install SafeCrit on this computer.
         </p>
         <div className="mt-5 rounded-2xl bg-ground p-4">
           <div className="stat-label">On an Android phone</div>
@@ -118,7 +118,7 @@ export default function InstallAppDialog({ onClose, onNotNow, platform: forcedPl
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-label="Install the SafeKrit app" data-testid="install-dialog">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-label="Install the SafeCrit app" data-testid="install-dialog">
       <div className="absolute inset-0 bg-ink/40" onClick={onNotNow || onClose} aria-hidden="true" />
       <div ref={trapRef} className="relative w-full sm:max-w-[440px] bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-float ws-page-enter">
         <div className="flex items-center justify-between px-6 pt-5 pb-1">
@@ -131,7 +131,7 @@ export default function InstallAppDialog({ onClose, onNotNow, platform: forcedPl
           </button>
         </div>
         <div className="px-6 pb-6 overflow-y-auto">
-          <h2 className="text-[24px] font-extrabold tracking-tight leading-tight text-ink mt-3">Install the SafeKrit app</h2>
+          <h2 className="text-[24px] font-extrabold tracking-tight leading-tight text-ink mt-3">Install the SafeCrit app</h2>
           <p className="text-ink-3 mt-1 mb-6">
             Alarms, tasks and the live plant from your {where === 'desktop' ? 'desktop' : 'home screen'}, full screen, without the browser. The app opens straight to sign-in.
           </p>

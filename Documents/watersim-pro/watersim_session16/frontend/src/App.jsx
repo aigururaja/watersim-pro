@@ -29,7 +29,7 @@ const TasksPage      = lazy(PAGE_LOADERS.TasksPage);
 const LivePlantPage  = lazy(PAGE_LOADERS.LivePlantPage);
 const TwinPage       = lazy(PAGE_LOADERS.TwinPage);
 
-function PageLoader({ label = 'Loading SafeKrit…' }) {
+function PageLoader({ label = 'Loading SafeCrit…' }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="flex flex-col items-center gap-3">

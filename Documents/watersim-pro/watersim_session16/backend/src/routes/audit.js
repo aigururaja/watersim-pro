@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Audit read API
+ * SafeCrit — Audit read API
  *
  * Mounted at: /api/v1/audit   (admin only — capability `audit.read`)
  *

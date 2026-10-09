@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Flow-Control Elements (pump / valve) Tests  (Session 17)
+ * SafeCrit — Flow-Control Elements (pump / valve) Tests  (Session 17)
  *
  * Coverage:
  *   - pump model: passthrough when ON, zero flow when OFF, VFD speed scaling,

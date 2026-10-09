@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# SafeKrit — Database backup (docker compose deployment)
+# SafeCrit — Database backup (docker compose deployment)
 #
 # Usage:   ./scripts/backup.sh [output-dir]        (default: ./backups)
 # Cron:    30 2 * * * cd /srv/watersim && ./scripts/backup.sh >> backups/backup.log 2>&1

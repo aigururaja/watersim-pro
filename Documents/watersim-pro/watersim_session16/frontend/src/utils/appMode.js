@@ -1,7 +1,7 @@
 /**
  * App mode and app installation.
  *
- * SafeKrit is reached two ways: in a browser, where "/" is the public landing
+ * SafeCrit is reached two ways: in a browser, where "/" is the public landing
  * page, and as an installed app (the Android app, an app installed from the
  * browser, a home-screen app on iPhone, or a native wrapper). The installed
  * app must never show the landing page: it opens on a plain sign-in screen
@@ -19,11 +19,11 @@ const DISMISS_KEY = 'ws.installPrompt.dismissedAt';
 const INSTALLED_KEY = 'ws.appInstalled';
 /** A dismissed install prompt is asked again after this long. */
 export const REASK_MS = 7 * 24 * 60 * 60 * 1000;
-/** Native wrappers identify themselves with this token in their user agent. */
-const WRAPPER_TOKEN = /SafeKrit-(Android|iOS)/i;
+/** Native wrappers identify themselves with this token in their user agent (SafeKrit- from builds before the rename). */
+const WRAPPER_TOKEN = /Safe[CK]rit-(Android|iOS)/i;
 
 /** The Android app file the landing page offers. */
-export const APK = { href: '/downloads/safekrit.apk', version: '1.0.0', size: '1.2 MB' };
+export const APK = { href: '/downloads/safecrit.apk', version: '1.0.1', size: '1.2 MB' };
 
 const media = (query) => {
   try { return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(query).matches === true; } catch { return false; }

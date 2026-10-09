@@ -1,5 +1,5 @@
 /**
- * SafeKrit — SQLite driver (node:sqlite), behind the same API as pg.js
+ * SafeCrit — SQLite driver (node:sqlite), behind the same API as pg.js
  *
  * The application's SQL is written for PostgreSQL. This module runs it on
  * SQLite by:

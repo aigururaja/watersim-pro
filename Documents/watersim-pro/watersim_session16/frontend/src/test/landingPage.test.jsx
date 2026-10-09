@@ -36,7 +36,7 @@ beforeEach(() => {
 describe('LandingPage', () => {
   it('names the product and its three surfaces, with no form until asked', () => {
     mount();
-    expect(screen.getByRole('heading', { level: 1, name: 'SafeKrit' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'SafeCrit' })).toBeInTheDocument();
     for (const name of ['Operations monitor & control', 'Digital twin', 'Predictive maintenance']) {
       expect(screen.getByRole('heading', { name })).toBeInTheDocument();
     }
@@ -66,12 +66,12 @@ describe('LandingPage', () => {
   it('/login renders the page with the sign-in popup already open', async () => {
     mount({ dialog: 'login' }, ['/login']);
     expect(await screen.findByRole('dialog', { name: 'Sign in' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1, name: 'SafeKrit' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'SafeCrit' })).toBeInTheDocument();
   });
 
   it('asks to install the app shortly after the page appears, and "Not now" is remembered', async () => {
     mount({ installPromptDelayMs: 10 });
-    const dialog = await screen.findByRole('dialog', { name: 'Install the SafeKrit app' });
+    const dialog = await screen.findByRole('dialog', { name: 'Install the SafeCrit app' });
     expect(within(dialog).getByText(/opens straight to sign-in/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Not now' }));
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -89,19 +89,19 @@ describe('LandingPage', () => {
     mount({ dialog: 'login', installPromptDelayMs: 5 }, ['/login']);
     await screen.findByRole('dialog', { name: 'Sign in' });
     await new Promise((r) => setTimeout(r, 40));
-    expect(screen.queryByRole('dialog', { name: 'Install the SafeKrit app' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Install the SafeCrit app' })).toBeNull();
   });
 
   it('the header and the phone section open the install popup, which offers the Android app file', async () => {
     mount();
     await userEvent.click(screen.getByTestId('header-install'));
-    let dialog = await screen.findByRole('dialog', { name: 'Install the SafeKrit app' });
+    let dialog = await screen.findByRole('dialog', { name: 'Install the SafeCrit app' });
     // jsdom is a desktop browser that cannot install apps: it is told to use Chrome or Edge, and gets the phone file.
     expect(within(dialog).getByText(/does not install apps/)).toBeInTheDocument();
-    expect(within(dialog).getByTestId('apk-download')).toHaveAttribute('href', '/downloads/safekrit.apk');
+    expect(within(dialog).getByTestId('apk-download')).toHaveAttribute('href', '/downloads/safecrit.apk');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     await userEvent.click(screen.getByTestId('section-install'));
-    dialog = await screen.findByRole('dialog', { name: 'Install the SafeKrit app' });
+    dialog = await screen.findByRole('dialog', { name: 'Install the SafeCrit app' });
     expect(dialog).toBeInTheDocument();
   });
 

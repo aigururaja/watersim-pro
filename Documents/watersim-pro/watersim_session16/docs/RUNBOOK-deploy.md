@@ -1,6 +1,6 @@
 # RUNBOOK — Deployment (CI/CD, images, rollback)
 
-Audience: anyone deploying SafeKrit or debugging a failed deploy.
+Audience: anyone deploying SafeCrit or debugging a failed deploy.
 Last updated: 2026-09-03.
 
 ---

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Database Connection Pool
+ * SafeCrit — Database Connection Pool
  *
  * Supports both DATABASE_URL (production/Docker) and individual
  * DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD env vars (local dev).

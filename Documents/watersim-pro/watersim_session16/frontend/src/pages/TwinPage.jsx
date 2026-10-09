@@ -1,5 +1,5 @@
 /**
- * SafeKrit — TwinPage
+ * SafeCrit — TwinPage
  * The digital twin: the model that runs beside the plant, on the server, and
  * says where they disagree.
  *

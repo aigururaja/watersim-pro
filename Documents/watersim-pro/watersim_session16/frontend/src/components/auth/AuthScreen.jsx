@@ -26,7 +26,7 @@ export default function AuthScreen({ mode: initialMode = 'login' }) {
         <span className="w-14 h-14 rounded-2xl bg-ink text-white flex items-center justify-center" aria-hidden="true">
           <Droplets className="w-7 h-7" />
         </span>
-        <div className="mt-5 text-[13px] font-semibold text-ink-3">SafeKrit</div>
+        <div className="mt-5 text-[13px] font-semibold text-ink-3">SafeCrit</div>
         <h1 className="text-[28px] font-extrabold tracking-tight leading-tight text-ink">{copy.title}</h1>
         <p className="text-ink-3 mt-1 mb-6">{copy.subtitle}</p>
         {note && <div className="mb-4 rounded-2xl bg-ok-soft text-ok px-4 py-3 text-sm" role="status">{note}</div>}

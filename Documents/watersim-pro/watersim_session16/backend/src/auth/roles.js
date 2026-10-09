@@ -1,5 +1,5 @@
 /**
- * SafeKrit — roles and capabilities: the ONE source of truth.
+ * SafeCrit — roles and capabilities: the ONE source of truth.
  *
  * Four places used to carry their own copy of the role list — the DB enum,
  * `ROLE_HIERARCHY` in middleware/auth.js, `VALID_ROLES` in the admin

@@ -1,6 +1,6 @@
 {
-  "name": "SafeKrit",
-  "short_name": "SafeKrit",
+  "name": "SafeCrit",
+  "short_name": "SafeCrit",
   "description": "Live plant monitoring, alarms, maintenance tasks and the digital twin for water and wastewater plants.",
   "id": "/",
   "start_url": "/dashboard",

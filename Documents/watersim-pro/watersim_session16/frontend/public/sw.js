@@ -1,5 +1,5 @@
 /*
- * SafeKrit service worker — deliberately small.
+ * SafeCrit service worker — deliberately small.
  *
  * It exists so the site is installable (and so the Android app, a Trusted Web
  * Activity, has something to show with no network). It handles page
@@ -8,7 +8,7 @@
  * so it cannot serve a stale build or a stale reading: a plant screen must
  * either be live or say plainly that it is not.
  */
-const CACHE = 'safekrit-shell-v1';
+const CACHE = 'safecrit-shell-v1';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [OFFLINE_URL, '/icons/icon-192.png'];
 

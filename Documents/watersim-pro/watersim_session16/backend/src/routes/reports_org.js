@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * SafeKrit — Org-Level Reports API
+ * SafeCrit — Org-Level Reports API
  *
  * Mounted at: /api/v1/reports
  *

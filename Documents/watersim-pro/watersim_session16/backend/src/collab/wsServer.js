@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Real-time Collaboration WebSocket Server
+ * SafeCrit — Real-time Collaboration WebSocket Server
  * Mounted on the same HTTP server as Express.
  * Uses the `ws` package (no socket.io dependency).
  *

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — regenerate the ITC STP flow documents.
+ * SafeCrit — regenerate the ITC STP flow documents.
  *
  * Run: npm run plant:flow      (from the repo root)
  *

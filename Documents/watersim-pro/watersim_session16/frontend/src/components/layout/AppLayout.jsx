@@ -1,5 +1,5 @@
 /**
- * SafeKrit — AppLayout
+ * SafeCrit — AppLayout
  *
  * The application shell. Since Phase 0 of the three-application plan the
  * sidebar is organised into three SURFACES — Operations, Digital Twin,
@@ -157,7 +157,7 @@ function SidebarContent({
               <span className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0" aria-hidden="true">
                 <Droplets className="w-[18px] h-[18px]" />
               </span>
-              <span className="font-extrabold text-lg tracking-tight truncate">SafeKrit</span>
+              <span className="font-extrabold text-lg tracking-tight truncate">SafeCrit</span>
             </div>
             <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${chip.className}`} data-testid="tier-chip">
               <ChipIcon className="w-3 h-3" aria-hidden="true" />
@@ -168,7 +168,7 @@ function SidebarContent({
             )}
           </div>
         ) : (
-          <span className="mx-auto w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center" title="SafeKrit" aria-hidden="true">
+          <span className="mx-auto w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center" title="SafeCrit" aria-hidden="true">
             <Droplets className="w-5 h-5" />
           </span>
         )}
@@ -391,7 +391,7 @@ export default function AppLayout({ children, immersive = false, defaultCollapse
     ...adminItems, SETTINGS_ITEM,
   ];
   const active = activeItem(everyItem, location.pathname);
-  const title = active?.label || surfaceMeta?.label || 'SafeKrit';
+  const title = active?.label || surfaceMeta?.label || 'SafeCrit';
 
   // Mobile bottom bar: the open surface's links (max 5), plus Settings.
   const bottomItems = [...(surfaceMeta?.items || []).slice(0, 4), SETTINGS_ITEM];

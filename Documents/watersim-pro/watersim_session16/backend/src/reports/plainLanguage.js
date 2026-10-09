@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Plain-language report layer
+ * SafeCrit — Plain-language report layer
  *
  * buildPlainSummary(report) turns the structured report JSON (see
  * reportData.js) into a "layman's" summary a non-engineer can read:

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Maintenance tasks API
+ * SafeCrit — Maintenance tasks API
  *
  * Mounted at: /api/v1/tasks
  *

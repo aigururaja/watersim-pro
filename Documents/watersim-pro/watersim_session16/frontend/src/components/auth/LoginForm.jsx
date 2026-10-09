@@ -135,7 +135,7 @@ export default function LoginForm({ onRegister }) {
         </button>
       </form>
       <p className="mt-6 text-center text-sm text-ink-3">
-        New to SafeKrit?{' '}
+        New to SafeCrit?{' '}
         <button type="button" onClick={onRegister} className="text-ink font-semibold hover:underline">Register your organisation</button>
       </p>
     </>

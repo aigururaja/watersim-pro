@@ -1,5 +1,5 @@
 /**
- * SafeKrit — authenticated file downloads.
+ * SafeCrit — authenticated file downloads.
  *
  * Every export/download in the app goes through the unified axios client so
  * the Authorization header (and token refresh on 401) applies. A bare

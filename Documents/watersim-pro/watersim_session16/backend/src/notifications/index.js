@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Notifications
+ * SafeCrit — Notifications
  *
  * emit(eventType, …) is the one entry point. It resolves WHO should hear
  * about an event from the organisation's subscription policy (role- or

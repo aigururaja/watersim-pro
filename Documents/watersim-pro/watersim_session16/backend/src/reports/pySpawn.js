@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Hardened Python subprocess runner
+ * SafeCrit — Hardened Python subprocess runner
  *
  * Shared by pdfGenerator.js and excelGenerator.js. Hardening:
  *   - PYTHON_BIN env override (default 'python3'; 'python' on Windows, where

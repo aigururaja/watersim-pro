@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Simulation worker entry (worker_threads)
+ * SafeCrit — Simulation worker entry (worker_threads)
  *
  * Runs one simulation and posts the result back to the parent.
  * The simulation engine is pure (no DB / express imports), so this file

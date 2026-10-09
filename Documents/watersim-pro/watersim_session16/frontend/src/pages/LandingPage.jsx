@@ -1,5 +1,5 @@
 /**
- * LandingPage — the public front door at "/": what SafeKrit is, its three
+ * LandingPage — the public front door at "/": what SafeCrit is, its three
  * surfaces with real screens of the product, the reference plant, how an
  * alarm becomes work, who sees what, what it connects to, and the way in.
  *
@@ -150,11 +150,11 @@ export default function LandingPage({ dialog: initialDialog = null, installPromp
       {/* Header */}
       <header className="sticky top-0 z-30 bg-ground/90 backdrop-blur border-b border-line/70">
         <div className="mx-auto max-w-[1200px] px-5 md:px-8 h-16 flex items-center gap-3">
-          <Link to="/" className="flex items-center gap-2.5 min-w-0" aria-label="SafeKrit home">
+          <Link to="/" className="flex items-center gap-2.5 min-w-0" aria-label="SafeCrit home">
             <span className="w-9 h-9 rounded-xl bg-ink text-white flex items-center justify-center flex-shrink-0" aria-hidden="true">
               <Droplets className="w-[18px] h-[18px]" />
             </span>
-            <span className="font-extrabold text-lg tracking-tight">SafeKrit</span>
+            <span className="font-extrabold text-lg tracking-tight">SafeCrit</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 ml-8 text-sm font-medium text-ink-2" aria-label="Sections">
             <a href="#surfaces" className="hover:text-ink">Product</a>
@@ -178,7 +178,7 @@ export default function LandingPage({ dialog: initialDialog = null, installPromp
               <span className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold bg-white border border-line text-ink-2">
                 <ShieldCheck className="w-3.5 h-3.5 text-accent" aria-hidden="true" /> Plant operations platform
               </span>
-              <h1 className="mt-5 text-[40px] md:text-[56px] font-extrabold tracking-tight leading-[1.05]">SafeKrit</h1>
+              <h1 className="mt-5 text-[40px] md:text-[56px] font-extrabold tracking-tight leading-[1.05]">SafeCrit</h1>
               <p className="mt-2 text-[22px] md:text-[26px] font-bold tracking-tight leading-tight">
                 Run the plant you have. Model the plant you want.
               </p>
@@ -189,7 +189,7 @@ export default function LandingPage({ dialog: initialDialog = null, installPromp
               </p>
               <div className="mt-8 flex flex-wrap gap-3">{doors(true)}</div>
               <button type="button" onClick={openInstall} className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-2 hover:text-ink">
-                <Smartphone className="w-4 h-4" aria-hidden="true" /> Install the SafeKrit app
+                <Smartphone className="w-4 h-4" aria-hidden="true" /> Install the SafeCrit app
               </button>
               <dl className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4" aria-label="At a glance">
                 {PROOF.map((p) => (
@@ -200,12 +200,12 @@ export default function LandingPage({ dialog: initialDialog = null, installPromp
                 ))}
               </dl>
             </div>
-            <Shot src="/landing/dashboard.jpg" alt="The SafeKrit administration dashboard: plant at a glance, approvals, team, integrations, notifications and PLC health" eager />
+            <Shot src="/landing/dashboard.jpg" alt="The SafeCrit administration dashboard: plant at a glance, approvals, team, integrations, notifications and PLC health" eager />
           </div>
         </section>
 
         {/* Surfaces */}
-        <section id="surfaces" className="mx-auto max-w-[1200px] px-5 md:px-8 py-10 md:py-14" aria-label="What SafeKrit does">
+        <section id="surfaces" className="mx-auto max-w-[1200px] px-5 md:px-8 py-10 md:py-14" aria-label="What SafeCrit does">
           <div className="max-w-[720px] mb-8 md:mb-12">
             <div className="stat-label">Product</div>
             <h2 className="text-[28px] md:text-[36px] font-extrabold tracking-tight leading-tight mt-1">Three surfaces, one plant</h2>
@@ -353,7 +353,7 @@ export default function LandingPage({ dialog: initialDialog = null, installPromp
         <section className="mx-auto max-w-[1200px] px-5 md:px-8 pb-14" aria-label="Get started">
           <div className="rounded-3xl bg-ink text-white p-8 md:p-12 flex flex-wrap items-center justify-between gap-6">
             <div className="max-w-[620px]">
-              <h2 className="text-[26px] md:text-[32px] font-extrabold tracking-tight leading-tight">See your plant in SafeKrit</h2>
+              <h2 className="text-[26px] md:text-[32px] font-extrabold tracking-tight leading-tight">See your plant in SafeCrit</h2>
               <p className="text-white/70 mt-2">Register your organisation, invite the team, connect a PLC or start with the simulator.</p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -372,11 +372,11 @@ export default function LandingPage({ dialog: initialDialog = null, installPromp
 
       <footer className="border-t border-line">
         <div className="mx-auto max-w-[1200px] px-5 md:px-8 py-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-ink-3">
-          <span className="font-semibold text-ink inline-flex items-center gap-2"><Droplets className="w-4 h-4" aria-hidden="true" /> SafeKrit</span>
+          <span className="font-semibold text-ink inline-flex items-center gap-2"><Droplets className="w-4 h-4" aria-hidden="true" /> SafeCrit</span>
           <span>Process simulation, live plant monitoring and maintenance.</span>
           <span className="inline-flex items-center gap-1"><LineChart className="w-3.5 h-3.5" aria-hidden="true" /> Operations · Twin · Maintenance</span>
           <span className="inline-flex items-center gap-1"><Activity className="w-3.5 h-3.5" aria-hidden="true" /> Modbus · OPC UA · S7 · EtherNet/IP</span>
-          <span className="ml-auto">© {new Date().getFullYear()} SafeKrit</span>
+          <span className="ml-auto">© {new Date().getFullYear()} SafeCrit</span>
         </div>
       </footer>
 

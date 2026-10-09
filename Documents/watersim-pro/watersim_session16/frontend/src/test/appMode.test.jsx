@@ -59,7 +59,7 @@ describe('isInstalledApp', () => {
   });
 
   it('is true inside a native wrapper that names itself in the user agent', () => {
-    setUA('Mozilla/5.0 (iPhone) AppleWebKit/605 SafeKrit-iOS/1.0');
+    setUA('Mozilla/5.0 (iPhone) AppleWebKit/605 SafeCrit-iOS/1.0');
     expect(isInstalledApp()).toBe(true);
   });
 });
@@ -128,14 +128,14 @@ describe('InstallAppDialog per platform', () => {
 
   it('Android without one-tap install: the app file and the steps', () => {
     mount({ platform: 'android' });
-    const d = screen.getByRole('dialog', { name: 'Install the SafeKrit app' });
+    const d = screen.getByRole('dialog', { name: 'Install the SafeCrit app' });
     expect(within(d).getByTestId('apk-download')).toHaveTextContent('Download for Android');
     expect(within(d).getByText(/Allow installs from your browser/)).toBeInTheDocument();
   });
 
   it('iPhone: Share, then Add to Home Screen', () => {
     mount({ platform: 'ios' });
-    const d = screen.getByRole('dialog', { name: 'Install the SafeKrit app' });
+    const d = screen.getByRole('dialog', { name: 'Install the SafeCrit app' });
     expect(within(d).getByText(/tap Share/)).toBeInTheDocument();
     expect(within(d).getByText(/Add to Home Screen/)).toBeInTheDocument();
     expect(within(d).queryByTestId('apk-download')).toBeNull();
@@ -149,7 +149,7 @@ describe('InstallAppDialog per platform', () => {
     act(() => { window.dispatchEvent(event); });
     mount({ platform: 'desktop' });
     await userEvent.click(screen.getByTestId('install-app'));
-    expect(await screen.findByText('SafeKrit is installed')).toBeInTheDocument();
+    expect(await screen.findByText('SafeCrit is installed')).toBeInTheDocument();
     expect(screen.getByText(/Start menu, Dock or desktop/)).toBeInTheDocument();
   });
 });

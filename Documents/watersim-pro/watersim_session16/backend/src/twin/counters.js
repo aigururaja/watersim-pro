@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Equipment counters (Phase 4)
+ * SafeCrit — Equipment counters (Phase 4)
  *
  * Run hours, starts and trips per drive per day, derived from the historian:
  * every XS (run status) and XA (trip) sample since the last pass, walked in

@@ -36,7 +36,7 @@ export default function AuthDialog({ mode = 'login', onClose, onModeChange }) {
       <div ref={trapRef} className="relative w-full sm:max-w-[480px] bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-float ws-page-enter">
         <div className="flex items-center justify-between px-6 pt-5 pb-1">
           <span className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold bg-ink text-white">
-            <Droplets className="w-3.5 h-3.5" aria-hidden="true" /> SafeKrit
+            <Droplets className="w-3.5 h-3.5" aria-hidden="true" /> SafeCrit
           </span>
           <button type="button" onClick={onClose} aria-label="Close"
             className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-ground text-ink hover:bg-line transition">

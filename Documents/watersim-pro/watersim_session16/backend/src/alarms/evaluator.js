@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Alarm evaluator
+ * SafeCrit — Alarm evaluator
  *
  * Two layers:
  *

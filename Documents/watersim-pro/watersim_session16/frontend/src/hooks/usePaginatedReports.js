@@ -1,5 +1,5 @@
 /**
- * SafeKrit — usePaginatedReports
+ * SafeCrit — usePaginatedReports
  * Session 16: Performance — cursor-based infinite scroll for the reports list.
  *
  * Replaces the old page/offset approach with a stable cursor so:

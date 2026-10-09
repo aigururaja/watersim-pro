@@ -1,5 +1,5 @@
 /**
- * SafeKrit — roles and capabilities (client mirror).
+ * SafeCrit — roles and capabilities (client mirror).
  *
  * This is a copy of `backend/src/auth/roles.js`, kept identical by
  * `frontend/src/test/roles.test.js`, which reads the backend file and asserts

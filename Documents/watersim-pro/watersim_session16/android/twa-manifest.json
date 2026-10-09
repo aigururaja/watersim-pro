@@ -1,8 +1,8 @@
 {
   "packageId": "com.inferconautomation.safekrit",
   "host": "dt.inferconautomation.com",
-  "name": "SafeKrit",
-  "launcherName": "SafeKrit",
+  "name": "SafeCrit",
+  "launcherName": "SafeCrit",
   "display": "standalone",
   "themeColor": "#16181D",
   "navigationColor": "#16181D",
@@ -19,8 +19,8 @@
     "path": "C:\\Users\\prade\\.safekrit-android\\safekrit-upload.jks",
     "alias": "safekrit"
   },
-  "appVersionCode": 1,
-  "appVersion": "1.0.0",
+  "appVersionCode": 2,
+  "appVersion": "1.0.1",
   "shortcuts": [
     {
       "name": "Live plant",

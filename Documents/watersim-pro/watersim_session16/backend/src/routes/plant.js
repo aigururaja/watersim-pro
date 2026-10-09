@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Plant definition API
+ * SafeCrit — Plant definition API
  *
  * Mounted at: /api/v1/plant
  *

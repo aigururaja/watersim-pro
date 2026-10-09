@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * SafeKrit's WhatsApp templates on the Meta WhatsApp Business Account —
+ * SafeCrit's WhatsApp templates on the Meta WhatsApp Business Account —
  * submit them for review, watch their status, preview what they will say.
  *
  *   node scripts/whatsapp-templates.js list       catalogue, and each template's review status on the WABA
@@ -85,7 +85,7 @@ async function list() {
     const rows = have.filter((h) => h.name === t.name);
     if (!rows.length) { console.log(`  ${t.name.padEnd(24)} not submitted yet`); continue; }
     for (const r of rows) {
-      const paramNote = r.params !== 2 ? ` (takes ${r.params} parameters — SafeKrit sends 2)` : '';
+      const paramNote = r.params !== 2 ? ` (takes ${r.params} parameters — SafeCrit sends 2)` : '';
       console.log(`  ${r.name.padEnd(24)} ${String(r.language).padEnd(6)} ${r.status}${paramNote}${r.reason ? ` — ${r.reason}` : ''}`);
     }
   }
@@ -149,7 +149,7 @@ async function submit() {
 /**
  * delete --only <name> --yes: remove one template (every language of that
  * name) from the WABA — for retiring a superseded template, e.g. the
- * watersim_* set after the safekrit_* set was approved and mapped. Refuses
+ * watersim_* set after the safecrit_* set was approved and mapped. Refuses
  * a template the current WHATSAPP_TEMPLATES mapping still points at.
  */
 async function deleteTemplate() {

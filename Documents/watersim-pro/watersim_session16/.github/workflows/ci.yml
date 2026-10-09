@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# SafeKrit — CI Pipeline
+# SafeCrit — CI Pipeline
 # Runs on every push and pull request to main / develop.
 #
 # Jobs:

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Outbox worker
+ * SafeCrit — Outbox worker
  *
  * Drains notification_outbox: claims due rows with SKIP LOCKED (so a second
  * process could run alongside), hands each to its channel adapter, and marks

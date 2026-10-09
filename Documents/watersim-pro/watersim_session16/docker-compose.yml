@@ -1,4 +1,4 @@
-# SafeKrit — Local Development Stack
+# SafeCrit — Local Development Stack
 # Usage:
 #   docker compose up          # start all services (migrations run automatically)
 #   docker compose up -d       # detached

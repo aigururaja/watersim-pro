@@ -1,5 +1,5 @@
 /**
- * SafeKrit — ReportPage
+ * SafeCrit — ReportPage
  * Full-page simulation report viewer with permit compliance, cost breakdown,
  * effluent quality table, unit operation metrics, and PDF export.
  *
@@ -691,7 +691,7 @@ export default function ReportPage() {
             <p className="text-sm text-ink-3">Default parameters used for all nodes.</p>
           )}
           <p className="text-[10px] text-ink-3 mt-4 border-t border-line pt-3">
-            This report is generated automatically by SafeKrit. Results should be reviewed by a
+            This report is generated automatically by SafeCrit. Results should be reviewed by a
             qualified engineer before use in design or regulatory submissions.
           </p>
         </Section>

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ─────────────────────────────────────────────────────────────
-# SafeKrit — Backend Development Dockerfile
+# SafeCrit — Backend Development Dockerfile
 #
 # This is an npm-workspaces monorepo with a SINGLE root package-lock.json.
 # Build context MUST be the repo root:

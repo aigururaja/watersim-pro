@@ -1,4 +1,4 @@
-# WaterSim Pro (being renamed SafeKrit) — project knowledge for every Claude session
+# WaterSim Pro (being renamed SafeCrit) — project knowledge for every Claude session
 
 This file is the shared memory of the project. Claude Code loads it automatically
 for any session opened in this directory or below. Everything here was learned
@@ -9,11 +9,11 @@ edit this file in the same commit.
 Last updated: 9 Sep 2026 (branch `session17-remediation`, HEAD `b459738`).
 
 **Product rename in progress (9 Sep 2026).** At 10:22 IST another session
-began renaming the product from *WaterSim Pro* to **SafeKrit** across the
+began renaming the product from *WaterSim Pro* to **SafeCrit** across the
 working tree: 165 tracked files, uncommitted at the time of writing, covering
 the README title, the page `<title>`, package descriptions, every source
 header and the WhatsApp template names in the catalogue (`watersim_alert` →
-`safekrit_alert` and the other three). Identifiers that still carry the old
+`safecrit_alert` and the other three). Identifiers that still carry the old
 name and were not renamed: the GitHub repo `watersim-pro`, the npm packages
 `@watersim/*`, the `X-WaterSim-Signature` webhook header, the CMMS settings
 `WATERSIM_*`, and on the VPS the service user, paths, `watersim-backend.service`,
@@ -23,6 +23,23 @@ must be re-submitted under the new names, or `WHATSAPP_TEMPLATES` must map to
 the names Meta actually holds. Second, this file says "WaterSim Pro" wherever a
 path or identifier still does. Confirm the final spelling with the user before
 adding new brand strings; the contractor in the proposal is spelled *Safekrite*.
+
+**Spelling settled: SafeCrit (9 Oct 2026).** The user asked for *SafeKrit* to
+become **SafeCrit** everywhere. Renamed: every display string, the WhatsApp
+template names (`safecrit_*`), the service-worker cache, the APK download
+(`/downloads/safecrit.apk`), the Android launcher name and the landing
+screenshots. Kept on purpose: the Android package id
+`com.inferconautomation.safekrit` and the signing key path and alias (a new
+package id would be a different app that cannot update installed ones and
+would break `assetlinks.json`). `appMode.js` accepts both `SafeCrit-` and
+`SafeKrit-` user-agent tokens. The contractor *Safekrite* is a company name and
+was not changed. The APK is published under both `downloads/safecrit.apk` and
+the old `downloads/safekrit.apk` (nginx answers a missing file with index.html
+at 200, so a dead link would hand out a web page named .apk). **WhatsApp:** Meta
+holds APPROVED templates named `safekrit_*` and the host's `WHATSAPP_TEMPLATES`
+maps exactly those; the adapter sends whatever that mapping names, so the
+`safecrit_*` catalogue is not live yet. Submit it, wait until `list` shows all
+four APPROVED, and only then switch the host mapping and retire the old set.
 
 ---
 
@@ -322,7 +339,7 @@ Deployed bare-metal (no Docker) per `docs/RUNBOOK-deploy-ubuntu.md`, first on
   `WHATSAPP_TEMPLATES={"alarm.raised":"watersim_alarm_raised","alarm.cleared":"watersim_alarm_cleared","task.":"watersim_task_update","*":"watersim_alert"}`
   on the host. Meta refuses a body that begins or ends with a variable or
   stacks two; the catalogue's `check()` mirrors those rules. The 9 Sep 2026
-  rename changes these four names to `safekrit_*` in the working tree while
+  rename changes these four names to `safecrit_*` in the working tree while
   Meta holds the `watersim_*` submissions; see the rename note at the top.
 - Meta delivery receipts and replies arrive on `POST /api/v1/webhooks/whatsapp`;
   a reply from a phone marks that channel verified. `NOTIFICATIONS_DRY_RUN=true`
@@ -459,13 +476,13 @@ tokens and classes live in `frontend/tailwind.config.js` and
   --skipVersionUpgrade` then `build --skipPwaValidation`, passing the password
   in `BUBBLEWRAP_KEYSTORE_PASSWORD` and `BUBBLEWRAP_KEY_PASSWORD` and masking
   it in the output. Copy `app-release-signed.apk` to
-  `frontend/public/downloads/safekrit.apk`; the landing page links to it.
+  `frontend/public/downloads/safecrit.apk`; the landing page links to it.
   Raise `appVersionCode` for every release. Runbook section 17 has the
   procedure for people.
 - **App mode vs browser (17 Sep 2026).** `frontend/src/utils/appMode.js`
   decides whether the page runs as an installed app: a standalone display,
   the Android app's `android-app://` referrer on the first page, or a
-  `SafeKrit-Android` / `SafeKrit-iOS` token in a native wrapper's user agent
+  `SafeCrit-Android` / `SafeCrit-iOS` token in a native wrapper's user agent
   (the iOS wrapper being built on the Mac should add it). In app mode `/`
   goes to the dashboard and `/login` / `/register` render
   `components/auth/AuthScreen.jsx`; the landing page never appears. In a

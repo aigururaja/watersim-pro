@@ -1,5 +1,5 @@
 /**
- * SafeKrit — PLC binding API
+ * SafeCrit — PLC binding API
  * Mounted at /api/v1/projects/:projectId/flowsheets/:flowsheetId (same base
  * as simulate), so the paths are:
  *

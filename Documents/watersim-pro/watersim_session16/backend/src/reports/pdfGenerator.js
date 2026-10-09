@@ -1,5 +1,5 @@
 /**
- * SafeKrit — PDF Report Generator
+ * SafeCrit — PDF Report Generator
  *
  * Generates a professional engineering report PDF from a completed simulation
  * run. Delegates to a Python script (reportlab) via the hardened runner in

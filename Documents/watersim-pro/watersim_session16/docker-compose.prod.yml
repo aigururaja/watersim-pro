@@ -1,4 +1,4 @@
-# SafeKrit — Production Docker Compose
+# SafeCrit — Production Docker Compose
 #
 # Prerequisites:
 #   1. Create .env.prod from .env.prod.example and populate all values

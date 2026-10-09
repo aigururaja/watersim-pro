@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Audit logging
+ * SafeCrit — Audit logging
  *
  * Writes to the audit_logs table (migration 001):
  *   organisation_id UUID NOT NULL, user_id UUID NULL, action VARCHAR(100),

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — role dashboards
+ * SafeCrit — role dashboards
  *
  * Mounted at: /api/v1/dashboard
  *

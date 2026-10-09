@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Report Routes
+ * SafeCrit — Report Routes
  *
  * GET  /projects/:projectId/flowsheets/:flowsheetId/simulate/:runId/report
  *      → Returns structured report JSON (used by the frontend ReportPage)

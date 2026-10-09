@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Development Seed
+ * SafeCrit — Development Seed
  * Run: npm run seed  (from backend/ directory)
  */
 require('dotenv').config();
@@ -10,7 +10,7 @@ const { seedItcStp } = require('./itcStp');
 const ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
 
 async function seed() {
-  console.log('\n▶  Seeding SafeKrit development data…\n');
+  console.log('\n▶  Seeding SafeCrit development data…\n');
 
   // ── Organisation ────────────────────────────────────────────────────────
   const { rows: [org] } = await query(`
@@ -18,7 +18,7 @@ async function seed() {
     VALUES ($1, $2)
     ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
     RETURNING id, name, slug
-  `, ['SafeKrit Demo Org', 'demo-org']);
+  `, ['SafeCrit Demo Org', 'demo-org']);
   console.log(`   ✔  Organisation  : ${org.name}  (${org.id})`);
 
   // ── Admin user ───────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — ITC sewage treatment plant seed.
+ * SafeCrit — ITC sewage treatment plant seed.
  *
  * Creates the plant as a working project: the organisation, its users, the full
  * flowsheet from the schematic, the reuse permit template, and alarm rules

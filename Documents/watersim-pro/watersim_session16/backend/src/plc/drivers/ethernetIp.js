@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Allen-Bradley EtherNet/IP driver (real, via the Python bridge)
+ * SafeCrit — Allen-Bradley EtherNet/IP driver (real, via the Python bridge)
  *
  * Backed by pycomm3's LogixDriver (CIP, ControlLogix/CompactLogix) through
  * backend/src/plc/bridge/plc_bridge.py. Availability is probed at runtime by

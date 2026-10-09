@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Digital twin API (Phase 4)
+ * SafeCrit — Digital twin API (Phase 4)
  *
  * Mounted at: /api/v1/twin
  *

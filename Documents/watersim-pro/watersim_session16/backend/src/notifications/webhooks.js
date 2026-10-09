@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Outbound webhooks (Phase 5)
+ * SafeCrit — Outbound webhooks (Phase 5)
  *
  * queueWebhooks() writes one outbox row (channel 'webhook') per enabled
  * endpoint whose event types match, carrying the event document as its body.

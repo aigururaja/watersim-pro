@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Preview (live-mode) simulation tests
+ * SafeCrit — Preview (live-mode) simulation tests
  *
  * Covers:
  *  - preview: true runs the solver but creates NO simulation_runs row

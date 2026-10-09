@@ -1,5 +1,5 @@
 /**
- * SafeKrit — LivePlantPage
+ * SafeCrit — LivePlantPage
  * The screen on the wall. Every process area of the plant with its measured
  * points, its drives drawn by the canvas's own symbols in their measured
  * state, the active alarms, the health of every PLC link, the maintenance

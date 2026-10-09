@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Inbound from the CMMS (Phase 5)
+ * SafeCrit — Inbound from the CMMS (Phase 5)
  *
  * Mounted at: /api/v1/cmms · API key with scope workorders:write
  *

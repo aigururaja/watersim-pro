@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# SafeKrit — First-time TLS bootstrap (docker compose deployment)
+# SafeCrit — First-time TLS bootstrap (docker compose deployment)
 #
 # Usage:   ./scripts/init-tls.sh <domain> <email>
 # Example: ./scripts/init-tls.sh app.watersim.example.com ops@example.com

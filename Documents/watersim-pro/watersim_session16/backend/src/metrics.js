@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Prometheus metrics
+ * SafeCrit — Prometheus metrics
  *
  * Exposes:
  *   - default Node.js process metrics (CPU, memory, event-loop lag, GC, ...)

@@ -506,7 +506,7 @@ export default function NotificationsTab({ showToast }) {
             </button>
           </div>
           <p className="text-xs text-ink-3">
-            Outside a 24-hour reply window Meta delivers only approved templates. SafeKrit fills two parameters — the subject and the details —
+            Outside a 24-hour reply window Meta delivers only approved templates. SafeCrit fills two parameters — the subject and the details —
             so a template mapped in <span className="font-mono">WHATSAPP_TEMPLATES</span> must take exactly two.
           </p>
           {templates?.error && <div role="alert" className="text-xs text-danger bg-danger-soft border border-danger/30 rounded-xl px-3 py-2">{templates.error}</div>}
@@ -524,7 +524,7 @@ export default function NotificationsTab({ showToast }) {
                       <td className="px-3 py-2"><span data-status={t.status} className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${TEMPLATE_STATUS[t.status] || 'text-ink-2 bg-ground border-line'}`}>{t.status}</span></td>
                       <td className="px-3 py-2">{t.language}</td>
                       <td className="px-3 py-2">{t.category}</td>
-                      <td className={`px-3 py-2 ${t.mappedTo?.length && t.params !== 2 ? 'text-red-600 font-semibold' : ''}`} title={t.mappedTo?.length && t.params !== 2 ? 'SafeKrit sends two parameters; Meta will refuse this template' : ''}>{t.params}</td>
+                      <td className={`px-3 py-2 ${t.mappedTo?.length && t.params !== 2 ? 'text-red-600 font-semibold' : ''}`} title={t.mappedTo?.length && t.params !== 2 ? 'SafeCrit sends two parameters; Meta will refuse this template' : ''}>{t.params}</td>
                       <td className="px-3 py-2 font-mono">{t.mappedTo?.length ? t.mappedTo.join(', ') : <span className="text-ink-3">—</span>}</td>
                     </tr>
                   ))}

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — AuditPage
+ * SafeCrit — AuditPage
  * The organisation's audit trail: who did what, to which record, when — and
  * which automated source (poller, evaluator) did it when nobody was logged in.
  *
@@ -301,7 +301,7 @@ export default function AuditPage() {
           <EmptyState
             icon={ShieldAlert}
             title="Audit trail is admin-only"
-            description="Every change in SafeKrit is recorded, but reading the trail is reserved for administrators. Ask an admin if you need an export."
+            description="Every change in SafeCrit is recorded, but reading the trail is reserved for administrators. Ask an admin if you need an export."
             action={{ label: 'Back to dashboard', href: '/dashboard' }}
           />
         </div>

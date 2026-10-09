@@ -1,5 +1,5 @@
 /**
- * SafeKrit — PLC connection API   (mounted at /api/v1/plc)
+ * SafeCrit — PLC connection API   (mounted at /api/v1/plc)
  *
  *   GET    /protocols            — registered protocol descriptors
  *   GET    /connections          — org's connections (passwords masked)

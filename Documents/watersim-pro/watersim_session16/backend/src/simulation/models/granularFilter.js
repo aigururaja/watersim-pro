@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Granular Media Filter  (Session 8 — Step 38)
+ * SafeCrit — Granular Media Filter  (Session 8 — Step 38)
  *
  * Models a dual-media (anthracite + sand) or mono-media sand filter
  * for tertiary TSS / turbidity polishing prior to disinfection.

@@ -1,5 +1,5 @@
 /**
- * SafeKrit — Historian
+ * SafeCrit — Historian
  *
  * Owns the sample tables created by migration 011. Three responsibilities:
  *

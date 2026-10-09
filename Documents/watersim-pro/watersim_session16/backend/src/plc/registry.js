@@ -1,5 +1,5 @@
 /**
- * SafeKrit — PLC driver registry
+ * SafeCrit — PLC driver registry
  *
  * Every driver self-describes via its descriptor:
  *   { protocol, label, status: 'available'|'stub', configFields: [...], addressHint }

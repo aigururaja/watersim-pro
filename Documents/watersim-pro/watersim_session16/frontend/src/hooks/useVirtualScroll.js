@@ -1,5 +1,5 @@
 /**
- * SafeKrit — useVirtualScroll
+ * SafeCrit — useVirtualScroll
  * Session 16: Performance — virtual scrolling for large data tables.
  *
  * Usage:

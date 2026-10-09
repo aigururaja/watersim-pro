@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 /**
- * Design tokens — the SafeKrit console look, shared with the Capacity Network
+ * Design tokens — the SafeCrit console look, shared with the Capacity Network
  * admin console: near-black primary actions and sidebar, a soft grey ground,
  * white cards with a 20px radius and a soft shadow, a teal accent, and one
  * soft/strong pair per tone (ok / warn / danger).

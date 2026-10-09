@@ -1,5 +1,5 @@
 /**
- * SafeKrit — P&ID reader
+ * SafeCrit — P&ID reader
  *
  * Reads a picture of a P&ID with Claude (vision) and proposes a flowsheet:
  * the process equipment as unit blocks the solver can run, the lines between
