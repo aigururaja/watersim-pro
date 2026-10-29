@@ -130,12 +130,12 @@ describe('readPid on Ollama', () => {
   });
   // A streamed answer: the content split over several lines, cut mid-line
   // between network chunks, and a closing line with done_reason.
-  const streamed = (content) => {
+  const streamed = (content, doneReason = 'stop') => {
     const half = Math.floor(content.length / 2);
     const ndjson = [
       { message: { content: content.slice(0, half) }, done: false },
       { message: { content: content.slice(half) }, done: false },
-      { model: 'qwen2.5vl:7b', message: { content: '' }, done: true, done_reason: 'stop' },
+      { model: 'qwen2.5vl:7b', message: { content: '' }, done: true, done_reason: doneReason },
     ].map((l) => JSON.stringify(l)).join('\n') + '\n';
     const bytes = new TextEncoder().encode(ndjson);
     const cut = Math.floor(bytes.length / 3);
@@ -167,6 +167,28 @@ describe('readPid on Ollama', () => {
     await expect(readPid(PNG)).rejects.toThrow(/ollama pull qwen2.5vl:7b/);
     pidReader.ollamaIo.post.mockResolvedValueOnce(streamed('not json'));
     await expect(readPid(PNG)).rejects.toThrow(/No flowsheet could be read/);
+  });
+
+  it('keeps what was read when the answer is cut off', async () => {
+    const full = JSON.stringify(PLANT_REPORT);
+    const cut = full.slice(0, full.indexOf('"connections"') + 40);   // part way into the lines
+    pidReader.ollamaIo.post.mockResolvedValueOnce(streamed(cut, 'length'));
+    const p = await readPid(PNG);
+    expect(p.units).toHaveLength(5);
+    expect(p.warnings.join(' ')).toMatch(/cut short/);
+    // cut before any unit: a clear error
+    pidReader.ollamaIo.post.mockResolvedValueOnce(streamed('{"units":[{"id":"u1","ty', 'length'));
+    await expect(readPid(PNG)).rejects.toThrow(/before it listed any equipment/);
+    const body = JSON.parse(pidReader.ollamaIo.post.mock.calls[0][2]);
+    expect(body.format.properties.skipped.maxItems).toBeGreaterThan(0);
+  });
+
+  it('refuses an answer that only copies out the block catalogue', async () => {
+    const units = pidReader.UNIT_TYPES.slice(0, 20).map((type, i) => ({
+      id: `u${i + 1}`, type, label: type, bbox_2d: [10, 10, 20, 20], params: [],
+    }));
+    pidReader.ollamaIo.post.mockResolvedValueOnce(streamed(JSON.stringify({ units, connections: [], skipped: [], notes: '' })));
+    await expect(readPid(PNG)).rejects.toThrow(/listed its block catalogue/);
   });
 
   it('reads one drawing at a time and caps the answer length', async () => {
@@ -273,4 +295,25 @@ describe('POST …/background/read', () => {
     expect(res.body.units).toHaveLength(5);
     expect(res.body.connections).toHaveLength(4);
   });
+
+  it('answers 202 while a long read runs and hands the result to the poll', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    let finish;
+    mockCreate.mockReturnValue(new Promise((r) => { finish = r; }));
+    const started = await request(app).post(`${base}/read`).set('Authorization', `Bearer ${token}`);
+    expect(started.status).toBe(202);
+    const again = await request(app).post(`${base}/read`).set('Authorization', `Bearer ${token}`);
+    expect(again.status).toBe(202);
+    expect(mockCreate).toHaveBeenCalledTimes(1);   // the running read is joined, not restarted
+    expect((await request(app).get(`${base}/read`).set('Authorization', `Bearer ${token}`)).status).toBe(202);
+    finish({
+      model: 'claude-opus-5', stop_reason: 'tool_use',
+      content: [{ type: 'tool_use', id: 't1', name: 'report_flowsheet', input: PLANT_REPORT }],
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const done = await request(app).get(`${base}/read`).set('Authorization', `Bearer ${token}`);
+    expect(done.status).toBe(200);
+    expect(done.body.units).toHaveLength(5);
+    expect((await request(app).get(`${base}/read`).set('Authorization', `Bearer ${token}`)).status).toBe(404);
+  }, 20_000);
 });

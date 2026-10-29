@@ -82,6 +82,28 @@ describe('PidImport', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('keeps polling while a long read runs, then shows the result', async () => {
+    const proposal = {
+      units: [{ id: 'u1', type: 'inlet', label: 'Raw Sewage', x: 0.1, y: 0.5, params: {} }],
+      connections: [], skipped: [], warnings: [], notes: '',
+    };
+    api.get.mockImplementation(async (u) => (u.endsWith('/read')
+      ? (api.get.mock.calls.filter(([x]) => x.endsWith('/read')).length < 2
+        ? { status: 202, data: { status: 'reading' } } : { status: 200, data: proposal })
+      : { status: 200, data: STORED }));
+    api.post.mockResolvedValue({ status: 202, data: { status: 'reading' } });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mount();
+      fireEvent.click(await screen.findByRole('button', { name: /Build diagram/ }));
+      await vi.advanceTimersByTimeAsync(7000);
+      await screen.findByRole('dialog');
+      expect(screen.getByText('Raw Sewage')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('uploading', () => {
     // jsdom cannot decode images or draw on a canvas: stand in for both.
     let restore;

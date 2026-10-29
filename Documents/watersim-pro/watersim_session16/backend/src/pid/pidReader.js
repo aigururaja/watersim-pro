@@ -34,7 +34,7 @@ const { MODELS, PALETTE_TYPE_MAP } = require('../simulation/solver');
 
 const DEFAULT_MODEL = 'claude-opus-5';
 const DEFAULT_OLLAMA_MODEL = 'qwen2.5vl:7b';
-const OLLAMA_MAX_TOKENS = 2500;
+const OLLAMA_MAX_TOKENS = 3500;
 const TOOL_NAME = 'report_flowsheet';
 
 /**
@@ -167,7 +167,7 @@ Call ${TOOL_NAME} exactly once with the result.`;
 // model reports boxes and boxesToFractions() turns them into x, y.
 const OLLAMA_SYSTEM_PROMPT = `${PROMPT_BODY}
 
-Answer with one JSON object and nothing else. It has four keys: "units" (each with id, type, label, bbox_2d, params), "connections" (each with from and to, the ids of two units), "skipped" (each with label and reason) and "notes" (a string). "type" must be one of the block names listed above. bbox_2d is the box around the drawn item as [x1, y1, x2, y2] in pixels of the image. Be brief: ids like "u1", a reason of a few words for each skipped item, params only for numbers actually written next to the item (key Q for a flow), notes empty unless something needs checking.`;
+Answer with one JSON object and nothing else. It has four keys: "units" (each with id, type, label, bbox_2d, params), "connections" (each with from and to, the ids of two units), "skipped" (each with label and reason, at most 12, group similar items such as "instruments" or "valves" into one entry) and "notes" (a string). "type" must be one of the block names listed above. bbox_2d is the box around the drawn item as [x1, y1, x2, y2] in pixels of the image. Be brief: ids like "u1", a reason of a few words for each skipped item, params only for numbers actually written next to the item (key Q for a flow), notes empty unless something needs checking.`;
 
 // The report schema with each unit's x, y replaced by a pixel box.
 const OLLAMA_SCHEMA = (() => {
@@ -180,6 +180,12 @@ const OLLAMA_SCHEMA = (() => {
     description: 'Box around the drawn item, [x1, y1, x2, y2] in pixels of the image.',
   };
   unit.required = unit.required.filter((k) => k !== 'x' && k !== 'y').concat('bbox_2d');
+  // Caps keep a small model from looping on one list until it runs out of
+  // answer length (Ollama's grammar enforces maxItems).
+  s.properties.units.maxItems = 40;
+  s.properties.connections.maxItems = 60;
+  s.properties.skipped.maxItems = 12;
+  unit.properties.params.maxItems = 4;
   return s;
 })();
 
@@ -364,8 +370,8 @@ async function callOllama(base64, signal) {
       model,
       stream: true,
       format: OLLAMA_SCHEMA,
-      // num_predict stops a model that loops on its JSON; a plant answer is
-      // well under 1000 tokens.
+      // num_predict stops a model that loops on its JSON; a cut-off answer
+      // keeps what was read (closeTruncatedJson).
       options: { temperature: 0, num_ctx: 8192, num_predict: OLLAMA_MAX_TOKENS },
       messages: [
         { role: 'system', content: OLLAMA_SYSTEM_PROMPT },
@@ -411,16 +417,75 @@ async function callOllama(base64, signal) {
     throw failed(err, true);
   }
 
-  if (last.done_reason === 'length') {
-    throw new PidReadError('The local model ran past its answer length on this drawing. Crop it to the part you want to simulate and try again.');
-  }
+  // A busy drawing can run past num_predict; keep everything read up to the
+  // cut (units come first in the answer, then lines, then the skipped list).
+  const cutOff = last.done_reason === 'length';
   let raw;
   try {
     raw = JSON.parse(content);
   } catch {
-    throw new PidReadError('No flowsheet could be read from this picture. Check that it is a P&ID and is clearly legible.');
+    raw = cutOff ? closeTruncatedJson(content) : null;
   }
-  return { ...normalizeProposal(boxesToFractions(raw)), model: last.model || model };
+  if (!raw || !Array.isArray(raw.units) || !raw.units.length) {
+    throw new PidReadError(cutOff
+      ? 'The local model ran past its answer length before it listed any equipment. Crop the drawing to the part you want to simulate and try again.'
+      : 'No flowsheet could be read from this picture. Check that it is a P&ID and is clearly legible.');
+  }
+  if (recitesCatalogue(raw.units)) {
+    throw new PidReadError('The local model could not make sense of this drawing: it listed its block catalogue instead of the equipment drawn. Crop the picture to the main process equipment and try again, or use the larger model.');
+  }
+  const proposal = normalizeProposal(boxesToFractions(raw));
+  if (cutOff) {
+    proposal.warnings = [...(proposal.warnings || []),
+      'The drawing was large for the local model and its answer was cut short: check for missing blocks or lines.'];
+  }
+  return { ...proposal, model: last.model || model };
+}
+
+/**
+ * True when a small model, lost on a drawing, copied out the block list from
+ * its prompt: a dozen or more types in the catalogue's own order.
+ */
+function recitesCatalogue(units) {
+  let last = -1;
+  let run = 0;
+  for (const u of units) {
+    const i = UNIT_TYPES.indexOf(u?.type);
+    if (i > last) { run++; last = i; }
+  }
+  return run >= 12;
+}
+
+/**
+ * Parse JSON that stops part way: cut after the last complete value and close
+ * whatever is still open. Returns null when nothing usable is left.
+ */
+function closeTruncatedJson(textIn) {
+  const cuts = [];   // [index after a closed value, open brackets at that point]
+  const stack = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < textIn.length; i++) {
+    const c = textIn[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}' || c === ']') {
+      stack.pop();
+      cuts.push([i + 1, stack.join('')]);
+    }
+  }
+  for (let k = cuts.length - 1; k >= 0 && k >= cuts.length - 400; k--) {
+    const [at, open] = cuts[k];
+    const close = [...open].reverse().map((b) => (b === '{' ? '}' : ']')).join('');
+    try {
+      return JSON.parse(textIn.slice(0, at) + close);
+    } catch { /* try an earlier cut */ }
+  }
+  return null;
 }
 
 const clamp01 = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5);

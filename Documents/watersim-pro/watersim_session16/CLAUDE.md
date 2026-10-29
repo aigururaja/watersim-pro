@@ -359,7 +359,12 @@ by the user on 29 Oct 2026 for speed (~2 min a drawing, misreads more; the
 in both env files). CPU only, so slow either way ( so the request is streamed over node:http;
 fetch drops a response with no headers after 300 s). One read at a time
 (a second gets 409), a browser that leaves cancels its read, and
-`num_predict` caps a looping answer. The server reaches it through ngrok at
+`num_predict` caps a looping answer (a cut-off answer keeps what was read; an
+answer that just copies the block catalogue, which the 3B does on a busy
+drawing such as a three-phase separator, is refused). The read is a job: POST
+`…/background/read` answers 202 while it runs and the browser polls GET every
+3 s (one long request was dropped by browsers as "Request aborted"); a job
+not polled for 60 s is cancelled. The server reaches it through ngrok at
 `https://chump-scandal-snitch.ngrok-free.dev` with basic auth `OLLAMA_AUTH`
 (in `backend/.env`, never print it); start the tunnel with
 `backend/scripts/ollama-tunnel.ps1`. After killing ngrok wait ~15 s before

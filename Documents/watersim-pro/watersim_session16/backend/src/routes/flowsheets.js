@@ -278,6 +278,70 @@ router.put('/:id/background', requireRole('engineer'), [
   } catch (err) { next(err); }
 });
 
+// A read on the local model takes minutes, longer than browsers and mobile
+// networks keep a silent request open ("Request aborted"). So a read runs as a
+// job: POST starts it and answers with the result if it is done within a few
+// seconds, otherwise 202 { status: 'reading' }; the browser then polls GET
+// until it gets the result or the error. A job nobody has polled for a while
+// is cancelled, so an abandoned read does not hold the model.
+const pidJobs = new Map();   // flowsheetId -> { promise, result, seen, gone }
+const PID_ANSWER_WAIT_MS = 5_000;
+const PID_ABANDON_MS = 60_000;
+
+/** The HTTP status and body for a failed read. */
+function pidFailure(err) {
+  if (err instanceof pidReader.PidReadError) return [err.status, { error: err.message }];
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return [503, { error: 'The Anthropic API key was rejected. Check ANTHROPIC_API_KEY in backend/.env.', code: 'PID_READER_BAD_KEY' }];
+  }
+  if (err instanceof Anthropic.RateLimitError) return [429, { error: 'The AI service is busy. Wait a minute and try again.' }];
+  if (err instanceof Anthropic.APIConnectionError) {
+    return [502, { error: 'Could not reach the AI service. Check the internet connection and try again.' }];
+  }
+  if (err instanceof Anthropic.APIError) {
+    logger.error('P&ID read failed', { status: err.status, message: err.message });
+    return [502, { error: `The AI service returned an error (${err.status ?? 'unknown'}). Try again.` }];
+  }
+  logger.error('P&ID read failed', { message: err?.message });
+  return [500, { error: 'The reading failed. Try again.' }];
+}
+
+function startPidJob(req, imageData) {
+  const id = req.params.id;
+  const gone = new AbortController();
+  const job = { result: null, seen: Date.now(), gone };
+  const started = Date.now();
+  const watch = setInterval(() => {
+    if (Date.now() - job.seen > PID_ABANDON_MS) gone.abort();
+  }, 10_000);
+  watch.unref?.();
+  job.promise = pidReader.readPid(imageData, { signal: gone.signal })
+    .then((proposal) => {
+      auditLog(req, 'flowsheet.background.read', 'flowsheet', id, {
+        units: proposal.units.length, connections: proposal.connections.length, model: proposal.model,
+      });
+      logger.info('P&ID read', { flowsheetId: id, units: proposal.units.length, ms: Date.now() - started });
+      job.result = [200, proposal];
+    })
+    .catch((err) => { job.result = pidFailure(err); })
+    .finally(() => {
+      clearInterval(watch);
+      // Keep a finished result a while for the poll that collects it.
+      setTimeout(() => { if (pidJobs.get(id) === job) pidJobs.delete(id); }, 10 * 60_000).unref?.();
+    });
+  pidJobs.set(id, job);
+  return job;
+}
+
+/** Answer with the job's result (and forget it), or 202 while it runs. */
+function answerPidJob(req, res, job) {
+  job.seen = Date.now();
+  if (!job.result) return res.status(202).json({ status: 'reading' });
+  pidJobs.delete(req.params.id);
+  const [status, body] = job.result;
+  res.status(status).json(body);
+}
+
 // POST /api/v1/projects/:projectId/flowsheets/:id/background/read (engineer+)
 // Reads the stored P&ID picture with Claude or the local Ollama model and returns a PROPOSED flowsheet
 // (units, connections, skipped items). Nothing is saved: the canvas shows the
@@ -292,35 +356,29 @@ router.post('/:id/background/read', requireRole('engineer'), [param('id').isUUID
         code: 'PID_READER_NOT_CONFIGURED',
       });
     }
-    const r = await query('SELECT image_data FROM flowsheet_backgrounds WHERE flowsheet_id = $1', [req.params.id]);
-    if (!r.rows[0]) return res.status(404).json({ error: 'Upload a P&ID picture first' });
-
-    // A browser that leaves (or reloads) cancels a local-model read, so an
-    // abandoned read does not hold the model for the next one.
-    const gone = new AbortController();
-    res.on('close', () => { if (!res.writableEnded) gone.abort(); });
-    const started = Date.now();
-    const proposal = await pidReader.readPid(r.rows[0].image_data, { signal: gone.signal });
-    auditLog(req, 'flowsheet.background.read', 'flowsheet', req.params.id, {
-      units: proposal.units.length, connections: proposal.connections.length, model: proposal.model,
-    });
-    logger.info('P&ID read', { flowsheetId: req.params.id, units: proposal.units.length, ms: Date.now() - started });
-    res.json(proposal);
+    let job = pidJobs.get(req.params.id);
+    if (!job || job.result) {   // a finished, uncollected job is replaced by a new read
+      const r = await query('SELECT image_data FROM flowsheet_backgrounds WHERE flowsheet_id = $1', [req.params.id]);
+      if (!r.rows[0]) return res.status(404).json({ error: 'Upload a P&ID picture first' });
+      job = startPidJob(req, r.rows[0].image_data);
+    }
+    await Promise.race([job.promise, new Promise((r) => setTimeout(r, PID_ANSWER_WAIT_MS).unref?.())]);
+    answerPidJob(req, res, job);
   } catch (err) {
-    if (err instanceof pidReader.PidReadError) return res.status(err.status).json({ error: err.message });
-    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-      return res.status(503).json({ error: 'The Anthropic API key was rejected. Check ANTHROPIC_API_KEY in backend/.env.', code: 'PID_READER_BAD_KEY' });
-    }
-    if (err instanceof Anthropic.RateLimitError) {
-      return res.status(429).json({ error: 'The AI service is busy. Wait a minute and try again.' });
-    }
-    if (err instanceof Anthropic.APIConnectionError) {
-      return res.status(502).json({ error: 'Could not reach the AI service. Check the internet connection and try again.' });
-    }
-    if (err instanceof Anthropic.APIError) {
-      logger.error('P&ID read failed', { status: err.status, message: err.message });
-      return res.status(502).json({ error: `The AI service returned an error (${err.status ?? 'unknown'}). Try again.` });
-    }
+    next(err);
+  }
+});
+
+// GET /api/v1/projects/:projectId/flowsheets/:id/background/read (engineer+)
+// Poll a running read: 202 while it runs, then the result or the error once.
+router.get('/:id/background/read', requireRole('engineer'), [param('id').isUUID()], async (req, res, next) => {
+  if (vErr(req, res)) return;
+  try {
+    if (!await flowsheetInOrg(req)) return res.status(404).json({ error: 'Flowsheet not found' });
+    const job = pidJobs.get(req.params.id);
+    if (!job) return res.status(404).json({ error: 'No reading is running for this drawing. Press Build diagram to start one.' });
+    answerPidJob(req, res, job);
+  } catch (err) {
     next(err);
   }
 });

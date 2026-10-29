@@ -26,6 +26,8 @@ import api from '../../services/api';
 import { PID_ACCEPT, uploadPidPicture, pidErrorText } from '../../utils/pidImage';
 import { TAG } from './symbols';
 
+const PID_POLL_MS = 3000;
+
 const PidImport = forwardRef(function PidImport({ projectId, flowsheetId, onBuild, autoRead = false, onAutoRead }, ref) {
   const url = `/projects/${projectId}/flowsheets/${flowsheetId}/background`;
   const [pid, setPid] = useState(null);         // { width, height, fileName, placement }
@@ -34,6 +36,8 @@ const PidImport = forwardRef(function PidImport({ projectId, flowsheetId, onBuil
   const [reading, setReading] = useState(false);
   const [proposal, setProposal] = useState(null); // AI reading awaiting review
   const fileRef = useRef(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,8 +55,15 @@ const PidImport = forwardRef(function PidImport({ projectId, flowsheetId, onBuil
   const readDrawing = async () => {
     setReading(true); setError(null);
     try {
-      const { data } = await api.post(`${url}/read`);
-      setProposal(data);
+      // A local-model read takes minutes: the server answers 202 while it
+      // runs and the result is collected by polling.
+      let res = await api.post(`${url}/read`);
+      while (res.status === 202) {
+        await new Promise((r) => setTimeout(r, PID_POLL_MS));
+        if (!mounted.current) return;
+        res = await api.get(`${url}/read`);
+      }
+      setProposal(res.data);
     } catch (err) {
       setError(pidErrorText(err));
     } finally {
