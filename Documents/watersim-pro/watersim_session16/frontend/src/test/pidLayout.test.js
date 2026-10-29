@@ -40,6 +40,18 @@ describe('layoutPidUnits', () => {
     expect(pos.u4.x - pos.u3.x).toBe(CELL_W);
   });
 
+  it('moves clear of blocks already on the sheet, and stays put when there are none nearby', () => {
+    const units = [{ id: 'u1', x: 0.1, y: 0.5 }, { id: 'u2', x: 0.5, y: 0.5 }];
+    const box = { w: 1200, h: 800 };
+    const alone = layoutPidUnits(units, chain(2), box);
+    const existing = [{ ...alone.u1 }, { ...alone.u2 }];   // the same blocks built before
+    const pos = layoutPidUnits(units, chain(2), box, existing);
+    expect(noOverlap({ ...pos, e1: existing[0], e2: existing[1] })).toBe(true);
+    expect(pos.u2.x - pos.u1.x).toBe(alone.u2.x - alone.u1.x);   // arrangement kept
+    const far = layoutPidUnits(units, chain(2), box, [{ x: 5000, y: 5000 }]);
+    expect(far).toEqual(alone);
+  });
+
   it('stacks branches in one column and survives a recycle loop', () => {
     const units = ['u1', 'u2', 'u3', 'u4'].map((id) => ({ id, x: 0.5, y: 0.5 }));
     const connections = [{ from: 'u1', to: 'u2' }, { from: 'u1', to: 'u3' }, { from: 'u2', to: 'u4' }, { from: 'u4', to: 'u2' }];

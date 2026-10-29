@@ -20,9 +20,22 @@ const MAX_STRETCH = 4;
  * @param {{id:string,x:number,y:number}[]} units  x, y as fractions of the picture
  * @param {{from:string,to:string}[]} connections
  * @param {{w:number,h:number,ox?:number,oy?:number}} box  the picture on the sheet
+ * @param {{x:number,y:number}[]} [existing]  top-left of cards already on the
+ *   sheet; if the new set would touch any of them it moves right, past them all
  * @returns {Record<string,{x:number,y:number}>}  top-left of each card
  */
-export function layoutPidUnits(units, connections, { w, h, ox = 0, oy = 0 }) {
+export function layoutPidUnits(units, connections, box, existing = []) {
+  const out = layoutFresh(units, connections, box);
+  const fresh = Object.values(out);
+  const touches = fresh.some((a) => existing.some((b) =>
+    Math.abs(a.x - b.x) < CELL_W && Math.abs(a.y - b.y) < CELL_H));
+  if (!touches) return out;
+  const shift = Math.max(...existing.map((b) => b.x)) + CELL_W - Math.min(...fresh.map((a) => a.x));
+  for (const p of fresh) p.x += shift;
+  return out;
+}
+
+function layoutFresh(units, connections, { w, h, ox = 0, oy = 0 }) {
   if (!units.length) return {};
   const centres = units.map((u) => ({ id: u.id, x: u.x * w, y: u.y * h }));
 

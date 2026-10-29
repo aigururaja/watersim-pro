@@ -1318,7 +1318,8 @@ export default function CanvasPage() {
     const ox = pl?.x ?? 0;
     const oy = pl?.y ?? 0;
     const idMap = {};
-    const placed = layoutPidUnits(proposal.units, proposal.connections, { w, h, ox, oy });
+    const placed = layoutPidUnits(proposal.units, proposal.connections, { w, h, ox, oy },
+      nodesRef.current.map((n) => n.position).filter(Boolean));
     const newNodes = proposal.units.map((u) => {
       const id = getId();
       idMap[u.id] = id;
