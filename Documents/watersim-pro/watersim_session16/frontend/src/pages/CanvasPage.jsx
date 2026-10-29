@@ -56,6 +56,7 @@ import {
 import { NodeControlContext, NodeInfoContext, isControlOn } from '../components/canvas/controlState';
 import InfoTip, { InfoFacts } from '../components/InfoTip';
 import { OP_INFO, METRIC_INFO, paramInfo } from '../content/explanations';
+import { layoutPidUnits } from '../utils/pidLayout';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 //
@@ -1305,7 +1306,8 @@ export default function CanvasPage() {
   //
   // Each unit is laid out where it sits on the drawing (its position is a
   // fraction of the image, mapped onto the sheet through the picture's stored
-  // placement). Only parameter keys this block actually has are
+  // placement), spread apart by layoutPidUnits so cards never overlap. Only
+  // parameter keys this block actually has are
   // kept. With "Create & simulate", the effect below saves and then runs once
   // the new nodes are in state — the server simulates the SAVED flowsheet.
   const pendingSimulateRef = useRef(false);
@@ -1316,6 +1318,7 @@ export default function CanvasPage() {
     const ox = pl?.x ?? 0;
     const oy = pl?.y ?? 0;
     const idMap = {};
+    const placed = layoutPidUnits(proposal.units, proposal.connections, { w, h, ox, oy });
     const newNodes = proposal.units.map((u) => {
       const id = getId();
       idMap[u.id] = id;
@@ -1324,8 +1327,8 @@ export default function CanvasPage() {
       return {
         id,
         type: 'unitOp',
-        // Card centre on the item: cards are 168 x 116.
-        position: { x: Math.round(ox + u.x * w - 84), y: Math.round(oy + u.y * h - 58) },
+        // Where the item sits on the drawing, spread so no two cards overlap.
+        position: placed[u.id],
         data: { label: u.label, opType: u.type, params },
       };
     });
