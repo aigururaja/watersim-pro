@@ -11,9 +11,19 @@
  * canvas and solver accept before anything reaches the user. The proposal is
  * only a proposal: the canvas shows it for review and the user creates it.
  *
+ * Two providers read the picture. Claude answers through the tool; a local
+ * vision model on Ollama (usually reached through an ngrok tunnel to the PC
+ * that runs it) answers with JSON constrained to the same schema. Either way
+ * the answer goes through normalizeProposal().
+ *
  * Configuration (backend/.env):
- *   ANTHROPIC_API_KEY   required — without it the route answers 503
- *   PID_READER_MODEL    optional, default claude-opus-5
+ *   PID_READER_PROVIDER optional, "anthropic" or "ollama"; default ollama when
+ *                       OLLAMA_BASE_URL is set, otherwise anthropic
+ *   ANTHROPIC_API_KEY   needed for anthropic — without it the route answers 503
+ *   OLLAMA_BASE_URL     needed for ollama, e.g. https://<name>.ngrok-free.dev
+ *   OLLAMA_AUTH         optional "user:password" for the tunnel's basic auth
+ *   PID_READER_MODEL    optional, default claude-opus-5 / qwen2.5vl:7b
+ *   PID_READER_TIMEOUT_MS optional, default 600000 for ollama (CPU inference is slow)
  */
 'use strict';
 
@@ -21,6 +31,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { MODELS, PALETTE_TYPE_MAP } = require('../simulation/solver');
 
 const DEFAULT_MODEL = 'claude-opus-5';
+const DEFAULT_OLLAMA_MODEL = 'qwen2.5vl:7b';
 const TOOL_NAME = 'report_flowsheet';
 
 /**
@@ -133,16 +144,22 @@ const REPORT_TOOL = {
   },
 };
 
-const SYSTEM_PROMPT = `You read process and instrumentation diagrams (P&IDs) and turn them into a flowsheet for a steady-state process simulator.
+const PROMPT_BODY = `You read process and instrumentation diagrams (P&IDs) and turn them into a flowsheet for a steady-state process simulator.
 
 The simulator has these unit blocks:
 ${UNIT_CATALOGUE.map(([t, d]) => `- ${t}: ${d}`).join('\n')}
 
 How the flowsheet is used: each block computes flows and qualities from what enters it, so what matters is the main process equipment and the process lines between it. Valves (including control valves), bypasses, instruments and transmitters (LT, PT, FT, TT), controllers and control loops (LC, PC, FC), relief valves, drains, vents and utility lines do not change a steady-state mass balance: leave them out and list them under skipped with a short reason. Every stream that enters or leaves the drawing becomes an inlet or an outlet block, so each block has something upstream and downstream. Only use a block type when the drawing actually shows that equipment; when nothing in the catalogue fits a piece of equipment, list it under skipped rather than forcing a match.
 
-For each unit give its position as the centre of the drawn item in the image, as fractions of the image width and height. Connections follow the direction of flow. Only put numbers in params when they are written on the drawing.
+For each unit give its position as the centre of the drawn item in the image, as fractions of the image width and height. Connections follow the direction of flow. Only put numbers in params when they are written on the drawing.`;
+
+const SYSTEM_PROMPT = `${PROMPT_BODY}
 
 Call ${TOOL_NAME} exactly once with the result.`;
+
+const OLLAMA_SYSTEM_PROMPT = `${PROMPT_BODY}
+
+Answer with one JSON object and nothing else. It has four keys: "units" (each with id, type, label, x, y, params), "connections" (each with from and to, the ids of two units), "skipped" (each with label and reason) and "notes" (a string). "type" must be one of the block names listed above.`;
 
 class PidReadError extends Error {
   constructor(message, status = 422) {
@@ -152,9 +169,24 @@ class PidReadError extends Error {
   }
 }
 
-/** True when a credential is configured for the SDK to use. */
+/** "ollama" or "anthropic", from PID_READER_PROVIDER or what is configured. */
+function provider() {
+  const p = (process.env.PID_READER_PROVIDER || '').trim().toLowerCase();
+  if (p === 'ollama' || p === 'anthropic') return p;
+  return process.env.OLLAMA_BASE_URL ? 'ollama' : 'anthropic';
+}
+
+/** True when the chosen provider has what it needs to be called. */
 function isConfigured() {
+  if (provider() === 'ollama') return !!process.env.OLLAMA_BASE_URL;
   return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+}
+
+/** The message the route shows when isConfigured() is false. */
+function notConfiguredMessage() {
+  return provider() === 'ollama'
+    ? 'AI reading is not set up yet. Set OLLAMA_BASE_URL in backend/.env to the local model\'s address (the ngrok URL) and restart the server.'
+    : 'AI reading is not set up yet. Add ANTHROPIC_API_KEY to backend/.env and restart the server.';
 }
 
 let client = null;
@@ -173,6 +205,7 @@ const DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,(.+)$/;
 async function readPid(imageDataUrl) {
   const m = DATA_URL.exec(imageDataUrl || '');
   if (!m) throw new PidReadError('The stored picture is not a PNG, JPEG or WebP image.');
+  if (provider() === 'ollama') return readPidOllama(m[2]);
   const model = process.env.PID_READER_MODEL || DEFAULT_MODEL;
 
   const response = await getClient().beta.messages.create({
@@ -207,6 +240,97 @@ async function readPid(imageDataUrl) {
     throw new PidReadError('No flowsheet could be read from this picture. Check that it is a P&ID and is clearly legible.');
   }
   return { ...normalizeProposal(call.input), model: response.model };
+}
+
+/**
+ * Read the picture with a vision model on Ollama (/api/chat), the output
+ * held to the report schema by Ollama's structured outputs.
+ * @param {string} base64  the image bytes, base64
+ */
+async function readPidOllama(base64) {
+  const model = process.env.PID_READER_MODEL || DEFAULT_OLLAMA_MODEL;
+  const base = process.env.OLLAMA_BASE_URL.replace(/\/+$/, '');
+  const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' };
+  if (process.env.OLLAMA_AUTH) {
+    headers.Authorization = `Basic ${Buffer.from(process.env.OLLAMA_AUTH).toString('base64')}`;
+  }
+  const timeout = Number(process.env.PID_READER_TIMEOUT_MS) || 600_000;
+
+  let res;
+  try {
+    res = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers,
+      signal: AbortSignal.timeout(timeout),
+      // Streamed: on a CPU the answer takes minutes, and fetch gives up on a
+      // response whose headers have not arrived within 300 s.
+      body: JSON.stringify({
+        model,
+        stream: true,
+        format: REPORT_TOOL.input_schema,
+        options: { temperature: 0, num_ctx: 16384 },
+        messages: [
+          { role: 'system', content: OLLAMA_SYSTEM_PROMPT },
+          { role: 'user', content: 'Read this P&ID and report the flowsheet as JSON.', images: [base64] },
+        ],
+      }),
+    });
+  } catch (err) {
+    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+    throw new PidReadError(timedOut
+      ? 'The local model took too long to read this drawing. Crop it to the part you want to simulate and try again.'
+      : 'The local model could not be reached. Check that Ollama and the ngrok tunnel are running.', timedOut ? 504 : 503);
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new PidReadError('The local model refused the credentials. Check OLLAMA_AUTH against the ngrok tunnel.', 503);
+  }
+  if (!res.ok) {
+    const body = (await res.text().catch(() => '')).slice(0, 300);
+    if (/not found/i.test(body)) {
+      throw new PidReadError(`The local model "${model}" is not installed. Run: ollama pull ${model}`, 503);
+    }
+    throw new PidReadError(`The local model answered with an error (${res.status}). Check that Ollama and the ngrok tunnel are running.`, 502);
+  }
+
+  // One JSON object per line; the content arrives in pieces, the last line
+  // carries done_reason and the model name.
+  let content = '';
+  let last = {};
+  try {
+    const decoder = new TextDecoder();
+    let buf = '';
+    const take = (line) => {
+      if (!line.trim()) return;
+      const chunk = JSON.parse(line);
+      if (chunk.error) throw new PidReadError(`The local model failed: ${String(chunk.error).slice(0, 200)}`, 502);
+      content += chunk.message?.content || '';
+      last = chunk;
+    };
+    for await (const part of res.body) {
+      buf += decoder.decode(part, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      lines.forEach(take);
+    }
+    take(buf);
+  } catch (err) {
+    if (err instanceof PidReadError) throw err;
+    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+    throw new PidReadError(timedOut
+      ? 'The local model took too long to read this drawing. Crop it to the part you want to simulate and try again.'
+      : 'The connection to the local model broke off while it was reading. Try again.', timedOut ? 504 : 502);
+  }
+
+  if (last.done_reason === 'length') {
+    throw new PidReadError('The drawing is too large to read in one go. Crop it to the part you want to simulate.');
+  }
+  let raw;
+  try {
+    raw = JSON.parse(content);
+  } catch {
+    throw new PidReadError('No flowsheet could be read from this picture. Check that it is a P&ID and is clearly legible.');
+  }
+  return { ...normalizeProposal(raw), model: last.model || model };
 }
 
 const clamp01 = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5);
@@ -267,4 +391,7 @@ function normalizeProposal(raw) {
   return { units, connections, skipped, notes: text(raw?.notes, 1000), warnings };
 }
 
-module.exports = { readPid, normalizeProposal, isConfigured, PidReadError, UNIT_TYPES, REPORT_TOOL, SYSTEM_PROMPT };
+module.exports = {
+  readPid, normalizeProposal, isConfigured, notConfiguredMessage, provider,
+  PidReadError, UNIT_TYPES, REPORT_TOOL, SYSTEM_PROMPT,
+};

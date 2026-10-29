@@ -279,7 +279,7 @@ router.put('/:id/background', requireRole('engineer'), [
 });
 
 // POST /api/v1/projects/:projectId/flowsheets/:id/background/read (engineer+)
-// Reads the stored P&ID picture with Claude and returns a PROPOSED flowsheet
+// Reads the stored P&ID picture with Claude or the local Ollama model and returns a PROPOSED flowsheet
 // (units, connections, skipped items). Nothing is saved: the canvas shows the
 // proposal for review and the user creates the blocks.
 router.post('/:id/background/read', requireRole('engineer'), [param('id').isUUID()], async (req, res, next) => {
@@ -288,7 +288,7 @@ router.post('/:id/background/read', requireRole('engineer'), [param('id').isUUID
     if (!await flowsheetInOrg(req)) return res.status(404).json({ error: 'Flowsheet not found' });
     if (!pidReader.isConfigured()) {
       return res.status(503).json({
-        error: 'AI reading is not set up yet. Add ANTHROPIC_API_KEY to backend/.env and restart the server.',
+        error: pidReader.notConfiguredMessage(),
         code: 'PID_READER_NOT_CONFIGURED',
       });
     }

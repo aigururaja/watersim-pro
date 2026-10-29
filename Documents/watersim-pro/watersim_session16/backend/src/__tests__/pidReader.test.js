@@ -15,6 +15,13 @@ jest.mock('@anthropic-ai/sdk', () => {
 const pidReader = require('../pid/pidReader');
 const { normalizeProposal, readPid, PidReadError } = pidReader;
 
+// The Claude tests run on the anthropic provider whatever the dev .env
+// selects (it is loaded later, with the app); the Ollama tests set their own.
+beforeEach(() => {
+  process.env.PID_READER_PROVIDER = 'anthropic';
+  delete process.env.PID_READER_MODEL;
+});
+
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 // What Claude reports for a small activated-sludge P&ID.
@@ -99,6 +106,75 @@ describe('readPid', () => {
   it('refuses anything that is not a stored image', async () => {
     await expect(readPid('data:text/plain;base64,aGk=')).rejects.toBeInstanceOf(PidReadError);
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('readPid on Ollama', () => {
+  const saved = { ...process.env };
+  const realFetch = global.fetch;
+  beforeEach(() => {
+    process.env.PID_READER_PROVIDER = 'ollama';
+    process.env.OLLAMA_BASE_URL = 'https://example.ngrok-free.dev/';
+    process.env.OLLAMA_AUTH = 'safecrit:secret';
+    delete process.env.PID_READER_MODEL;
+    global.fetch = jest.fn();
+  });
+  afterEach(() => {
+    for (const k of ['PID_READER_PROVIDER', 'OLLAMA_BASE_URL', 'OLLAMA_AUTH', 'PID_READER_MODEL']) {
+      if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k];
+    }
+    global.fetch = realFetch;
+  });
+  const reply = (body, status = 200) => ({
+    ok: status < 300, status, json: async () => body, text: async () => JSON.stringify(body),
+  });
+  // A streamed answer: the content split over several lines, cut mid-line
+  // between network chunks, and a closing line with done_reason.
+  const streamed = (content) => {
+    const half = Math.floor(content.length / 2);
+    const ndjson = [
+      { message: { content: content.slice(0, half) }, done: false },
+      { message: { content: content.slice(half) }, done: false },
+      { model: 'qwen2.5vl:7b', message: { content: '' }, done: true, done_reason: 'stop' },
+    ].map((l) => JSON.stringify(l)).join('\n') + '\n';
+    const bytes = new TextEncoder().encode(ndjson);
+    const cut = Math.floor(bytes.length / 3);
+    return { ok: true, status: 200, body: [bytes.slice(0, cut), bytes.slice(cut)] };
+  };
+
+  it('sends the picture with the schema as format and checks the answer', async () => {
+    global.fetch.mockResolvedValue(streamed(JSON.stringify(PLANT_REPORT)));
+    const p = await readPid(PNG);
+    expect(p.units).toHaveLength(5);
+    expect(p.model).toBe('qwen2.5vl:7b');
+    expect(mockCreate).not.toHaveBeenCalled();
+
+    const [url, init] = global.fetch.mock.calls[0];
+    expect(url).toBe('https://example.ngrok-free.dev/api/chat');
+    expect(init.headers.Authorization).toBe(`Basic ${Buffer.from('safecrit:secret').toString('base64')}`);
+    const body = JSON.parse(init.body);
+    expect(body).toMatchObject({ model: 'qwen2.5vl:7b', stream: true });
+    expect(body.format.required).toEqual(['units', 'connections', 'skipped', 'notes']);
+    expect(body.messages[1].images[0]).not.toMatch(/^data:/);
+  });
+
+  it('explains an unreachable tunnel, bad credentials, a missing model and unreadable output', async () => {
+    global.fetch.mockRejectedValueOnce(new TypeError('fetch failed'));
+    await expect(readPid(PNG)).rejects.toThrow(/could not be reached/);
+    global.fetch.mockResolvedValueOnce(reply({}, 401));
+    await expect(readPid(PNG)).rejects.toThrow(/OLLAMA_AUTH/);
+    global.fetch.mockResolvedValueOnce(reply({ error: 'model "qwen2.5vl:7b" not found, try pulling it first' }, 404));
+    await expect(readPid(PNG)).rejects.toThrow(/ollama pull qwen2.5vl:7b/);
+    global.fetch.mockResolvedValueOnce(streamed('not json'));
+    await expect(readPid(PNG)).rejects.toThrow(/No flowsheet could be read/);
+  });
+
+  it('is configured by OLLAMA_BASE_URL alone', () => {
+    delete process.env.PID_READER_PROVIDER;
+    expect(pidReader.provider()).toBe('ollama');
+    expect(pidReader.isConfigured()).toBe(true);
+    delete process.env.OLLAMA_BASE_URL;
+    expect(pidReader.provider()).toBe('anthropic');
   });
 });
 

@@ -349,6 +349,20 @@ Deployed bare-metal (no Docker) per `docs/RUNBOOK-deploy-ubuntu.md`, first on
   login email and profile mobile. `POST /api/v1/notifications/subscriptions/defaults`
   installs the policy for all five roles.
 
+## 9a. P&ID reader on the local LLM (29 Oct 2026)
+
+"Import from P&ID" (`backend/src/pid/pidReader.js`) reads the picture with
+Claude, or with Ollama when `OLLAMA_BASE_URL` is set (`PID_READER_PROVIDER`
+forces one). The local model is `qwen2.5vl:7b` on this PC's Ollama (CPU only:
+about 4–5 minutes per drawing, so the request is streamed; plain fetch drops a
+response with no headers after 300 s). The server reaches it through ngrok at
+`https://chump-scandal-snitch.ngrok-free.dev` with basic auth `OLLAMA_AUTH`
+(in `backend/.env`, never print it); start the tunnel with
+`backend/scripts/ollama-tunnel.ps1`. After killing ngrok wait ~15 s before
+restarting, or the old endpoint keeps answering without the Host rewrite and
+Ollama replies 403. Production also needs the read route's nginx
+`proxy_read_timeout` raised above the current 120 s.
+
 ## 10. Looking at the UI without a browser session
 
 The user judges work by screenshots of the running app and asked for the plant
