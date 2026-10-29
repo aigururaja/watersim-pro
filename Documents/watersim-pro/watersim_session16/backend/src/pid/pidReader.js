@@ -154,15 +154,59 @@ ${UNIT_CATALOGUE.map(([t, d]) => `- ${t}: ${d}`).join('\n')}
 
 How the flowsheet is used: each block computes flows and qualities from what enters it, so what matters is the main process equipment and the process lines between it. Valves (including control valves), bypasses, instruments and transmitters (LT, PT, FT, TT), controllers and control loops (LC, PC, FC), relief valves, drains, vents and utility lines do not change a steady-state mass balance: leave them out and list them under skipped with a short reason. Every stream that enters or leaves the drawing becomes an inlet or an outlet block, so each block has something upstream and downstream. Only use a block type when the drawing actually shows that equipment; when nothing in the catalogue fits a piece of equipment, list it under skipped rather than forcing a match.
 
-For each unit give its position as the centre of the drawn item in the image, as fractions of the image width and height. Connections follow the direction of flow. Only put numbers in params when they are written on the drawing.`;
+Connections follow the direction of flow. Only put numbers in params when they are written on the drawing.`;
 
 const SYSTEM_PROMPT = `${PROMPT_BODY}
 
+For each unit give its position as the centre of the drawn item in the image, as fractions of the image width and height.
+
 Call ${TOOL_NAME} exactly once with the result.`;
 
+// Qwen-VL models locate things as pixel boxes (bbox_2d), which they were
+// trained on; asked for fractions they invent an even spacing. So the local
+// model reports boxes and boxesToFractions() turns them into x, y.
 const OLLAMA_SYSTEM_PROMPT = `${PROMPT_BODY}
 
-Answer with one JSON object and nothing else. It has four keys: "units" (each with id, type, label, x, y, params), "connections" (each with from and to, the ids of two units), "skipped" (each with label and reason) and "notes" (a string). "type" must be one of the block names listed above. Be brief: ids like "u1", a reason of a few words for each skipped item, params only for numbers actually written next to the item (key Q for a flow), notes empty unless something needs checking.`;
+Answer with one JSON object and nothing else. It has four keys: "units" (each with id, type, label, bbox_2d, params), "connections" (each with from and to, the ids of two units), "skipped" (each with label and reason) and "notes" (a string). "type" must be one of the block names listed above. bbox_2d is the box around the drawn item as [x1, y1, x2, y2] in pixels of the image. Be brief: ids like "u1", a reason of a few words for each skipped item, params only for numbers actually written next to the item (key Q for a flow), notes empty unless something needs checking.`;
+
+// The report schema with each unit's x, y replaced by a pixel box.
+const OLLAMA_SCHEMA = (() => {
+  const s = JSON.parse(JSON.stringify(REPORT_TOOL.input_schema));
+  const unit = s.properties.units.items;
+  delete unit.properties.x;
+  delete unit.properties.y;
+  unit.properties.bbox_2d = {
+    type: 'array', items: { type: 'integer' }, minItems: 4, maxItems: 4,
+    description: 'Box around the drawn item, [x1, y1, x2, y2] in pixels of the image.',
+  };
+  unit.required = unit.required.filter((k) => k !== 'x' && k !== 'y').concat('bbox_2d');
+  return s;
+})();
+
+/**
+ * Turn each unit's pixel box into the x, y fractions the canvas uses. The
+ * model's pixels are in its own resized frame, so the frame is taken from the
+ * boxes themselves (the furthest right and lowest edge); only the relative
+ * arrangement matters to the canvas. A unit without a usable box keeps no
+ * position and normalizeProposal centres it.
+ */
+function boxesToFractions(raw) {
+  const units = Array.isArray(raw?.units) ? raw.units : [];
+  const boxes = units.map((u) => {
+    const b = Array.isArray(u?.bbox_2d) ? u.bbox_2d.map(Number) : [];
+    return b.length === 4 && b.every(Number.isFinite) ? b : null;
+  });
+  const fx = Math.max(1, ...boxes.filter(Boolean).map((b) => Math.max(b[0], b[2])));
+  const fy = Math.max(1, ...boxes.filter(Boolean).map((b) => Math.max(b[1], b[3])));
+  return {
+    ...raw,
+    units: units.map((u, i) => {
+      const b = boxes[i];
+      if (!b) return u;
+      return { ...u, x: (b[0] + b[2]) / 2 / fx, y: (b[1] + b[3]) / 2 / fy };
+    }),
+  };
+}
 
 class PidReadError extends Error {
   constructor(message, status = 422) {
@@ -319,7 +363,7 @@ async function callOllama(base64, signal) {
     res = await ollamaIo.post(`${base}/api/chat`, headers, JSON.stringify({
       model,
       stream: true,
-      format: REPORT_TOOL.input_schema,
+      format: OLLAMA_SCHEMA,
       // num_predict stops a model that loops on its JSON; a plant answer is
       // well under 1000 tokens.
       options: { temperature: 0, num_ctx: 8192, num_predict: OLLAMA_MAX_TOKENS },
@@ -376,7 +420,7 @@ async function callOllama(base64, signal) {
   } catch {
     throw new PidReadError('No flowsheet could be read from this picture. Check that it is a P&ID and is clearly legible.');
   }
-  return { ...normalizeProposal(raw), model: last.model || model };
+  return { ...normalizeProposal(boxesToFractions(raw)), model: last.model || model };
 }
 
 const clamp01 = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5);
@@ -438,6 +482,6 @@ function normalizeProposal(raw) {
 }
 
 module.exports = {
-  readPid, normalizeProposal, isConfigured, notConfiguredMessage, provider, ollamaIo,
+  readPid, normalizeProposal, boxesToFractions, isConfigured, notConfiguredMessage, provider, ollamaIo,
   PidReadError, UNIT_TYPES, REPORT_TOOL, SYSTEM_PROMPT,
 };

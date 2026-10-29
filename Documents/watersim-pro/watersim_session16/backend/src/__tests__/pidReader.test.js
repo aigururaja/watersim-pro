@@ -193,6 +193,23 @@ describe('readPid on Ollama', () => {
     await expect(read).rejects.toMatchObject({ status: 499 });
   });
 
+  it('asks for pixel boxes and turns them into positions', async () => {
+    const boxed = {
+      ...PLANT_REPORT,
+      units: PLANT_REPORT.units.map(({ x: _x, y: _y, ...u }, i) => ({ ...u, bbox_2d: [i * 200, 100, i * 200 + 100, 200] })),
+    };
+    pidReader.ollamaIo.post.mockResolvedValue(streamed(JSON.stringify(boxed)));
+    const p = await readPid(PNG);
+    const body = JSON.parse(pidReader.ollamaIo.post.mock.calls[0][2]);
+    const unit = body.format.properties.units.items;
+    expect(unit.required).toContain('bbox_2d');
+    expect(unit.properties.x).toBeUndefined();
+    // frame is the furthest edge (900, 200): centres 50/900 .. 850/900, 150/200
+    expect(p.units[0].x).toBeCloseTo(50 / 900);
+    expect(p.units[4].x).toBeCloseTo(850 / 900);
+    expect(p.units.every((u) => u.y === 0.75)).toBe(true);
+  });
+
   it('is configured by OLLAMA_BASE_URL alone', () => {
     delete process.env.PID_READER_PROVIDER;
     expect(pidReader.provider()).toBe('ollama');

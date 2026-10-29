@@ -29,10 +29,32 @@ describe('layoutPidUnits', () => {
     expect(pos.u1.x).toBeLessThan(pos.u2.x);   // order kept
   });
 
-  it('falls back to flow order when units share a spot', () => {
+  it('follows the drawing on a small picture, rows and a lower pump included', () => {
+    // A train across the picture with the pump drawn lower, as on a P&ID.
     const units = [
-      { id: 'u1', x: 0.5, y: 0.5 }, { id: 'u2', x: 0.5, y: 0.5 },
-      { id: 'u3', x: 0.51, y: 0.5 }, { id: 'u4', x: 0.5, y: 0.52 },
+      { id: 'u1', x: 0.05, y: 0.5 }, { id: 'u2', x: 0.2, y: 0.5 }, { id: 'u3', x: 0.33, y: 0.5 },
+      { id: 'u4', x: 0.42, y: 0.62 }, { id: 'u5', x: 0.55, y: 0.5 }, { id: 'u6', x: 0.9, y: 0.25 },
+    ];
+    const pos = layoutPidUnits(units, chain(6), { w: 300, h: 170 });
+    expect(noOverlap(pos)).toBe(true);
+    const byX = Object.entries(pos).sort((a, b) => a[1].x - b[1].x).map(([id]) => id);
+    expect(byX).toEqual(['u1', 'u2', 'u3', 'u4', 'u5', 'u6']);   // left-to-right order kept
+    expect(pos.u1.y).toBe(pos.u2.y);                              // same row stays a row
+    expect(pos.u4.y).toBeGreaterThan(pos.u3.y);                   // the pump stays lower
+    expect(pos.u6.y).toBeLessThan(pos.u5.y);                      // and the high one higher
+  });
+
+  it('nudges apart two items read at the same spot without losing the rest', () => {
+    const units = [{ id: 'u1', x: 0.1, y: 0.5 }, { id: 'u2', x: 0.5, y: 0.5 }, { id: 'u3', x: 0.51, y: 0.5 }];
+    const pos = layoutPidUnits(units, chain(3), { w: 1200, h: 800 });
+    expect(noOverlap(pos)).toBe(true);
+    expect(pos.u1.y).toBe(pos.u2.y);
+  });
+
+  it('falls back to flow order when every unit is at one spot', () => {
+    const units = [
+      { id: 'u1', x: 1, y: 1 }, { id: 'u2', x: 1, y: 1 },
+      { id: 'u3', x: 1, y: 1 }, { id: 'u4', x: 1, y: 1 },
     ];
     const pos = layoutPidUnits(units, chain(4), { w: 600, h: 400 });
     expect(noOverlap(pos)).toBe(true);
@@ -53,7 +75,7 @@ describe('layoutPidUnits', () => {
   });
 
   it('stacks branches in one column and survives a recycle loop', () => {
-    const units = ['u1', 'u2', 'u3', 'u4'].map((id) => ({ id, x: 0.5, y: 0.5 }));
+    const units = ['u1', 'u2', 'u3', 'u4'].map((id) => ({ id, x: 0.5, y: 0.5 }));   // no positions: flow order
     const connections = [{ from: 'u1', to: 'u2' }, { from: 'u1', to: 'u3' }, { from: 'u2', to: 'u4' }, { from: 'u4', to: 'u2' }];
     const pos = layoutPidUnits(units, connections, { w: 600, h: 400 });
     expect(noOverlap(pos)).toBe(true);
