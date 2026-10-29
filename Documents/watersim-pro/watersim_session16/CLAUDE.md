@@ -354,8 +354,10 @@ Deployed bare-metal (no Docker) per `docs/RUNBOOK-deploy-ubuntu.md`, first on
 "Import from P&ID" (`backend/src/pid/pidReader.js`) reads the picture with
 Claude, or with Ollama when `OLLAMA_BASE_URL` is set (`PID_READER_PROVIDER`
 forces one). The local model is `qwen2.5vl:7b` on this PC's Ollama (CPU only:
-about 4–5 minutes per drawing, so the request is streamed; plain fetch drops a
-response with no headers after 300 s). The server reaches it through ngrok at
+about 4–5 minutes per drawing, so the request is streamed over node:http;
+fetch drops a response with no headers after 300 s). One read at a time
+(a second gets 409), a browser that leaves cancels its read, and
+`num_predict` caps a looping answer. The server reaches it through ngrok at
 `https://chump-scandal-snitch.ngrok-free.dev` with basic auth `OLLAMA_AUTH`
 (in `backend/.env`, never print it); start the tunnel with
 `backend/scripts/ollama-tunnel.ps1`. After killing ngrok wait ~15 s before
