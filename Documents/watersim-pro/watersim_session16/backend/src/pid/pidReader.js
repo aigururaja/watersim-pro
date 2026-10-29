@@ -27,11 +27,14 @@
  */
 'use strict';
 
+const http = require('http');
+const https = require('https');
 const Anthropic = require('@anthropic-ai/sdk');
 const { MODELS, PALETTE_TYPE_MAP } = require('../simulation/solver');
 
 const DEFAULT_MODEL = 'claude-opus-5';
 const DEFAULT_OLLAMA_MODEL = 'qwen2.5vl:7b';
+const OLLAMA_MAX_TOKENS = 2500;
 const TOOL_NAME = 'report_flowsheet';
 
 /**
@@ -159,7 +162,7 @@ Call ${TOOL_NAME} exactly once with the result.`;
 
 const OLLAMA_SYSTEM_PROMPT = `${PROMPT_BODY}
 
-Answer with one JSON object and nothing else. It has four keys: "units" (each with id, type, label, x, y, params), "connections" (each with from and to, the ids of two units), "skipped" (each with label and reason) and "notes" (a string). "type" must be one of the block names listed above.`;
+Answer with one JSON object and nothing else. It has four keys: "units" (each with id, type, label, x, y, params), "connections" (each with from and to, the ids of two units), "skipped" (each with label and reason) and "notes" (a string). "type" must be one of the block names listed above. Be brief: ids like "u1", a reason of a few words for each skipped item, params only for numbers actually written next to the item (key Q for a flow), notes empty unless something needs checking.`;
 
 class PidReadError extends Error {
   constructor(message, status = 422) {
@@ -200,12 +203,13 @@ const DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,(.+)$/;
 /**
  * Send the picture to Claude and return the normalised proposal.
  * @param {string} imageDataUrl  data:image/png|jpeg|webp;base64,...
+ * @param {{signal?: AbortSignal}} [opts]  signal cancels a local-model read
  * @returns {Promise<{units, connections, skipped, notes, warnings, model}>}
  */
-async function readPid(imageDataUrl) {
+async function readPid(imageDataUrl, { signal } = {}) {
   const m = DATA_URL.exec(imageDataUrl || '');
   if (!m) throw new PidReadError('The stored picture is not a PNG, JPEG or WebP image.');
-  if (provider() === 'ollama') return readPidOllama(m[2]);
+  if (provider() === 'ollama') return readPidOllama(m[2], signal);
   const model = process.env.PID_READER_MODEL || DEFAULT_MODEL;
 
   const response = await getClient().beta.messages.create({
@@ -243,43 +247,89 @@ async function readPid(imageDataUrl) {
 }
 
 /**
+ * POST to Ollama and hand back the response as a stream. Node's http client
+ * is used rather than fetch: on a CPU the first byte can take minutes, and
+ * fetch gives up on a response whose headers have not arrived within 300 s.
+ * Kept on an object so the tests can replace it.
+ */
+const ollamaIo = {
+  post(url, headers, body, signal) {
+    const lib = url.startsWith('https:') ? https : http;
+    return new Promise((resolve, reject) => {
+      const req = lib.request(url, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Length': Buffer.byteLength(body) },
+        signal,
+      }, (res) => resolve({
+        status: res.statusCode,
+        ok: res.statusCode >= 200 && res.statusCode < 300,
+        body: res,
+        text: async () => { let s = ''; for await (const c of res) s += c; return s; },
+      }));
+      req.on('error', reject);
+      req.end(body);
+    });
+  },
+};
+
+// The local model reads one drawing at a time (a CPU runs one request at a
+// time anyway); a second read while one runs would only queue behind it.
+let ollamaBusy = false;
+
+/**
  * Read the picture with a vision model on Ollama (/api/chat), the output
  * held to the report schema by Ollama's structured outputs.
  * @param {string} base64  the image bytes, base64
+ * @param {AbortSignal} [signal]  aborts the read, e.g. when the browser leaves
  */
-async function readPidOllama(base64) {
+async function readPidOllama(base64, signal) {
+  if (ollamaBusy) {
+    throw new PidReadError('The local model is already reading a drawing. Wait for it to finish (a few minutes) and try again.', 409);
+  }
+  ollamaBusy = true;
+  try {
+    return await callOllama(base64, signal);
+  } finally {
+    ollamaBusy = false;
+  }
+}
+
+async function callOllama(base64, signal) {
   const model = process.env.PID_READER_MODEL || DEFAULT_OLLAMA_MODEL;
   const base = process.env.OLLAMA_BASE_URL.replace(/\/+$/, '');
   const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' };
   if (process.env.OLLAMA_AUTH) {
     headers.Authorization = `Basic ${Buffer.from(process.env.OLLAMA_AUTH).toString('base64')}`;
   }
-  const timeout = Number(process.env.PID_READER_TIMEOUT_MS) || 600_000;
+  const timer = AbortSignal.timeout(Number(process.env.PID_READER_TIMEOUT_MS) || 600_000);
+  const abort = signal ? AbortSignal.any([timer, signal]) : timer;
+  const failed = (err, whileReading) => {
+    if (err instanceof PidReadError) return err;
+    if (timer.aborted) {
+      return new PidReadError('The local model took too long to read this drawing. Crop it to the part you want to simulate and try again.', 504);
+    }
+    if (signal?.aborted) return new PidReadError('The read was cancelled.', 499);
+    return whileReading
+      ? new PidReadError('The connection to the local model broke off while it was reading. Try again.', 502)
+      : new PidReadError('The local model could not be reached. Check that Ollama and the ngrok tunnel are running.', 503);
+  };
 
   let res;
   try {
-    res = await fetch(`${base}/api/chat`, {
-      method: 'POST',
-      headers,
-      signal: AbortSignal.timeout(timeout),
-      // Streamed: on a CPU the answer takes minutes, and fetch gives up on a
-      // response whose headers have not arrived within 300 s.
-      body: JSON.stringify({
-        model,
-        stream: true,
-        format: REPORT_TOOL.input_schema,
-        options: { temperature: 0, num_ctx: 16384 },
-        messages: [
-          { role: 'system', content: OLLAMA_SYSTEM_PROMPT },
-          { role: 'user', content: 'Read this P&ID and report the flowsheet as JSON.', images: [base64] },
-        ],
-      }),
-    });
+    res = await ollamaIo.post(`${base}/api/chat`, headers, JSON.stringify({
+      model,
+      stream: true,
+      format: REPORT_TOOL.input_schema,
+      // num_predict stops a model that loops on its JSON; a plant answer is
+      // well under 1000 tokens.
+      options: { temperature: 0, num_ctx: 8192, num_predict: OLLAMA_MAX_TOKENS },
+      messages: [
+        { role: 'system', content: OLLAMA_SYSTEM_PROMPT },
+        { role: 'user', content: 'Read this P&ID and report the flowsheet as JSON.', images: [base64] },
+      ],
+    }), abort);
   } catch (err) {
-    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
-    throw new PidReadError(timedOut
-      ? 'The local model took too long to read this drawing. Crop it to the part you want to simulate and try again.'
-      : 'The local model could not be reached. Check that Ollama and the ngrok tunnel are running.', timedOut ? 504 : 503);
+    throw failed(err, false);
   }
   if (res.status === 401 || res.status === 403) {
     throw new PidReadError('The local model refused the credentials. Check OLLAMA_AUTH against the ngrok tunnel.', 503);
@@ -314,15 +364,11 @@ async function readPidOllama(base64) {
     }
     take(buf);
   } catch (err) {
-    if (err instanceof PidReadError) throw err;
-    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
-    throw new PidReadError(timedOut
-      ? 'The local model took too long to read this drawing. Crop it to the part you want to simulate and try again.'
-      : 'The connection to the local model broke off while it was reading. Try again.', timedOut ? 504 : 502);
+    throw failed(err, true);
   }
 
   if (last.done_reason === 'length') {
-    throw new PidReadError('The drawing is too large to read in one go. Crop it to the part you want to simulate.');
+    throw new PidReadError('The local model ran past its answer length on this drawing. Crop it to the part you want to simulate and try again.');
   }
   let raw;
   try {
@@ -392,6 +438,6 @@ function normalizeProposal(raw) {
 }
 
 module.exports = {
-  readPid, normalizeProposal, isConfigured, notConfiguredMessage, provider,
+  readPid, normalizeProposal, isConfigured, notConfiguredMessage, provider, ollamaIo,
   PidReadError, UNIT_TYPES, REPORT_TOOL, SYSTEM_PROMPT,
 };

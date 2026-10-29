@@ -111,19 +111,19 @@ describe('readPid', () => {
 
 describe('readPid on Ollama', () => {
   const saved = { ...process.env };
-  const realFetch = global.fetch;
+  const realPost = pidReader.ollamaIo.post;
   beforeEach(() => {
     process.env.PID_READER_PROVIDER = 'ollama';
     process.env.OLLAMA_BASE_URL = 'https://example.ngrok-free.dev/';
     process.env.OLLAMA_AUTH = 'safecrit:secret';
     delete process.env.PID_READER_MODEL;
-    global.fetch = jest.fn();
+    pidReader.ollamaIo.post = jest.fn();
   });
   afterEach(() => {
     for (const k of ['PID_READER_PROVIDER', 'OLLAMA_BASE_URL', 'OLLAMA_AUTH', 'PID_READER_MODEL']) {
       if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k];
     }
-    global.fetch = realFetch;
+    pidReader.ollamaIo.post = realPost;
   });
   const reply = (body, status = 200) => ({
     ok: status < 300, status, json: async () => body, text: async () => JSON.stringify(body),
@@ -143,30 +143,54 @@ describe('readPid on Ollama', () => {
   };
 
   it('sends the picture with the schema as format and checks the answer', async () => {
-    global.fetch.mockResolvedValue(streamed(JSON.stringify(PLANT_REPORT)));
+    pidReader.ollamaIo.post.mockResolvedValue(streamed(JSON.stringify(PLANT_REPORT)));
     const p = await readPid(PNG);
     expect(p.units).toHaveLength(5);
     expect(p.model).toBe('qwen2.5vl:7b');
     expect(mockCreate).not.toHaveBeenCalled();
 
-    const [url, init] = global.fetch.mock.calls[0];
+    const [url, headers, sent] = pidReader.ollamaIo.post.mock.calls[0];
     expect(url).toBe('https://example.ngrok-free.dev/api/chat');
-    expect(init.headers.Authorization).toBe(`Basic ${Buffer.from('safecrit:secret').toString('base64')}`);
-    const body = JSON.parse(init.body);
+    expect(headers.Authorization).toBe(`Basic ${Buffer.from('safecrit:secret').toString('base64')}`);
+    const body = JSON.parse(sent);
     expect(body).toMatchObject({ model: 'qwen2.5vl:7b', stream: true });
     expect(body.format.required).toEqual(['units', 'connections', 'skipped', 'notes']);
     expect(body.messages[1].images[0]).not.toMatch(/^data:/);
   });
 
   it('explains an unreachable tunnel, bad credentials, a missing model and unreadable output', async () => {
-    global.fetch.mockRejectedValueOnce(new TypeError('fetch failed'));
+    pidReader.ollamaIo.post.mockRejectedValueOnce(Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }));
     await expect(readPid(PNG)).rejects.toThrow(/could not be reached/);
-    global.fetch.mockResolvedValueOnce(reply({}, 401));
+    pidReader.ollamaIo.post.mockResolvedValueOnce(reply({}, 401));
     await expect(readPid(PNG)).rejects.toThrow(/OLLAMA_AUTH/);
-    global.fetch.mockResolvedValueOnce(reply({ error: 'model "qwen2.5vl:7b" not found, try pulling it first' }, 404));
+    pidReader.ollamaIo.post.mockResolvedValueOnce(reply({ error: 'model "qwen2.5vl:7b" not found, try pulling it first' }, 404));
     await expect(readPid(PNG)).rejects.toThrow(/ollama pull qwen2.5vl:7b/);
-    global.fetch.mockResolvedValueOnce(streamed('not json'));
+    pidReader.ollamaIo.post.mockResolvedValueOnce(streamed('not json'));
     await expect(readPid(PNG)).rejects.toThrow(/No flowsheet could be read/);
+  });
+
+  it('reads one drawing at a time and caps the answer length', async () => {
+    let finish;
+    pidReader.ollamaIo.post.mockReturnValueOnce(new Promise((r) => { finish = r; }));
+    const first = readPid(PNG);
+    await expect(readPid(PNG)).rejects.toMatchObject({ status: 409 });
+    finish(streamed(JSON.stringify(PLANT_REPORT)));
+    await expect(first).resolves.toMatchObject({ model: 'qwen2.5vl:7b' });
+    const body = JSON.parse(pidReader.ollamaIo.post.mock.calls[0][2]);
+    expect(body.options.num_predict).toBeGreaterThan(0);
+    // the guard is released after a read
+    pidReader.ollamaIo.post.mockResolvedValueOnce(streamed(JSON.stringify(PLANT_REPORT)));
+    await expect(readPid(PNG)).resolves.toBeTruthy();
+  });
+
+  it('passes the cancel signal on and reports a cancelled read', async () => {
+    const gone = new AbortController();
+    pidReader.ollamaIo.post.mockImplementationOnce((url, h, b, signal) => new Promise((resolve, reject) => {
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    }));
+    const read = readPid(PNG, { signal: gone.signal });
+    gone.abort();
+    await expect(read).rejects.toMatchObject({ status: 499 });
   });
 
   it('is configured by OLLAMA_BASE_URL alone', () => {

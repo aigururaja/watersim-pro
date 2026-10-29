@@ -295,8 +295,12 @@ router.post('/:id/background/read', requireRole('engineer'), [param('id').isUUID
     const r = await query('SELECT image_data FROM flowsheet_backgrounds WHERE flowsheet_id = $1', [req.params.id]);
     if (!r.rows[0]) return res.status(404).json({ error: 'Upload a P&ID picture first' });
 
+    // A browser that leaves (or reloads) cancels a local-model read, so an
+    // abandoned read does not hold the model for the next one.
+    const gone = new AbortController();
+    res.on('close', () => { if (!res.writableEnded) gone.abort(); });
     const started = Date.now();
-    const proposal = await pidReader.readPid(r.rows[0].image_data);
+    const proposal = await pidReader.readPid(r.rows[0].image_data, { signal: gone.signal });
     auditLog(req, 'flowsheet.background.read', 'flowsheet', req.params.id, {
       units: proposal.units.length, connections: proposal.connections.length, model: proposal.model,
     });
