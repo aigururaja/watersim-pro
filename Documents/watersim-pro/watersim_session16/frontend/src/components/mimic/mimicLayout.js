@@ -26,7 +26,7 @@ export const FAMILY = {
   valve: 'valve',
   equalisation_tank: 'tank', tank: 'tank', sbr_reactor: 'tank', anaerobic_digester: 'tank',
   activated_carbon_filter: 'vessel', multigrade_filter: 'vessel', micron_filter: 'vessel', pressure_filter: 'vessel',
-  water_softener: 'vessel', sand_filter: 'vessel', granular_filter: 'vessel', uf_membrane: 'vessel', ro_membrane: 'vessel', gac_adsorption: 'vessel',
+  water_softener: 'vessel', three_phase_separator: 'vessel', sand_filter: 'vessel', granular_filter: 'vessel', uf_membrane: 'vessel', ro_membrane: 'vessel', gac_adsorption: 'vessel',
   instrument: 'instrument',
   chemical_dosing: 'dosing', polymer_dosing: 'dosing', coagulant_dosing: 'dosing', chlorination: 'dosing', ph_adjustment: 'dosing',
   oil_grease_trap: 'basin', screening: 'basin', grit_removal: 'basin', primary_clarifier: 'basin', secondary_clarifier: 'basin', thickener: 'basin',

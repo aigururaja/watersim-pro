@@ -50,6 +50,7 @@ const MODELS = {
   softener:         require('./models/waterSoftener'),
   grease_trap:      require('./models/oilGreaseTrap'),
   instrument:       require('./models/instrument'),
+  three_phase_sep:  require('./models/threePhaseSeparator'),
 };
 
 const PALETTE_TYPE_MAP = {
@@ -90,6 +91,7 @@ const PALETTE_TYPE_MAP = {
   water_softener: 'softener',
   sludge_centrifuge: 'thickener',
   instrument: 'instrument',
+  three_phase_separator: 'three_phase_sep',
 };
 
 /**
@@ -118,12 +120,14 @@ const PORT_ALIASES = {
   thickened: 'thickened', filtrate: 'filtrate', permeate: 'permeate',
   concentrate: 'concentrate', screenings: 'screenings',
   digestate: 'digestate', backwash: 'backwash', effluent: 'effluent',
+  // Three-phase separator outlets; its water is the primary effluent.
+  oil: 'oil', condensate: 'oil', gas: 'gas', vapor: 'gas', vapour: 'gas', water: 'effluent',
 };
 
 // Named output ports a model may emit (order matters only for reporting).
 const OUTPUT_PORTS = [
   'effluent', 'primarySludge', 'WAS', 'RAS', 'thickened', 'filtrate',
-  'permeate', 'concentrate', 'screenings', 'digestate', 'backwash',
+  'permeate', 'concentrate', 'screenings', 'digestate', 'backwash', 'oil', 'gas',
 ];
 
 /** The palette type as authored on the canvas, before any alias resolution. */

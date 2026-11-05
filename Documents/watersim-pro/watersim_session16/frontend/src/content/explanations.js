@@ -323,6 +323,14 @@ export const OP_INFO = {
     watchFor: 'regenerations_per_day above two means the resin bed is undersized for the hardness load — the softener will spend more of its day in regeneration than in service, and the salt bill and reject volume both climb with it. Softening also does not reduce dissolved solids: it exchanges one ion for another, so a soft water is not a low-TDS water.',
     animation: 'The regeneration clock is a dial position, not a rotation: the model gives regenerations per DAY, and a spinning hand would turn a daily count into an implied speed. The brine tank level is drawn dashed because nothing computes it — the model consumes salt per regeneration and knows nothing about what is left in the tank.',
   },
+  three_phase_separator: {
+    title: 'Three-Phase Separator (Gas / Oil / Water)',
+    tagline: 'A pressurised horizontal vessel that splits produced fluids into gas, oil and water.',
+    what: 'Feed enters a horizontal vessel held under pressure. Gas flashes off the top and passes a demister pad that strips the droplets out of it; the liquid settles into an oil layer floating on water. The oil spills over a weir into its own bucket, the water is drawn from below the interface, and each of the three outlets sits on its own level or pressure control loop.',
+    how: 'The solver carries water quality, not phases, so this block is an honest flow split rather than a flash calculation. Gas = feed × gas_fraction_pct and oil = feed × oil_fraction_pct; the oil outlet also carries the water given by water_in_oil_pct (BS&W), and the water outlet carries the oil given by oil_in_water_mg_L. With a liquid_volume_m3 set, retention_min = liquid volume ÷ liquid flow per minute, and a vessel below rated_retention_min carries proportionally more oil into its water (up to ten times). The water outlet keeps the feed quality; the gas and oil outlets carry flow, pH and temperature only.',
+    watchFor: 'The phase fractions are inputs, not results: take them from the well test or the heat and material balance, because this block cannot predict them. Watch retention_min against the design and oil_in_water_mg_L on the water outlet, which is what the water treatment downstream has to handle.',
+    animation: 'Nothing moves. The oil layer is drawn at a fixed depth with its tone set by oil_fraction_pct, because the model computes a split and never a level. The weir goes dashed when the vessel runs below its design retention.',
+  },
   sludge_centrifuge: {
     title: 'Decanter Centrifuge',
     tagline: 'Spins the water out of sludge so what leaves site is a cake, not a tanker of liquid.',
@@ -845,6 +853,50 @@ export const PARAM_INFO = {
     effect: 'Sets days_between_cleanout. It changes no removal figure — it tells you how often somebody has to attend, and a trap emptied slower than this passes everything it caught.',
   },
 
+  // ── Three-phase separator ──────────────────────────────────────────────────
+  gas_fraction_pct: {
+    meaning: 'Share of the feed volume, at operating conditions, that leaves the separator as gas.',
+    unit: '%',
+    typical: 'From the well test or heat and material balance; 5–40 % is common.',
+    effect: 'Sets the gas outlet flow directly. Gas and oil together are capped at 100 % of the feed, and whatever is left is water.',
+  },
+  oil_fraction_pct: {
+    meaning: 'Share of the feed volume that is oil.',
+    unit: '%',
+    typical: 'Falls as a field ages and the water cut rises; 10–70 % is common.',
+    effect: 'Sets the oil outlet flow, before the water carried with it and the oil lost to the water outlet.',
+  },
+  water_in_oil_pct: {
+    meaning: 'Water leaving with the oil, as a share of the oil outlet — the BS&W (basic sediment and water).',
+    unit: '%',
+    typical: '0.5–5 % from a working separator; export crude is usually held below 0.5 %.',
+    effect: 'Moves that much water from the water outlet to the oil outlet.',
+  },
+  oil_in_water_mg_L: {
+    meaning: 'Oil left in the water outlet when the vessel runs at its design retention.',
+    unit: 'mg/L',
+    typical: '200–2,000 mg/L from a three-phase separator; downstream water treatment brings it to discharge limits.',
+    effect: 'Moves that much oil into the water outlet. A vessel short of its design retention multiplies it.',
+  },
+  liquid_volume_m3: {
+    meaning: 'Liquid hold-up of the vessel: the volume below the normal liquid level.',
+    unit: 'm³',
+    typical: 'Roughly half the vessel volume; 0 means not known and turns the retention check off.',
+    effect: 'With the liquid flow, sets retention_min. A smaller volume shortens retention and raises the oil carried into the water.',
+  },
+  rated_retention_min: {
+    meaning: 'The liquid retention time the vessel was sized for.',
+    unit: 'min',
+    typical: '3–5 min for light oil; 5–20 min or more for heavy or foaming crude.',
+    effect: 'Retention below this raises oil-in-water in proportion, up to ten times the design figure.',
+  },
+  operating_pressure_barg: {
+    meaning: 'The pressure the vessel is held at by its pressure control loop.',
+    unit: 'barg',
+    typical: '1–70 barg depending on the stage.',
+    effect: 'Reported for reference only. The flow split does not compute flash, so pressure changes no result here.',
+  },
+
   // ── Buffer tanks ──────────────────────────────────────────────────────────
   low_level_pct: {
     meaning: 'The low-level setpoint — where the outlet pumps stop so they do not run dry.',
@@ -1055,6 +1107,12 @@ export const METRIC_INFO = {
   speed_pct: 'Variable-speed-drive setting as a percentage of nominal pump speed.',
   opening_pct: 'How far the valve is open, as a percentage; flow passes in direct proportion.',
   Q_in_m3_d: 'Flow arriving at this element before it pumps or throttles anything, in m³/d.',
+  // ── Three-phase separator ──────────────────────────────────────────────────
+  gas_m3_d: 'Gas leaving the separator at operating conditions, in m³/d.',
+  oil_m3_d: 'Oil leaving the separator, including the water carried with it, in m³/d.',
+  water_m3_d: 'Water leaving the separator, including the oil carried with it, in m³/d.',
+  retention_min: 'Liquid retention time in the separator, in minutes; empty when no liquid volume is set.',
+  oil_recovery_pct: 'Share of the oil in the feed that leaves on the oil outlet rather than in the water.',
   Q_delivered_m3_d: 'Flow the pump actually passes downstream after its on/off state, speed and capacity are applied.',
   Q_out_m3_d: 'Flow the valve passes downstream, equal to the inflow times the opening percentage.',
   blocked_Q_m3_d: 'Flow this element could not pass — it would back up upstream in a real plant, and is lost here because the steady-state solver has no storage.',

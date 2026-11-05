@@ -75,6 +75,7 @@ import './pressure_filter';   // multigrade_filter + activated_carbon_filter + m
 import './water_softener';
 import './sludge_centrifuge';
 import './instrument';
+import './three_phase_separator';
 
 import { SYMBOLS } from './index';
 

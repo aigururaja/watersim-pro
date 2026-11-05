@@ -57,6 +57,7 @@ import { NodeControlContext, NodeInfoContext, isControlOn } from '../components/
 import InfoTip, { InfoFacts } from '../components/InfoTip';
 import { OP_INFO, METRIC_INFO, paramInfo } from '../content/explanations';
 import { layoutPidUnits } from '../utils/pidLayout';
+import { pidEdgeRoles } from '../utils/pidPorts';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 //
@@ -241,6 +242,16 @@ export const PARAM_DEFS = {
     { key: 'fog_removal_pct',    label: 'Clean-trap FOG Capture (%)', type: 'number', step: 5, min: 0, max: 99 },
     { key: 'TSS_removal_pct',    label: 'Settleable Solids Capture (%)', type: 'number', step: 5, min: 0, max: 90 },
     { key: 'grease_capacity_m3', label: 'Grease Capacity (m³)',       type: 'number', step: 0.01, min: 0 },
+  ],
+  three_phase_separator: [
+    { key: 'gas_fraction_pct',        label: 'Gas Fraction of Feed (%)',     type: 'number', step: 1, min: 0, max: 100,
+      hint: 'From the well test or heat and material balance — the block splits, it does not flash' },
+    { key: 'oil_fraction_pct',        label: 'Oil Fraction of Feed (%)',     type: 'number', step: 1, min: 0, max: 100 },
+    { key: 'water_in_oil_pct',        label: 'Water in Oil, BS&W (%)',       type: 'number', step: 0.5, min: 0, max: 99 },
+    { key: 'oil_in_water_mg_L',       label: 'Oil in Water at Design (mg/L)', type: 'number', step: 50, min: 0 },
+    { key: 'liquid_volume_m3',        label: 'Liquid Hold-up (m³, 0 = unknown)', type: 'number', step: 0.5, min: 0 },
+    { key: 'rated_retention_min',     label: 'Design Retention (min)',       type: 'number', step: 1, min: 0.1 },
+    { key: 'operating_pressure_barg', label: 'Operating Pressure (barg)',    type: 'number', step: 1, min: 0 },
   ],
   equalisation_tank: [
     { key: 'volume_m3',        label: 'Working Volume (m³)',       type: 'number', step: 5, min: 0 },
@@ -1334,13 +1345,15 @@ export default function CanvasPage() {
       };
     });
     const stamp = Date.now();
+    // A separator's lines carry the outlet they leave by (gas / oil / water).
+    const roles = pidEdgeRoles(proposal.units, proposal.connections);
     const newEdges = proposal.connections.map((c, i) => ({
       id: `edge_${stamp}_${i}`,
       source: idMap[c.from],
       target: idMap[c.to],
       type: 'stream',
       animated: false,
-      data: { streamType: 'stream' },
+      data: roles[i] ? { streamType: 'stream', role: roles[i] } : { streamType: 'stream' },
     }));
     setNodes(ns => [...ns, ...newNodes]);
     setEdges(es => [...es, ...newEdges]);

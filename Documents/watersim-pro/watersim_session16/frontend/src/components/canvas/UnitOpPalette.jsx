@@ -106,6 +106,12 @@ export const PALETTE = [
     ]
   },
   {
+    category: 'Oil & Gas Separation',
+    items: [
+      { type: 'three_phase_separator', label: 'Three-Phase Separator (gas / oil / water)' },
+    ]
+  },
+  {
     category: 'Instrumentation',
     items: [
       { type: 'instrument', label: 'Instrument (FT / LT / pH)' },

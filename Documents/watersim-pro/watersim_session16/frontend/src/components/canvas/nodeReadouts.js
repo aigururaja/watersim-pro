@@ -77,6 +77,7 @@ const SERVICE_BY_OP = {
   sbr_reactor: 'sludge',
   sludge_centrifuge: 'sludge',
   oil_grease_trap: 'recycle',
+  three_phase_separator: 'recycle',
   micron_filter: 'permeate',
   water_softener: 'permeate',
   primary_clarifier: 'sludge',
@@ -195,6 +196,10 @@ const READOUTS = {
   oil_grease_trap: {
     pick: (s) => s.metrics.fog_removed_kg_d, unit: 'kg FOG/d',
     title: 'Grease captured per day (fog_removed_kg_d)',
+  },
+  three_phase_separator: {
+    pick: (s) => s.metrics.oil_m3_d, unit: 'm³ oil/d',
+    title: 'Oil leaving on the oil outlet (oil_m3_d), with its BS&W water',
   },
   sbr_reactor: {
     pick: (s) => s.metrics.capacity_utilisation_pct, unit: '%',

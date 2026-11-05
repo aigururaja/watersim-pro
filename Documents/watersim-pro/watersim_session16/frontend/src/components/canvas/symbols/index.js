@@ -93,6 +93,7 @@ export const TAG = Object.freeze({
   activated_carbon_filter: 'ACF',
   micron_filter: 'MF',
   water_softener: 'SOF',
+  three_phase_separator: 'SEP',
   sludge_centrifuge: 'CFG',
   instrument: 'XT',
   // Legacy (imported / seeded sheets — not on the palette)
