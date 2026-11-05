@@ -75,6 +75,58 @@ describe('normalizeProposal', () => {
     expect(p.warnings.join(' ')).toMatch(/repeated id/);
     expect(p.warnings.join(' ')).toMatch(/does not join two blocks/);
   });
+
+  it('keeps a long reason whole, and cuts an over-long one on a word boundary', () => {
+    const long = 'The vessel separates gas, oil and water by gravity under pressure, and the catalogue has no block for it: oil_grease_trap is only for an atmospheric gravity interceptor, so forcing the match would simulate the wrong unit.';
+    const p = normalizeProposal({
+      units: [], connections: [],
+      skipped: [{ label: 'V-101', reason: long }, { label: 'X', reason: `${'word '.repeat(120)}end` }],
+      notes: '',
+    });
+    expect(p.skipped[0].reason).toBe(long);          // 219 chars: the old 160 cut it mid-word
+    expect(p.skipped[1].reason).toMatch(/word…$/);    // cut, and not in the middle of a word
+    expect(p.skipped[1].reason.length).toBeLessThanOrEqual(401);
+  });
+});
+
+describe('the three-phase separator', () => {
+  it('is offered as a block, apart from the atmospheric grease trap', () => {
+    expect(pidReader.UNIT_TYPES).toContain('three_phase_separator');
+    const catalogue = pidReader.SYSTEM_PROMPT;
+    expect(catalogue).toMatch(/three_phase_separator: Three-phase separator: a pressurised/);
+    expect(catalogue).toMatch(/oil_grease_trap is only for a trap or interceptor open to atmosphere/);
+    // Each phase leaves as its own labelled outlet: the label is what tells
+    // the canvas which port a line belongs to (frontend utils/pidPorts.js).
+    expect(catalogue).toMatch(/give each stream its own outlet block, labelled the way the drawing labels it/);
+  });
+
+  it('keeps a separator with its phase outlets and the numbers off the drawing', () => {
+    const p = normalizeProposal({
+      units: [
+        { id: 's1', type: 'inlet', label: '3 Phase Inlet', x: 0.05, y: 0.5, params: [] },
+        { id: 's2', type: 'three_phase_separator', label: 'V-101', x: 0.4, y: 0.5, params: [
+          { key: 'gas_fraction_pct', value: 20 }, { key: 'oil_fraction_pct', value: 45 },
+          { key: 'operating_pressure_barg', value: 7 },
+        ] },
+        { id: 's3', type: 'outlet', label: 'Vapor Outlet', x: 0.8, y: 0.2, params: [] },
+        { id: 's4', type: 'outlet', label: 'Oil Outlet', x: 0.8, y: 0.5, params: [] },
+        { id: 's5', type: 'outlet', label: 'Water Outlet', x: 0.8, y: 0.8, params: [] },
+      ],
+      connections: [
+        { from: 's1', to: 's2' }, { from: 's2', to: 's3' },
+        { from: 's2', to: 's4' }, { from: 's2', to: 's5' },
+      ],
+      skipped: [], notes: '',
+    });
+    expect(p.warnings).toEqual([]);
+    expect(p.units[1]).toMatchObject({
+      type: 'three_phase_separator',
+      params: { gas_fraction_pct: 20, oil_fraction_pct: 45, operating_pressure_barg: 7 },
+    });
+    expect(p.connections).toHaveLength(4);
+    expect(p.units.filter((u) => u.type === 'outlet').map((u) => u.label))
+      .toEqual(['Vapor Outlet', 'Oil Outlet', 'Water Outlet']);
+  });
 });
 
 describe('readPid', () => {
@@ -90,7 +142,7 @@ describe('readPid', () => {
     expect(p.model).toBe('claude-opus-5');
 
     const req = mockCreate.mock.calls[0][0];
-    expect(req.model).toBe('claude-opus-5');
+    expect(req.model).toBe('claude-opus-5-5');
     expect(req.tools[0]).toMatchObject({ name: 'report_flowsheet', strict: true });
     expect(req.messages[0].content[0]).toMatchObject({ type: 'image', source: { type: 'base64', media_type: 'image/png' } });
     expect(req.messages[0].content[0].source.data).not.toMatch(/^data:/);
@@ -103,6 +155,22 @@ describe('readPid', () => {
     await expect(readPid(PNG)).rejects.toThrow(/No flowsheet could be read/);
   });
 
+  it('uses PID_READER_MODEL but ignores a model tag left over from the local provider', async () => {
+    mockCreate.mockResolvedValue({
+      model: 'x', stop_reason: 'tool_use',
+      content: [{ type: 'tool_use', id: 't1', name: 'report_flowsheet', input: PLANT_REPORT }],
+    });
+    process.env.PID_READER_MODEL = 'claude-sonnet-5-5';
+    await readPid(PNG);
+    expect(mockCreate.mock.calls[0][0].model).toBe('claude-sonnet-5-5');
+
+    process.env.PID_READER_MODEL = 'qwen2.5vl:3b';
+    await readPid(PNG);
+    expect(mockCreate.mock.calls[1][0].model).toBe('claude-opus-5-5');
+  });
+
+  // Last in this block: the Ollama tests below check that Claude was never
+  // called, and only this describe resets the mock.
   it('refuses anything that is not a stored image', async () => {
     await expect(readPid('data:text/plain;base64,aGk=')).rejects.toBeInstanceOf(PidReadError);
     expect(mockCreate).not.toHaveBeenCalled();

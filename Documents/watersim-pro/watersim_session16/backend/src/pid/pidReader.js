@@ -22,7 +22,8 @@
  *   ANTHROPIC_API_KEY   needed for anthropic — without it the route answers 503
  *   OLLAMA_BASE_URL     needed for ollama, e.g. https://<name>.ngrok-free.dev
  *   OLLAMA_AUTH         optional "user:password" for the tunnel's basic auth
- *   PID_READER_MODEL    optional, default claude-opus-5 / qwen2.5vl:7b
+ *   PID_READER_MODEL    optional, default claude-opus-5-5 / qwen2.5vl:7b; a
+ *                       model tag left behind by the other provider is ignored
  *   PID_READER_TIMEOUT_MS optional, default 600000 for ollama (CPU inference is slow)
  */
 'use strict';
@@ -32,7 +33,7 @@ const https = require('https');
 const Anthropic = require('@anthropic-ai/sdk');
 const { MODELS, PALETTE_TYPE_MAP } = require('../simulation/solver');
 
-const DEFAULT_MODEL = 'claude-opus-5';
+const DEFAULT_MODEL = 'claude-opus-5-5';
 const DEFAULT_OLLAMA_MODEL = 'qwen2.5vl:7b';
 const OLLAMA_MAX_TOKENS = 3500;
 const TOOL_NAME = 'report_flowsheet';
@@ -50,7 +51,8 @@ const UNIT_CATALOGUE = [
   ['equalisation_tank',     'Equalisation / balancing tank'],
   ['screening',             'Bar screen or fine screen'],
   ['grit_removal',          'Grit chamber or grit removal'],
-  ['oil_grease_trap',       'Oil and grease trap or gravity oil-water interceptor at atmospheric pressure'],
+  ['oil_grease_trap',       'Oil and grease trap or gravity oil-water interceptor, open to atmosphere — not a pressurised vessel'],
+  ['three_phase_separator', 'Three-phase separator: a pressurised horizontal or vertical vessel splitting a feed into gas, oil and water outlets (demister pad, oil weir, interface level control)'],
   ['primary_clarifier',     'Primary clarifier / primary settling tank'],
   ['activated_sludge',      'Aeration tank / activated sludge basin'],
   ['sbr_reactor',           'Sequencing batch reactor (SBR)'],
@@ -108,7 +110,7 @@ const REPORT_TOOL = {
                 additionalProperties: false,
                 required: ['key', 'value'],
                 properties: {
-                  key:   { type: 'string', description: 'Parameter key, e.g. Q, volume_m3, depth_m, diameter_mm, rated_flow_m3_h.' },
+                  key:   { type: 'string', description: 'Parameter key, e.g. Q, volume_m3, depth_m, diameter_mm, rated_flow_m3_h; for a three-phase separator gas_fraction_pct, oil_fraction_pct, water_in_oil_pct, oil_in_water_mg_L, liquid_volume_m3, rated_retention_min, operating_pressure_barg.' },
                   value: { type: 'number' },
                 },
               },
@@ -154,7 +156,9 @@ ${UNIT_CATALOGUE.map(([t, d]) => `- ${t}: ${d}`).join('\n')}
 
 How the flowsheet is used: each block computes flows and qualities from what enters it, so what matters is the main process equipment and the process lines between it. Valves (including control valves), bypasses, instruments and transmitters (LT, PT, FT, TT), controllers and control loops (LC, PC, FC), relief valves, drains, vents and utility lines do not change a steady-state mass balance: leave them out and list them under skipped with a short reason. Every stream that enters or leaves the drawing becomes an inlet or an outlet block, so each block has something upstream and downstream. Only use a block type when the drawing actually shows that equipment; when nothing in the catalogue fits a piece of equipment, list it under skipped rather than forcing a match.
 
-Connections follow the direction of flow. Only put numbers in params when they are written on the drawing.`;
+A vessel that separates gas, oil and water under pressure is a three_phase_separator; oil_grease_trap is only for a trap or interceptor open to atmosphere. Where a vessel sends out more than one phase, give each stream its own outlet block, labelled the way the drawing labels it ("Vapor Outlet", "Oil Outlet", "Water Outlet"), connected from the vessel: the label is how each phase is told apart afterwards, so keep the drawing's wording rather than tidying it.
+
+Connections follow the direction of flow. Only put numbers in params when they are written on the drawing, and put each number on the block whose behaviour it sets rather than the one it happens to be written next to: a feed flow stays on the inlet, but the gas and oil fractions of a separator feed set how the separator splits, so they belong on the separator block.`;
 
 const SYSTEM_PROMPT = `${PROMPT_BODY}
 
@@ -260,7 +264,11 @@ async function readPid(imageDataUrl, { signal } = {}) {
   const m = DATA_URL.exec(imageDataUrl || '');
   if (!m) throw new PidReadError('The stored picture is not a PNG, JPEG or WebP image.');
   if (provider() === 'ollama') return readPidOllama(m[2], signal);
-  const model = process.env.PID_READER_MODEL || DEFAULT_MODEL;
+  // Both providers read PID_READER_MODEL. An Ollama tag ("qwen2.5vl:3b") left
+  // in the env after switching provider is not an API model id, so ignore it
+  // rather than asking the API for a model it has never heard of.
+  const wanted = (process.env.PID_READER_MODEL || '').trim();
+  const model = wanted && !wanted.includes(':') ? wanted : DEFAULT_MODEL;
 
   const response = await getClient().beta.messages.create({
     model,
@@ -281,7 +289,9 @@ async function readPid(imageDataUrl, { signal } = {}) {
         { type: 'text', text: `Read this P&ID and report the flowsheet with ${TOOL_NAME}.` },
       ],
     }],
-  });
+    // A read nobody is waiting for any more is dropped: the browser that left
+    // should not keep paying for an answer it will never see.
+  }, { signal });
 
   if (response.stop_reason === 'refusal') {
     throw new PidReadError('The picture could not be read (the request was declined). Try a clearer image of the P&ID.');
@@ -492,6 +502,20 @@ const clamp01 = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5);
 const text = (v, max) => String(v ?? '').trim().slice(0, max);
 
 /**
+ * text() for the sentences shown to the user (why an item was left out, what
+ * to check). A cut lands on a word boundary and says it was cut, so a reason
+ * never stops mid-word and nothing looks broken on the review panel.
+ */
+const prose = (v, max) => {
+  const s = String(v ?? '').trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const space = cut.lastIndexOf(' ');
+  const kept = space > max * 0.6 ? cut.slice(0, space) : cut;
+  return `${kept.replace(/[\s,;:.]+$/, '')}…`;
+};
+
+/**
  * Check a raw `report_flowsheet` input against what the canvas accepts:
  * known unit types, unique ids, positions inside the image, connections
  * between real units.
@@ -538,12 +562,12 @@ function normalizeProposal(raw) {
   }
 
   const skipped = (Array.isArray(raw?.skipped) ? raw.skipped : [])
-    .map((s) => ({ label: text(s?.label, 80), reason: text(s?.reason, 160) }))
+    .map((s) => ({ label: text(s?.label, 80), reason: prose(s?.reason, 400) }))
     .filter((s) => s.label);
 
   if (!units.length) warnings.push('No equipment the simulator knows was found on this drawing.');
 
-  return { units, connections, skipped, notes: text(raw?.notes, 1000), warnings };
+  return { units, connections, skipped, notes: prose(raw?.notes, 1000), warnings };
 }
 
 module.exports = {
