@@ -58,6 +58,7 @@ import InfoTip, { InfoFacts } from '../components/InfoTip';
 import { OP_INFO, METRIC_INFO, paramInfo } from '../content/explanations';
 import { layoutPidUnits } from '../utils/pidLayout';
 import { pidEdgeRoles } from '../utils/pidPorts';
+import { splitPidParams } from '../utils/pidParams';
 
 // ── Custom stream-labelled edge ──────────────────────────────────────────────
 //
@@ -325,6 +326,9 @@ export const PARAM_DEFS = {
     { key: 'range_max',   label: 'Span Maximum (0 = unranged)', type: 'number', step: 1 },
   ],
 };
+
+/** The setting keys a block type has, for numbers read off a P&ID. */
+const pidParamKeys = (type) => new Set((PARAM_DEFS[type] || []).map((d) => d.key));
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -1334,8 +1338,8 @@ export default function CanvasPage() {
     const newNodes = proposal.units.map((u) => {
       const id = getId();
       idMap[u.id] = id;
-      const known = new Set((PARAM_DEFS[u.type] || []).map((d) => d.key));
-      const params = Object.fromEntries(Object.entries(u.params || {}).filter(([k]) => known.has(k)));
+      // Numbers with no setting on this block were listed in the review.
+      const params = Object.fromEntries(splitPidParams(u.params, pidParamKeys(u.type)).kept);
       return {
         id,
         type: 'unitOp',
@@ -1815,6 +1819,7 @@ export default function CanvasPage() {
               {/* P&ID picture import: upload, then AI builds the diagram from it. */}
               <PidImport
                 ref={pidRef} projectId={projectId} flowsheetId={flowsheetId} onBuild={buildFromPid}
+                paramKeysOf={pidParamKeys}
                 autoRead={readPidOnOpen}
                 // Clear the flag so a page refresh does not read (and bill) again.
                 onAutoRead={() => navigate(location.pathname, { replace: true, state: null })}

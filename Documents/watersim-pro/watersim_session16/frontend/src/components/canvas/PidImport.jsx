@@ -25,10 +25,11 @@ import { ImagePlus, Trash2, Wand2, Loader2, X } from 'lucide-react';
 import api from '../../services/api';
 import { PID_ACCEPT, uploadPidPicture, pidErrorText } from '../../utils/pidImage';
 import { TAG } from './symbols';
+import { splitPidParams } from '../../utils/pidParams';
 
 const PID_POLL_MS = 3000;
 
-const PidImport = forwardRef(function PidImport({ projectId, flowsheetId, onBuild, autoRead = false, onAutoRead }, ref) {
+const PidImport = forwardRef(function PidImport({ projectId, flowsheetId, onBuild, paramKeysOf, autoRead = false, onAutoRead }, ref) {
   const url = `/projects/${projectId}/flowsheets/${flowsheetId}/background`;
   const [pid, setPid] = useState(null);         // { width, height, fileName, placement }
   const [busy, setBusy] = useState(false);
@@ -159,6 +160,7 @@ const PidImport = forwardRef(function PidImport({ projectId, flowsheetId, onBuil
       {proposal && createPortal(
         <ReviewDialog
           proposal={proposal}
+          paramKeysOf={paramKeysOf}
           onCancel={() => setProposal(null)}
           onCreate={() => createFromProposal(false)}
           onCreateAndSimulate={() => createFromProposal(true)}
@@ -170,7 +172,7 @@ const PidImport = forwardRef(function PidImport({ projectId, flowsheetId, onBuil
 });
 
 /** What the AI found, for the user to confirm before anything is created. */
-function ReviewDialog({ proposal, onCancel, onCreate, onCreateAndSimulate }) {
+function ReviewDialog({ proposal, paramKeysOf, onCancel, onCreate, onCreateAndSimulate }) {
   const { units, connections, skipped, warnings, notes } = proposal;
   const labelOf = Object.fromEntries(units.map((u) => [u.id, u.label]));
   const empty = units.length === 0;
@@ -186,13 +188,26 @@ function ReviewDialog({ proposal, onCancel, onCreate, onCreateAndSimulate }) {
             <h3 style={S.h3}>Blocks to create ({units.length})</h3>
             {empty ? <p style={S.muted}>None.</p> : (
               <ul style={S.list}>
-                {units.map((u) => (
-                  <li key={u.id} style={S.item}>
-                    <span style={S.tag}>{TAG[u.type] || '—'}</span>
-                    <strong>{u.label}</strong>
-                    <span style={S.muted}>{u.type.replace(/_/g, ' ')}</span>
-                  </li>
-                ))}
+                {units.map((u) => {
+                  const { kept, unused } = splitPidParams(u.params, paramKeysOf ? paramKeysOf(u.type) : null);
+                  return (
+                    <li key={u.id} style={S.item}>
+                      <span style={S.tag}>{TAG[u.type] || '—'}</span>
+                      <strong>{u.label}</strong>
+                      <span style={S.muted}>{u.type.replace(/_/g, ' ')}</span>
+                      {kept.length > 0 && (
+                        <span style={S.muted} data-testid="pid-params-kept">
+                          {kept.map(([k, v]) => `${k} = ${v}`).join(' · ')}
+                        </span>
+                      )}
+                      {unused.length > 0 && (
+                        <span style={S.unused} data-testid="pid-params-unused">
+                          Not used: {unused.map(([k, v]) => `${k} = ${v}`).join(' · ')} (no such setting on this block)
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -224,7 +239,7 @@ function ReviewDialog({ proposal, onCancel, onCreate, onCreateAndSimulate }) {
             </section>
           )}
           <p style={S.muted}>
-            The blocks are laid out as on the drawing, with default settings. Flows, sizes and pressures are rarely on a P&amp;ID:
+            The blocks are laid out as on the drawing. Numbers read off it are filled in and everything else starts at default settings. Flows, sizes and pressures are rarely on a P&amp;ID:
             click a block to enter your own values before trusting the results.
           </p>
         </div>
@@ -250,6 +265,7 @@ const S = {
   },
   title: { fontWeight: 700, color: '#1F4E79', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   muted: { color: '#64748B' },
+  unused: { color: '#92400E', flexBasis: '100%', fontSize: 12 },
   btn: {
     display: 'inline-flex', alignItems: 'center', gap: 4, height: 26, padding: '0 8px',
     border: '1px solid #E2E8F0', borderRadius: 6, background: '#fff', color: '#1E293B',

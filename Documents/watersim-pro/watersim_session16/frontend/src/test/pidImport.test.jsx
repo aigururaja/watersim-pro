@@ -21,10 +21,10 @@ const STORED = {
   placement: { x: 0, y: 0, scale: 1.5 },
 };
 
-function mount({ ref, onBuild } = {}) {
+function mount({ ref, onBuild, paramKeysOf } = {}) {
   return render(
     <ReactFlowProvider>
-      <PidImport ref={ref} projectId="p1" flowsheetId="f1" onBuild={onBuild} />
+      <PidImport ref={ref} projectId="p1" flowsheetId="f1" onBuild={onBuild} paramKeysOf={paramKeysOf} />
     </ReactFlowProvider>,
   );
 }
@@ -80,6 +80,21 @@ describe('PidImport', () => {
     expect(pid.placement).toEqual(STORED.placement);
     expect(opts).toEqual({ simulate: true });
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('lists numbers the block has no setting for instead of dropping them silently', async () => {
+    api.get.mockResolvedValue({ status: 200, data: STORED });
+    api.post.mockResolvedValue({ data: {
+      units: [{ id: 's', type: 'three_phase_separator', label: 'V-101', x: 0.5, y: 0.5,
+        params: { gas_fraction_pct: 20, design_pressure_barg: 7 } }],
+      connections: [], skipped: [], warnings: [], notes: '',
+    } });
+    mount({ paramKeysOf: () => new Set(['gas_fraction_pct', 'oil_fraction_pct']) });
+    fireEvent.click(await screen.findByRole('button', { name: /Build diagram/ }));
+    await screen.findByRole('dialog');
+    expect(screen.getByTestId('pid-params-kept').textContent).toBe('gas_fraction_pct = 20');
+    expect(screen.getByTestId('pid-params-unused').textContent)
+      .toBe('Not used: design_pressure_barg = 7 (no such setting on this block)');
   });
 
   it('keeps polling while a long read runs, then shows the result', async () => {
